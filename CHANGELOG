@@ -1,0 +1,33 @@
+# Changelog
+
+## [1] landing-page-v1 — 2026-02-16
+
+**Why:** Vivalyn needed a public-facing landing page to communicate the product value prop (AI training & assessment agents), capture demo leads, and establish brand presence following the YC-grade clean SaaS design system defined in `UI.md`.
+
+**What:** Built the complete landing page from a fresh React + Vite setup. Configured Tailwind CSS v4, Framer Motion, Lucide React, and Inter font. Created 6 reusable UI components, 2 layout components, and 9 landing page sections. Hero section features animated mock product UI cycling through 3 scenarios (Sales, Support, Education) with progress bar tabs.
+
+**Changes:**
+- `vite.config.ts` — added `@tailwindcss/vite` plugin
+- `index.html` — added Inter font preconnect, SEO meta, updated title
+- `src/index.css` — replaced with Tailwind v4 import + `@theme` for Inter font
+- `src/App.tsx` — rewritten to compose all landing page sections
+- `src/App.css` — deleted (all styling via Tailwind now)
+- `src/lib/motion.ts` — new; shared Framer Motion variants (fadeInUp, staggerContainer)
+- `src/lib/constants.ts` — new; all static data (nav links, features, steps, FAQs, metrics, testimonials, footer links)
+- `src/components/ui/Button.tsx` — new; Primary/Secondary/Ghost variants
+- `src/components/ui/Badge.tsx` — new; indigo-50 pill badge
+- `src/components/ui/Card.tsx` — new; bordered card with hover lift
+- `src/components/ui/SectionWrapper.tsx` — new; max-width + section padding wrapper
+- `src/components/ui/Logo.tsx` — new; "Vivalyn" text logo with indigo icon
+- `src/components/ui/Accordion.tsx` — new; FAQ expand/collapse with AnimatePresence
+- `src/components/layout/Header.tsx` — new; sticky 72px header with blur backdrop, nav links, mobile hamburger
+- `src/components/layout/Footer.tsx` — new; 4-column links grid + copyright
+- `src/sections/Hero.tsx` — new; 2-column hero with animated scenario cycling (Sales/Support/Education), mock report card, transcript, progress bar tabs
+- `src/sections/ProblemStatement.tsx` — new; centered narrow copy block
+- `src/sections/SolutionSummary.tsx` — new; "What we do" section
+- `src/sections/FeatureGrid.tsx` — new; 3-column card grid with Coming Soon badges
+- `src/sections/HowItWorks.tsx` — new; 3-step horizontal timeline with connector line
+- `src/sections/ReportPreview.tsx` — new; mock assessment report + feature bullet list
+- `src/sections/SocialProof.tsx` — new; metrics banner, partner logos, testimonial cards
+- `src/sections/FAQ.tsx` — new; 5 accordion items
+- `src/sections/CTASection.tsx` — new; indigo-600 rounded container with inverted CTA

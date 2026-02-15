@@ -1,35 +1,31 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import Header from './components/layout/Header'
+import Hero from './sections/Hero'
+import ProblemStatement from './sections/ProblemStatement'
+import SolutionSummary from './sections/SolutionSummary'
+import FeatureGrid from './sections/FeatureGrid'
+import HowItWorks from './sections/HowItWorks'
+import ReportPreview from './sections/ReportPreview'
+import SocialProof from './sections/SocialProof'
+import FAQ from './sections/FAQ'
+import CTASection from './sections/CTASection'
+import Footer from './components/layout/Footer'
 
-function App() {
-  const [count, setCount] = useState(0)
-
+export default function App() {
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className="min-h-screen">
+      <Header />
+      <main>
+        <Hero />
+        <ProblemStatement />
+        <SolutionSummary />
+        <FeatureGrid />
+        <HowItWorks />
+        <ReportPreview />
+        <SocialProof />
+        <FAQ />
+        <CTASection />
+      </main>
+      <Footer />
+    </div>
   )
 }
-
-export default App
