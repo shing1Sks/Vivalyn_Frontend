@@ -186,7 +186,8 @@ export interface PricingPlan {
   price: string
   credits: string
   bonus: string
-  sessions: string
+  baseSessions: string
+  bonusSessions: string
   perSession: string
   popular?: boolean
 }
@@ -197,7 +198,8 @@ export const PRICING_PLANS_IN: PricingPlan[] = [
     price: 'Free',
     credits: '120',
     bonus: '',
-    sessions: '~12',
+    baseSessions: '~12',
+    bonusSessions: '',
     perSession: '',
   },
   {
@@ -205,7 +207,8 @@ export const PRICING_PLANS_IN: PricingPlan[] = [
     price: '₹1,499',
     credits: '1,200',
     bonus: '+20%',
-    sessions: '~120',
+    baseSessions: '~120',
+    bonusSessions: '+24',
     perSession: '₹12.5',
   },
   {
@@ -213,7 +216,8 @@ export const PRICING_PLANS_IN: PricingPlan[] = [
     price: '₹4,999',
     credits: '4,200',
     bonus: '+26%',
-    sessions: '~420',
+    baseSessions: '~420',
+    bonusSessions: '+110',
     perSession: '₹11.9',
   },
   {
@@ -221,7 +225,8 @@ export const PRICING_PLANS_IN: PricingPlan[] = [
     price: '₹11,999',
     credits: '10,500',
     bonus: '+31%',
-    sessions: '~1,050',
+    baseSessions: '~1,050',
+    bonusSessions: '+325',
     perSession: '₹11.4',
     popular: true,
   },
@@ -230,7 +235,8 @@ export const PRICING_PLANS_IN: PricingPlan[] = [
     price: '₹29,999',
     credits: '28,000',
     bonus: '+40%',
-    sessions: '~2,800',
+    baseSessions: '~2,800',
+    bonusSessions: '+1,120',
     perSession: '₹10.7',
   },
 ]
@@ -241,7 +247,8 @@ export const PRICING_PLANS_INTL: PricingPlan[] = [
     price: 'Free',
     credits: '120',
     bonus: '',
-    sessions: '~12',
+    baseSessions: '~12',
+    bonusSessions: '',
     perSession: '',
   },
   {
@@ -249,7 +256,8 @@ export const PRICING_PLANS_INTL: PricingPlan[] = [
     price: '$29',
     credits: '1,750',
     bonus: '+20%',
-    sessions: '~175',
+    baseSessions: '~175',
+    bonusSessions: '+35',
     perSession: '$0.17',
   },
   {
@@ -257,7 +265,8 @@ export const PRICING_PLANS_INTL: PricingPlan[] = [
     price: '$79',
     credits: '5,000',
     bonus: '+25%',
-    sessions: '~500',
+    baseSessions: '~500',
+    bonusSessions: '+125',
     perSession: '$0.158',
   },
   {
@@ -265,7 +274,8 @@ export const PRICING_PLANS_INTL: PricingPlan[] = [
     price: '$199',
     credits: '13,000',
     bonus: '+30%',
-    sessions: '~1,300',
+    baseSessions: '~1,300',
+    bonusSessions: '+390',
     perSession: '$0.153',
     popular: true,
   },
@@ -274,7 +284,8 @@ export const PRICING_PLANS_INTL: PricingPlan[] = [
     price: '$499',
     credits: '35,000',
     bonus: '+40%',
-    sessions: '~3,500',
+    baseSessions: '~3,500',
+    bonusSessions: '+1,400',
     perSession: '$0.143',
   },
 ]

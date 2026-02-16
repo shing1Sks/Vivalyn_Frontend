@@ -74,7 +74,13 @@ function PricingCard({ plan }: { plan: PricingPlan }) {
               className="text-indigo-600 shrink-0 mt-0.5"
             />
             <span className="text-sm text-gray-700">
-              {plan.sessions} sessions (10 min each)
+              <span className="font-medium">{plan.baseSessions}</span>
+              {plan.bonusSessions && (
+                <span className="font-medium text-emerald-600">
+                  {' '}{plan.bonusSessions} bonus
+                </span>
+              )}{' '}
+              sessions (~10 min each)
             </span>
           </li>
           {plan.perSession && (
@@ -154,7 +160,7 @@ export default function Pricing() {
           animate="visible"
           exit="hidden"
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 min-h-[420px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 min-h-[440px]">
             {plans.map((plan) => (
               <motion.div key={plan.name} variants={fadeInUp}>
                 <PricingCard plan={plan} />
