@@ -1,5 +1,18 @@
 # Changelog
 
+## [2] pricing-section — 2026-02-16
+
+**Why:** Landing page needed a pricing section to communicate plan options for both Indian and international users, with a free trial available on a demo-request basis.
+
+**What:** Added a Pricing section with an India/International region toggle, 5 pricing tiers (Trial, Starter, Growth, Pro, Business), and animated card transitions. Pro plan is highlighted as "Most Popular". Trial tier uses a "Request Demo" CTA instead of direct signup.
+
+**Changes:**
+- `src/lib/constants.ts` — added `PricingPlan` interface, `PRICING_PLANS_IN` and `PRICING_PLANS_INTL` data arrays
+- `src/sections/Pricing.tsx` — new; region toggle, 5-column pricing card grid with AnimatePresence transitions, per-session cost, bonus credits, and "Contact sales" footer
+- `src/App.tsx` — added `<Pricing />` section between ReportPreview and SocialProof
+
+---
+
 ## [1] landing-page-v1 — 2026-02-16
 
 **Why:** Vivalyn needed a public-facing landing page to communicate the product value prop (AI training & assessment agents), capture demo leads, and establish brand presence following the YC-grade clean SaaS design system defined in `UI.md`.

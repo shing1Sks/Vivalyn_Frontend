@@ -5,6 +5,7 @@ import SolutionSummary from './sections/SolutionSummary'
 import FeatureGrid from './sections/FeatureGrid'
 import HowItWorks from './sections/HowItWorks'
 import ReportPreview from './sections/ReportPreview'
+import Pricing from './sections/Pricing'
 import SocialProof from './sections/SocialProof'
 import FAQ from './sections/FAQ'
 import CTASection from './sections/CTASection'
@@ -21,6 +22,7 @@ export default function App() {
         <FeatureGrid />
         <HowItWorks />
         <ReportPreview />
+        <Pricing />
         <SocialProof />
         <FAQ />
         <CTASection />

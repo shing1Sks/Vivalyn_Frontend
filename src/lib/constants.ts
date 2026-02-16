@@ -181,6 +181,104 @@ export const TESTIMONIALS = [
   },
 ]
 
+export interface PricingPlan {
+  name: string
+  price: string
+  credits: string
+  bonus: string
+  sessions: string
+  perSession: string
+  popular?: boolean
+}
+
+export const PRICING_PLANS_IN: PricingPlan[] = [
+  {
+    name: 'Trial',
+    price: 'Free',
+    credits: '120',
+    bonus: '',
+    sessions: '~12',
+    perSession: '',
+  },
+  {
+    name: 'Starter',
+    price: '₹1,499',
+    credits: '1,200',
+    bonus: '+20%',
+    sessions: '~120',
+    perSession: '₹12.5',
+  },
+  {
+    name: 'Growth',
+    price: '₹4,999',
+    credits: '4,200',
+    bonus: '+26%',
+    sessions: '~420',
+    perSession: '₹11.9',
+  },
+  {
+    name: 'Pro',
+    price: '₹11,999',
+    credits: '10,500',
+    bonus: '+31%',
+    sessions: '~1,050',
+    perSession: '₹11.4',
+    popular: true,
+  },
+  {
+    name: 'Business',
+    price: '₹29,999',
+    credits: '28,000',
+    bonus: '+40%',
+    sessions: '~2,800',
+    perSession: '₹10.7',
+  },
+]
+
+export const PRICING_PLANS_INTL: PricingPlan[] = [
+  {
+    name: 'Trial',
+    price: 'Free',
+    credits: '120',
+    bonus: '',
+    sessions: '~12',
+    perSession: '',
+  },
+  {
+    name: 'Starter',
+    price: '$29',
+    credits: '1,750',
+    bonus: '+20%',
+    sessions: '~175',
+    perSession: '$0.17',
+  },
+  {
+    name: 'Growth',
+    price: '$79',
+    credits: '5,000',
+    bonus: '+25%',
+    sessions: '~500',
+    perSession: '$0.158',
+  },
+  {
+    name: 'Pro',
+    price: '$199',
+    credits: '13,000',
+    bonus: '+30%',
+    sessions: '~1,300',
+    perSession: '$0.153',
+    popular: true,
+  },
+  {
+    name: 'Business',
+    price: '$499',
+    credits: '35,000',
+    bonus: '+40%',
+    sessions: '~3,500',
+    perSession: '$0.143',
+  },
+]
+
 export const FOOTER_LINKS = {
   product: [
     { label: 'Assessor Agents', href: '#product' },
