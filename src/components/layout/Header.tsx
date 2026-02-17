@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Menu, X, LogOut } from 'lucide-react'
+import { Menu, X, LogOut, LayoutDashboard } from 'lucide-react'
 import Logo from '../ui/Logo'
 import Button from '../ui/Button'
 import { NAV_LINKS } from '../../lib/constants'
@@ -77,6 +77,13 @@ export default function Header() {
                 <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-gray-200 shadow-md p-3 space-y-2">
                   <p className="text-sm text-gray-500 truncate px-2">{user.email}</p>
                   <button
+                    onClick={() => { setDropdownOpen(false); navigate('/dashboard') }}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    Dashboard
+                  </button>
+                  <button
                     onClick={handleSignOut}
                     className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
                   >
@@ -118,6 +125,13 @@ export default function Header() {
             {loading ? null : user ? (
               <>
                 <p className="text-sm text-gray-500 truncate mt-2">{user.email}</p>
+                <button
+                  onClick={() => { setMobileOpen(false); navigate('/dashboard') }}
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </button>
                 <button
                   onClick={handleSignOut}
                   className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
