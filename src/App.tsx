@@ -1,33 +1,14 @@
-import Header from './components/layout/Header'
-import Hero from './sections/Hero'
-import ProblemStatement from './sections/ProblemStatement'
-import SolutionSummary from './sections/SolutionSummary'
-import FeatureGrid from './sections/FeatureGrid'
-import HowItWorks from './sections/HowItWorks'
-import ReportPreview from './sections/ReportPreview'
-import Pricing from './sections/Pricing'
-import SocialProof from './sections/SocialProof'
-import FAQ from './sections/FAQ'
-import CTASection from './sections/CTASection'
-import Footer from './components/layout/Footer'
+import { Routes, Route } from 'react-router-dom'
+import Landing from './pages/Landing'
+import Auth from './pages/Auth'
+import Dashboard from './pages/Dashboard'
 
 export default function App() {
   return (
-    <div className="min-h-screen">
-      <Header />
-      <main>
-        <Hero />
-        <ProblemStatement />
-        <SolutionSummary />
-        <FeatureGrid />
-        <HowItWorks />
-        <ReportPreview />
-        <Pricing />
-        <SocialProof />
-        <FAQ />
-        <CTASection />
-      </main>
-      <Footer />
-    </div>
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+    </Routes>
   )
 }

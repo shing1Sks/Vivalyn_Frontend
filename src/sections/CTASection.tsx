@@ -1,8 +1,10 @@
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { fadeInUp, staggerContainer } from '../lib/motion'
 import Button from '../components/ui/Button'
 
 export default function CTASection() {
+  const navigate = useNavigate()
   return (
     <section className="py-16 md:py-24 px-6">
       <motion.div
@@ -29,14 +31,15 @@ export default function CTASection() {
           <Button
             variant="secondary"
             className="bg-white text-indigo-600 border-white hover:bg-indigo-50"
+            onClick={() => navigate('/auth')}
           >
-            Book a demo
+            Get started
           </Button>
           <Button
             variant="ghost"
             className="text-white hover:bg-indigo-500"
           >
-            Request pilot pricing
+            Book a demo
           </Button>
         </motion.div>
       </motion.div>

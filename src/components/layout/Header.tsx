@@ -1,22 +1,59 @@
-import { useState } from 'react'
-import { Menu, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { Menu, X, LogOut } from 'lucide-react'
 import Logo from '../ui/Logo'
 import Button from '../ui/Button'
 import { NAV_LINKS } from '../../lib/constants'
+import { useAuth } from '../../context/AuthContext'
 
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const { user, loading, signOut } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [dropdownOpen])
+
+  async function handleSignOut() {
+    setDropdownOpen(false)
+    setMobileOpen(false)
+    await signOut()
+    navigate('/')
+  }
+
+  // Prepend "/" to anchor links if not on landing page
+  function navHref(href: string) {
+    if (location.pathname === '/') return href
+    return '/' + href
+  }
+
+  const initial = user?.email?.charAt(0).toUpperCase() ?? '?'
 
   return (
     <header className="h-[72px] sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-gray-200">
       <div className="max-w-[1200px] mx-auto px-6 flex items-center justify-between h-full">
-        <Logo />
+        <a href="/" onClick={(e) => { e.preventDefault(); navigate('/') }}>
+          <Logo />
+        </a>
 
         <nav className="hidden md:flex items-center gap-8">
           {NAV_LINKS.map((link) => (
             <a
               key={link.label}
-              href={link.href}
+              href={navHref(link.href)}
               className="text-sm text-gray-600 hover:text-gray-900 transition-colors duration-[120ms]"
             >
               {link.label}
@@ -25,7 +62,35 @@ export default function Header() {
         </nav>
 
         <div className="hidden md:block">
-          <Button variant="primary">Book a demo</Button>
+          {loading ? (
+            <div className="w-8 h-8 rounded-full bg-gray-100 animate-pulse" />
+          ) : user ? (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 text-sm font-medium flex items-center justify-center cursor-pointer hover:bg-indigo-200 transition-colors duration-[120ms]"
+              >
+                {initial}
+              </button>
+
+              {dropdownOpen && (
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-gray-200 shadow-md p-3 space-y-2">
+                  <p className="text-sm text-gray-500 truncate px-2">{user.email}</p>
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Button variant="primary" onClick={() => navigate('/auth')}>
+              Sign in
+            </Button>
+          )}
         </div>
 
         <button
@@ -43,16 +108,33 @@ export default function Header() {
             {NAV_LINKS.map((link) => (
               <a
                 key={link.label}
-                href={link.href}
+                href={navHref(link.href)}
                 className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
                 onClick={() => setMobileOpen(false)}
               >
                 {link.label}
               </a>
             ))}
-            <Button variant="primary" className="mt-2 w-full">
-              Book a demo
-            </Button>
+            {loading ? null : user ? (
+              <>
+                <p className="text-sm text-gray-500 truncate mt-2">{user.email}</p>
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <Button
+                variant="primary"
+                className="mt-2 w-full"
+                onClick={() => { setMobileOpen(false); navigate('/auth') }}
+              >
+                Sign in
+              </Button>
+            )}
           </nav>
         </div>
       )}

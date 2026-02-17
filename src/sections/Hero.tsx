@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { fadeInUp, staggerContainer } from "../lib/motion";
 import Badge from "../components/ui/Badge";
@@ -301,6 +302,7 @@ function ScenarioTabs({
 }
 
 export default function Hero() {
+  const navigate = useNavigate();
   const [activeIndex, setActiveIndex] = useState(0);
   const [cycleKey, setCycleKey] = useState(0);
 
@@ -354,7 +356,7 @@ export default function Hero() {
               className="flex flex-wrap gap-4 pt-2"
             >
               <Button variant="primary">Get a demo</Button>
-              <Button variant="secondary">Request pilot pricing</Button>
+              <Button variant="secondary" onClick={() => navigate('/auth')}>Get started</Button>
             </motion.div>
           </motion.div>
 

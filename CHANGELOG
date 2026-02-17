@@ -1,5 +1,26 @@
 # Changelog
 
+## [3] supabase-auth — 2026-02-18
+
+**Why:** The app needed user authentication to gate CTA actions (sign up, sign in) and prepare for user-specific features like a dashboard.
+
+**What:** Added Supabase authentication supporting email/password, Google OAuth, and Microsoft Azure OAuth. Introduced React Router for multi-page routing, a global auth context, a login/signup page with animated form and OAuth buttons, and a simple protected dashboard. Header and CTA buttons now reflect auth state — showing "Sign in" when logged out and a user avatar dropdown when logged in.
+
+**Changes:**
+- `.env.example` — new; Supabase URL and anon key placeholders
+- `src/lib/supabase.ts` — new; Supabase client singleton with env var validation
+- `src/context/AuthContext.tsx` — new; React Context providing user/session state, email sign-in/sign-up, Google/Microsoft OAuth, sign-out, and `useAuth()` hook
+- `src/pages/Landing.tsx` — new; extracted landing page content from App.tsx
+- `src/pages/Auth.tsx` — new; login/signup page with tab toggle, Google & Microsoft OAuth buttons, email/password form, Framer Motion animations, subtle gradient background
+- `src/pages/Dashboard.tsx` — new; protected welcome page with user avatar, email display, and sign-out
+- `src/App.tsx` — replaced section composition with React Router routes (`/`, `/auth`, `/dashboard`)
+- `src/main.tsx` — wrapped app with `BrowserRouter` and `AuthProvider`
+- `src/components/layout/Header.tsx` — "Sign in" button navigates to `/auth`; logged-in users see initial avatar with dropdown (email + sign out); nav links prepend `/` when off landing page
+- `src/sections/Hero.tsx` — "Request pilot pricing" renamed to "Get started free", navigates to `/auth`
+- `src/sections/CTASection.tsx` — primary button renamed to "Get started" with auth gate; secondary button remains "Book a demo"
+
+---
+
 ## [2] pricing-section — 2026-02-16
 
 **Why:** Landing page needed a pricing section to communicate plan options for both Indian and international users, with a free trial available on a demo-request basis.
