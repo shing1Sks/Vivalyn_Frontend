@@ -22,7 +22,7 @@ export default function Auth() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      navigate('/dashboard', { replace: true })
+      navigate('/agent-space', { replace: true })
     }
   }, [user, authLoading, navigate])
 

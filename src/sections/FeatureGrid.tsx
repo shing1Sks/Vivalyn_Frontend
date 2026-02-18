@@ -7,7 +7,7 @@ import SectionWrapper from '../components/ui/SectionWrapper'
 
 export default function FeatureGrid() {
   return (
-    <SectionWrapper bgSoft id="use-cases">
+    <SectionWrapper bgSoft id="products">
       <div className="text-center mb-12">
         <p className="text-xs font-medium uppercase tracking-wide text-indigo-600 mb-4">
           Capabilities

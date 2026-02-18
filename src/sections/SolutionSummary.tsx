@@ -4,7 +4,7 @@ import SectionWrapper from '../components/ui/SectionWrapper'
 
 export default function SolutionSummary() {
   return (
-    <SectionWrapper id="product">
+    <SectionWrapper id="use-case">
       <motion.div
         variants={staggerContainer}
         initial="hidden"

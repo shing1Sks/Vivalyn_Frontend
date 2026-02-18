@@ -4,10 +4,8 @@ import { motion } from 'framer-motion'
 import { LogOut, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { fadeInUp, staggerContainer } from '../lib/motion'
-import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
 
-export default function Dashboard() {
+export default function AgentSpace() {
   const { user, loading, signOut } = useAuth()
   const navigate = useNavigate()
 
@@ -34,7 +32,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
       <main className="flex-1 flex items-center justify-center px-6 py-24">
         <motion.div
           variants={staggerContainer}
@@ -67,7 +64,6 @@ export default function Dashboard() {
           </motion.button>
         </motion.div>
       </main>
-      <Footer />
     </div>
   )
 }
