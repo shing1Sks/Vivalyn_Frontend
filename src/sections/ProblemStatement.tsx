@@ -4,7 +4,7 @@ import SectionWrapper from '../components/ui/SectionWrapper'
 
 export default function ProblemStatement() {
   return (
-    <SectionWrapper bgSoft>
+    <SectionWrapper bgSoft id="problem">
       <motion.div
         variants={staggerContainer}
         initial="hidden"
