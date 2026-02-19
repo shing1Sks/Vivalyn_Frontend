@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { LogOut, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useProfile } from '../context/ProfileContext'
+import UserAvatar from '../components/ui/UserAvatar'
 import { fadeInUp, staggerContainer } from '../lib/motion'
 
 export default function AgentSpace() {
   const { user, loading, signOut } = useAuth()
+  const { profile } = useProfile()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -23,8 +26,6 @@ export default function AgentSpace() {
     )
   }
 
-  const initial = user.email?.charAt(0).toUpperCase() ?? '?'
-
   async function handleSignOut() {
     await signOut()
     navigate('/')
@@ -39,11 +40,8 @@ export default function AgentSpace() {
           animate="visible"
           className="text-center max-w-md"
         >
-          <motion.div
-            variants={fadeInUp}
-            className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-700 text-2xl font-semibold flex items-center justify-center mx-auto mb-6"
-          >
-            {initial}
+          <motion.div variants={fadeInUp} className="mx-auto mb-6 w-fit">
+            <UserAvatar size="md" email={user.email ?? ''} profile={profile} />
           </motion.div>
 
           <motion.h1 variants={fadeInUp} className="text-2xl font-semibold text-gray-900 mb-2">

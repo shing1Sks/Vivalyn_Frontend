@@ -3,14 +3,17 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Menu, X, LogOut, Orbit } from 'lucide-react'
 import Logo from '../ui/Logo'
 import Button from '../ui/Button'
+import UserAvatar from '../ui/UserAvatar'
 import { NAV_LINKS } from '../../lib/constants'
 import { useAuth } from '../../context/AuthContext'
+import { useProfile } from '../../context/ProfileContext'
 
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const { user, loading, signOut } = useAuth()
+  const { profile } = useProfile()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -40,8 +43,6 @@ export default function Header() {
     return '/' + href
   }
 
-  const initial = user?.email?.charAt(0).toUpperCase() ?? '?'
-
   return (
     <header className="h-[72px] sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-gray-200">
       <div className="max-w-[1200px] mx-auto px-6 flex items-center justify-between h-full">
@@ -68,9 +69,9 @@ export default function Header() {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 text-sm font-medium flex items-center justify-center cursor-pointer hover:bg-indigo-200 transition-colors duration-[120ms]"
+                className="rounded-full overflow-hidden cursor-pointer hover:opacity-90 transition-opacity duration-[120ms] block"
               >
-                {initial}
+                <UserAvatar size="sm" email={user?.email ?? ''} profile={profile} />
               </button>
 
               {dropdownOpen && (

@@ -1,5 +1,22 @@
 # Changelog
 
+## [4] profile-api-integration — 2026-02-19
+
+**Why:** The avatar in the header and agent-space page was a hardcoded indigo circle with an email initial. Needed a real profile backed by the backend — showing the OAuth provider photo for Google/Microsoft users, and a unique gradient avatar for email users.
+
+**What:** Added a backend API layer and a `ProfileContext` that fetches-or-creates the user's profile on login. Built a reusable `UserAvatar` component that renders the provider photo if available, falling back to the stored gradient with the email initial. Wired it into the header dropdown and the agent-space welcome screen.
+
+**Changes:**
+- `.env.example` — added `VITE_BACKEND_URL=http://localhost:8000`
+- `src/lib/api.ts` — new; `fetchProfile(accessToken)` — typed fetch to `GET /api/v1/profile/me` using the Supabase access token as a Bearer header; exports `UserProfile` interface
+- `src/context/ProfileContext.tsx` — new; `ProfileProvider` watches `session.access_token` from `AuthContext`, calls `fetchProfile` on login, clears on sign-out; exposes `profile` and `profileLoading` via `useProfile()` hook
+- `src/components/ui/UserAvatar.tsx` — new; renders `<img referrerPolicy="no-referrer">` when `profile_pic_link` exists, otherwise a `<div>` with the stored CSS gradient and the first initial of the email; supports `sm` / `md` / `lg` sizes
+- `src/main.tsx` — added `ProfileProvider` inside `AuthProvider`
+- `src/components/layout/Header.tsx` — replaced hardcoded indigo avatar button with `UserAvatar size="sm"`; added `useProfile()` import
+- `src/pages/AgentSpace.tsx` — replaced hardcoded indigo avatar `motion.div` with `UserAvatar size="md"`; added `useProfile()` import
+
+---
+
 ## [3] supabase-auth — 2026-02-18
 
 **Why:** The app needed user authentication to gate CTA actions (sign up, sign in) and prepare for user-specific features like a dashboard.

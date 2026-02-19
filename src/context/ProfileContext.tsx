@@ -1,0 +1,41 @@
+import { createContext, useContext, useEffect, useState } from 'react'
+import { useAuth } from './AuthContext'
+import { fetchProfile } from '../lib/api'
+import type { UserProfile } from '../lib/api'
+
+interface ProfileContextType {
+  profile: UserProfile | null
+  profileLoading: boolean
+}
+
+const ProfileContext = createContext<ProfileContextType | undefined>(undefined)
+
+export function ProfileProvider({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth()
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(false)
+
+  useEffect(() => {
+    if (!session?.access_token) {
+      setProfile(null)
+      return
+    }
+    setProfileLoading(true)
+    fetchProfile(session.access_token)
+      .then(setProfile)
+      .catch((e) => console.error('[ProfileContext]', e))
+      .finally(() => setProfileLoading(false))
+  }, [session?.access_token])
+
+  return (
+    <ProfileContext.Provider value={{ profile, profileLoading }}>
+      {children}
+    </ProfileContext.Provider>
+  )
+}
+
+export function useProfile() {
+  const ctx = useContext(ProfileContext)
+  if (!ctx) throw new Error('useProfile must be used within a ProfileProvider')
+  return ctx
+}
