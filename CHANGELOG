@@ -1,5 +1,21 @@
 # Changelog
 
+## [5] agentspace-management — 2026-02-20
+
+**Why:** Users needed a workspace UI to organise agents. Each user gets one default AgentSpace on first login; they can create more. The app needed a dedicated in-app environment (no landing nav/footer) with a Supabase-style switcher so users can move between spaces.
+
+**What:** Added the full AgentSpace management layer: API functions, a scoped context with localStorage persistence, a Supabase-style space switcher, a create-space modal, a custom header, and a redesigned AgentSpace page. The switcher lives in the top-left of a new per-page header; the last-used space is restored from `localStorage` on every visit.
+
+**Changes:**
+- `src/lib/api.ts` — added `AgentSpace` interface, `CreateAgentSpacePayload` interface, `fetchAgentSpaces(token)` (`GET /api/v1/agentspaces`), `createAgentSpace(token, payload)` (`POST /api/v1/agentspaces`); error detail extracted from FastAPI `detail` field on failure
+- `src/context/AgentSpaceContext.tsx` — new; `AgentSpaceProvider` scoped to the AgentSpace page only (not global); fetches spaces on `session.access_token` change; restores active space from `localStorage` key `vivalyn_last_agentspace_id`, falling back to `spaces[0]`; exposes `spaces`, `activeSpace`, `spacesLoading`, `spacesError`, `switchSpace(id)`, `createSpace(payload)`, `refetchSpaces()` via `useAgentSpace()` hook; `createSpace` appends optimistically and switches immediately
+- `src/components/agentspace/AgentSpaceSwitcher.tsx` — new; trigger button shows active space name with animated rotating `ChevronDown`; `AnimatePresence` panel (`opacity 0→1, y -4→0`, 150 ms) lists all spaces with an `Orbit` icon, active space highlighted in `indigo-50` with a `Check` icon; "New AgentSpace" button at the bottom in indigo; outside-click closes via `useRef + mousedown`
+- `src/components/agentspace/CreateAgentSpaceModal.tsx` — new; `AnimatePresence` modal with blurred backdrop and scale+translate entrance (200 ms); single name input with `maxLength=80`, `autoFocus`; `Create` button disabled while name empty or submitting, shows `Loader2` spinner; error message displayed below input; resets state on close
+- `src/components/agentspace/AgentSpaceHeader.tsx` — new; 64 px sticky header replacing the landing `Header` on this route; left side: logo button (`./icon.png` + "Vivalyn" wordmark) navigating to `/` on click, `/` separator, `AgentSpaceSwitcher`; right side: `Settings` icon (disabled, `opacity-40`, `cursor-not-allowed`, title "Settings (coming soon)") + `UserAvatar sm` with sign-out dropdown
+- `src/pages/AgentSpace.tsx` — replaced; two-component pattern: outer `AgentSpace` handles auth guard and wraps `AgentSpaceProvider`; inner `AgentSpaceContent` consumes context, owns `createOpen` state; renders loading spinner, error message, active-space name with role subtitle, or empty-state CTA depending on context state; `staggerContainer + fadeInUp` animation on main content; `CreateAgentSpaceModal` always mounted, toggled by `createOpen`
+
+---
+
 ## [4] profile-api-integration — 2026-02-19
 
 **Why:** The avatar in the header and agent-space page was a hardcoded indigo circle with an email initial. Needed a real profile backed by the backend — showing the OAuth provider photo for Google/Microsoft users, and a unique gradient avatar for email users.

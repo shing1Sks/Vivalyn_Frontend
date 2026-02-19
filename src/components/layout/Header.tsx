@@ -131,7 +131,7 @@ export default function Header() {
                   className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
                 >
                   <Orbit className="w-4 h-4" />
-                  Dashboard
+                  Agent Space
                 </button>
                 <button
                   onClick={handleSignOut}
