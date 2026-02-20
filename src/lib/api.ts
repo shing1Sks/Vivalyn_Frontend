@@ -5,13 +5,21 @@ export interface UserProfile {
   is_admin: boolean
   profile_pic_gradient: string | null
   profile_pic_link: string | null
+  name: string
+  email: string
+}
+
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message)
+  }
 }
 
 export async function fetchProfile(accessToken: string): Promise<UserProfile> {
   const res = await fetch(`${BASE}/api/v1/profile/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
-  if (!res.ok) throw new Error('Failed to fetch profile')
+  if (!res.ok) throw new ApiError('Failed to fetch profile', res.status)
   return res.json()
 }
 

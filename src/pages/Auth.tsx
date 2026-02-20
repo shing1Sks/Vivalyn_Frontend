@@ -13,6 +13,7 @@ export default function Auth() {
   const navigate = useNavigate()
 
   const [mode, setMode] = useState<Mode>('login')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -39,7 +40,7 @@ export default function Auth() {
         setSubmitting(false)
       }
     } else {
-      const { error } = await signUpWithEmail(email, password)
+      const { error } = await signUpWithEmail(email, password, name)
       if (error) {
         setError(error.message)
         setSubmitting(false)
@@ -52,6 +53,7 @@ export default function Auth() {
 
   function switchMode(newMode: Mode) {
     setMode(newMode)
+    setName('')
     setError('')
     setMessage('')
   }
@@ -155,6 +157,24 @@ export default function Auth() {
               onSubmit={handleSubmit}
               className="space-y-4"
             >
+              {mode === 'signup' && (
+                <div>
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Name
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your name"
+                    required
+                    disabled={submitting}
+                    className="w-full py-3 px-4 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-600 transition-all duration-[120ms] disabled:opacity-50"
+                  />
+                </div>
+              )}
+
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
                   Email

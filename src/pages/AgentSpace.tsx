@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
@@ -9,10 +9,23 @@ import CreateAgentSpaceModal from '../components/agentspace/CreateAgentSpaceModa
 import { fadeInUp, staggerContainer } from '../lib/motion'
 
 function AgentSpaceContent() {
-  const { activeSpace, spacesLoading, spacesError } = useAgentSpace()
+  const { activeSpace, spaces, spacesLoading, spacesError, refetchSpaces } = useAgentSpace()
   const { signOut } = useAuth()
   const navigate = useNavigate()
   const [createOpen, setCreateOpen] = useState(false)
+  const retryCount = useRef(0)
+
+  // Safety net: if spaces still empty after load, retry a few times (handles
+  // any timing edge case between profile creation and agentspace fetch)
+  useEffect(() => {
+    if (!spacesLoading && spaces.length === 0 && !spacesError && retryCount.current < 5) {
+      const timer = setTimeout(() => {
+        retryCount.current += 1
+        refetchSpaces()
+      }, 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [spacesLoading, spaces.length, spacesError, refetchSpaces])
 
   async function handleSignOut() {
     await signOut()
@@ -61,20 +74,15 @@ function AgentSpaceContent() {
           </motion.div>
         ) : (
           <motion.div
-            variants={staggerContainer}
-            initial="hidden"
-            animate="visible"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
             className="flex items-center justify-center min-h-[60vh]"
           >
-            <motion.div variants={fadeInUp} className="text-center">
-              <p className="text-gray-500 mb-4 text-sm">You have no AgentSpaces yet.</p>
-              <button
-                onClick={() => setCreateOpen(true)}
-                className="px-5 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors duration-120 cursor-pointer"
-              >
-                Create your first AgentSpace
-              </button>
-            </motion.div>
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+              <p className="text-sm text-gray-500">Setting up your agentspace…</p>
+            </div>
           </motion.div>
         )}
       </main>

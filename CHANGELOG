@@ -1,5 +1,21 @@
 # Changelog
 
+## [6] profile-name-auth-hardening — 2026-02-20
+
+**Why:** Three related gaps needed closing: (1) the signup form had no name field so email-signup users had empty `name` in their profile; (2) the `UserProfile` type didn't include `name`/`email` even though the backend now returns them; (3) a deleted Supabase user still appeared logged in because `getSession()` reads localStorage without server validation, and a stale agentspace ID in localStorage could cause the app to render a phantom profile. Additionally, first-time users could briefly see the "no agentspace" empty state due to a race between the profile-creation fetch and the agentspace fetch.
+
+**What:** Added a name field to the signup form (hidden in login mode). Hardened the auth flow so a stale or invalid session is automatically cleared on the first API call. Sequenced agentspace loading to wait for profile fetch completion (profile creation also creates the default agentspace). Replaced the empty-agentspace CTA with a "Setting up your agentspace…" loader that auto-retries as a safety net.
+
+**Changes:**
+- `src/lib/api.ts` — added `name` and `email` to `UserProfile` interface; added `ApiError` class (extends `Error`, carries `status: number`); `fetchProfile` now throws `ApiError` instead of a plain `Error` so callers can inspect the HTTP status
+- `src/context/AuthContext.tsx` — `signUpWithEmail` accepts a third `name` param; passes it as `options.data.full_name` to `supabase.auth.signUp` so name lands in `user_metadata` for profile creation to pick up
+- `src/context/ProfileContext.tsx` — destructures `signOut` from `useAuth`; on `fetchProfile` failure, checks `e instanceof ApiError && e.status === 401` and calls `signOut()` to clear the stale localStorage session and redirect to auth; other errors still console-error only
+- `src/context/AgentSpaceContext.tsx` — imports `useProfile`; `loadSpaces` bails early while `profileLoading` is true so agentspace fetch only fires after profile creation (and its default agentspace creation) completes; `profileLoading` added to `useCallback` deps
+- `src/pages/Auth.tsx` — added `name` state; Name input field rendered only when `mode === 'signup'` (above Email); `switchMode` resets `name`; `signUpWithEmail` called with `name` as third arg
+- `src/pages/AgentSpace.tsx` — `AgentSpaceContent` now reads `spaces` and `refetchSpaces` from context; added `useRef` retry counter (`retryCount`, max 5) with a `useEffect` that calls `refetchSpaces()` after 1500 ms whenever spaces are empty post-load (safety net for edge cases); replaced "You have no AgentSpaces / Create your first" empty state with a centered `Loader2` spinner + "Setting up your agentspace…" text
+
+---
+
 ## [5] agentspace-management — 2026-02-20
 
 **Why:** Users needed a workspace UI to organise agents. Each user gets one default AgentSpace on first login; they can create more. The app needed a dedicated in-app environment (no landing nav/footer) with a Supabase-style switcher so users can move between spaces.

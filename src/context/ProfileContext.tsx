@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
-import { fetchProfile } from '../lib/api'
+import { fetchProfile, ApiError } from '../lib/api'
 import type { UserProfile } from '../lib/api'
 
 interface ProfileContextType {
@@ -11,7 +11,7 @@ interface ProfileContextType {
 const ProfileContext = createContext<ProfileContextType | undefined>(undefined)
 
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
-  const { session } = useAuth()
+  const { session, signOut } = useAuth()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
@@ -23,7 +23,14 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     setProfileLoading(true)
     fetchProfile(session.access_token)
       .then(setProfile)
-      .catch((e) => console.error('[ProfileContext]', e))
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 401) {
+          // Session exists in localStorage but user no longer exists in Supabase
+          signOut()
+        } else {
+          console.error('[ProfileContext]', e)
+        }
+      })
       .finally(() => setProfileLoading(false))
   }, [session?.access_token])
 

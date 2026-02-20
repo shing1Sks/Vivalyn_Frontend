@@ -13,6 +13,7 @@ interface AuthContextType {
   signUpWithEmail: (
     email: string,
     password: string,
+    name: string,
   ) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<void>;
   signInWithMicrosoft: () => Promise<void>;
@@ -52,8 +53,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error as Error | null };
   }
 
-  async function signUpWithEmail(email: string, password: string) {
-    const { error } = await supabase.auth.signUp({ email, password });
+  async function signUpWithEmail(email: string, password: string, name: string) {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
     return { error: error as Error | null };
   }
 

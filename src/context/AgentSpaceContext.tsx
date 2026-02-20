@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { useAuth } from './AuthContext'
+import { useProfile } from './ProfileContext'
 import { fetchAgentSpaces, createAgentSpace } from '../lib/api'
 import type { AgentSpace, CreateAgentSpacePayload } from '../lib/api'
 
@@ -19,13 +20,15 @@ const AgentSpaceContext = createContext<AgentSpaceContextType | undefined>(undef
 
 export function AgentSpaceProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuth()
+  const { profileLoading } = useProfile()
   const [spaces, setSpaces] = useState<AgentSpace[]>([])
   const [activeSpace, setActiveSpace] = useState<AgentSpace | null>(null)
   const [spacesLoading, setSpacesLoading] = useState(false)
   const [spacesError, setSpacesError] = useState<string | null>(null)
 
   const loadSpaces = useCallback(async () => {
-    if (!session?.access_token) return
+    // Wait for profile fetch to complete — profile creation also creates the default agentspace
+    if (!session?.access_token || profileLoading) return
     setSpacesLoading(true)
     setSpacesError(null)
     try {
@@ -45,7 +48,7 @@ export function AgentSpaceProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setSpacesLoading(false)
     }
-  }, [session?.access_token])
+  }, [session?.access_token, profileLoading])
 
   useEffect(() => {
     loadSpaces()
