@@ -1,25 +1,35 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings, LogOut } from 'lucide-react'
+import { Settings, LogOut, Bell } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useProfile } from '../../context/ProfileContext'
+import { useAgentSpace } from '../../context/AgentSpaceContext'
 import UserAvatar from '../ui/UserAvatar'
 import AgentSpaceSwitcher from './AgentSpaceSwitcher'
+import { usePendingInviteCount } from './InboxPanel'
 
 interface AgentSpaceHeaderProps {
   onSignOut: () => void
   onCreateSpaceClick: () => void
+  onSettingsClick: () => void
+  onInboxClick: () => void
 }
 
 export default function AgentSpaceHeader({
   onSignOut,
   onCreateSpaceClick,
+  onSettingsClick,
+  onInboxClick,
 }: AgentSpaceHeaderProps) {
   const { user } = useAuth()
   const { profile } = useProfile()
+  const { activeSpace } = useAgentSpace()
   const navigate = useNavigate()
   const [userDropdownOpen, setUserDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const pendingCount = usePendingInviteCount()
+
+  const isAdmin = activeSpace?.role === 'admin'
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -53,16 +63,44 @@ export default function AgentSpaceHeader({
           <AgentSpaceSwitcher onCreateClick={onCreateSpaceClick} />
         </div>
 
-        {/* Right: Settings + Avatar */}
+        {/* Right: Inbox + Settings + Avatar */}
         <div className="flex items-center gap-1.5">
+          {/* Inbox bell */}
           <button
-            disabled
-            title="Settings (coming soon)"
-            className="p-2 text-gray-400 rounded-lg opacity-40 cursor-not-allowed"
+            onClick={onInboxClick}
+            title="Inbox"
+            className={`relative p-2 rounded-lg transition-colors duration-[120ms] cursor-pointer ${
+              pendingCount > 0
+                ? 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+            }`}
           >
-            <Settings className="w-4 h-4" />
+            <Bell className="w-4 h-4" />
+            {pendingCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-indigo-600 rounded-full" />
+            )}
           </button>
 
+          {/* Settings (admin only) */}
+          {isAdmin ? (
+            <button
+              onClick={onSettingsClick}
+              title="Settings"
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              disabled
+              title="Settings (admin only)"
+              className="p-2 text-gray-400 rounded-lg opacity-40 cursor-not-allowed"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* User dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setUserDropdownOpen(!userDropdownOpen)}

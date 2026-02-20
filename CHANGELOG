@@ -1,5 +1,23 @@
 # Changelog
 
+## [7] agentspace-management-system — 2026-02-21
+
+**Why:** Users needed a full invite-based membership system — admins invite people by email, invitees get a branded email, click the link, sign in if needed, and accept to join. Admins needed a settings panel to manage members and invites. Users needed an inbox for invites sent to them.
+
+**What:** Added the complete frontend layer: settings panel (members + invites management), inbox panel, invite accept page, API functions, header updates, and auth redirect support. Bell icon highlights only when there are pending invites.
+
+**Changes:**
+- `src/lib/api.ts` — added `AgentSpaceMember` and `Invite` interfaces; added 9 API functions: `fetchAgentSpaceMembers`, `changeAgentSpaceMemberRole`, `removeAgentSpaceMember`, `fetchAgentSpaceInvites`, `createInvite`, `revokeInvite`, `fetchInboxInvites`, `fetchInviteDetails` (no auth token), `acceptInvite`
+- `src/App.tsx` — added `/invite/:inviteId` route pointing to new `InviteAccept` page
+- `src/pages/Auth.tsx` — reads `?next=` query param via `useLocation`; after successful login/signup navigates to `next` if present instead of always going to `/agent-space`
+- `src/pages/InviteAccept.tsx` — **new**; public page at `/invite/:inviteId`; fetches invite details without auth; handles states: loading, not found, expired/revoked, already accepted, pending+not-logged-in ("Sign in to accept" → `/auth?next=/invite/{id}`), pending+logged-in+email-mismatch, pending+logged-in+match (Accept button); on accept auto-redirects to `/agent-space` after 2 s
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx` — **new**; right slide-out panel (max-w-440, `x: 100%→0` animation); Members tab with `MemberRow` (role dropdown + remove button, self-actions disabled) and Invites tab with send form (email + role select) and `InviteRow` (status badge + revoke button); admin-only
+- `src/components/agentspace/InboxPanel.tsx` — **new**; right slide-out panel (max-w-420); `InviteCard` per invite with status badge, `timeAgo` timestamp, and Accept button for pending valid invites; on accept updates local state + calls `refetchSpaces()`; exports `usePendingInviteCount()` hook for the header badge
+- `src/components/agentspace/AgentSpaceHeader.tsx` — added `onSettingsClick` and `onInboxClick` props; added `usePendingInviteCount` hook; bell button color is conditional (`pendingCount > 0` → indigo, else gray) with dot badge when pending; Settings button enabled only when `activeSpace?.role === 'admin'`
+- `src/pages/AgentSpace.tsx` — added `settingsOpen` and `inboxOpen` state; wired both props to `AgentSpaceHeader`; renders `<AgentSpaceSettingsPanel>` and `<InboxPanel>`
+
+---
+
 ## [6] profile-name-auth-hardening — 2026-02-20
 
 **Why:** Three related gaps needed closing: (1) the signup form had no name field so email-signup users had empty `name` in their profile; (2) the `UserProfile` type didn't include `name`/`email` even though the backend now returns them; (3) a deleted Supabase user still appeared logged in because `getSession()` reads localStorage without server validation, and a stale agentspace ID in localStorage could cause the app to render a phantom profile. Additionally, first-time users could briefly see the "no agentspace" empty state due to a race between the profile-creation fetch and the agentspace fetch.

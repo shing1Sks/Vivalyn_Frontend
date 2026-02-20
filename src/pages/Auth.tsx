@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -11,6 +11,8 @@ type Mode = 'login' | 'signup'
 export default function Auth() {
   const { user, loading: authLoading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithMicrosoft } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const next = new URLSearchParams(location.search).get('next')
 
   const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
@@ -23,9 +25,9 @@ export default function Auth() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      navigate('/agent-space', { replace: true })
+      navigate(next ?? '/agent-space', { replace: true })
     }
-  }, [user, authLoading, navigate])
+  }, [user, authLoading, navigate, next])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

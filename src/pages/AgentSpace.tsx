@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext'
 import { AgentSpaceProvider, useAgentSpace } from '../context/AgentSpaceContext'
 import AgentSpaceHeader from '../components/agentspace/AgentSpaceHeader'
 import CreateAgentSpaceModal from '../components/agentspace/CreateAgentSpaceModal'
+import AgentSpaceSettingsPanel from '../components/agentspace/AgentSpaceSettingsPanel'
+import InboxPanel from '../components/agentspace/InboxPanel'
 import { fadeInUp, staggerContainer } from '../lib/motion'
 
 function AgentSpaceContent() {
@@ -13,6 +15,8 @@ function AgentSpaceContent() {
   const { signOut } = useAuth()
   const navigate = useNavigate()
   const [createOpen, setCreateOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [inboxOpen, setInboxOpen] = useState(false)
   const retryCount = useRef(0)
 
   // Safety net: if spaces still empty after load, retry a few times (handles
@@ -35,7 +39,12 @@ function AgentSpaceContent() {
   if (spacesLoading) {
     return (
       <>
-        <AgentSpaceHeader onSignOut={handleSignOut} onCreateSpaceClick={() => setCreateOpen(true)} />
+        <AgentSpaceHeader
+          onSignOut={handleSignOut}
+          onCreateSpaceClick={() => setCreateOpen(true)}
+          onSettingsClick={() => setSettingsOpen(true)}
+          onInboxClick={() => setInboxOpen(true)}
+        />
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
         </div>
@@ -46,7 +55,12 @@ function AgentSpaceContent() {
   if (spacesError) {
     return (
       <>
-        <AgentSpaceHeader onSignOut={handleSignOut} onCreateSpaceClick={() => setCreateOpen(true)} />
+        <AgentSpaceHeader
+          onSignOut={handleSignOut}
+          onCreateSpaceClick={() => setCreateOpen(true)}
+          onSettingsClick={() => setSettingsOpen(true)}
+          onInboxClick={() => setInboxOpen(true)}
+        />
         <div className="flex-1 flex items-center justify-center px-6">
           <p className="text-sm text-red-500">{spacesError}</p>
         </div>
@@ -56,7 +70,12 @@ function AgentSpaceContent() {
 
   return (
     <>
-      <AgentSpaceHeader onSignOut={handleSignOut} onCreateSpaceClick={() => setCreateOpen(true)} />
+      <AgentSpaceHeader
+        onSignOut={handleSignOut}
+        onCreateSpaceClick={() => setCreateOpen(true)}
+        onSettingsClick={() => setSettingsOpen(true)}
+        onInboxClick={() => setInboxOpen(true)}
+      />
 
       <main className="flex-1 px-6 py-8">
         {activeSpace ? (
@@ -91,6 +110,16 @@ function AgentSpaceContent() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSuccess={() => setCreateOpen(false)}
+      />
+
+      <AgentSpaceSettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
+
+      <InboxPanel
+        open={inboxOpen}
+        onClose={() => setInboxOpen(false)}
       />
     </>
   )
