@@ -1,5 +1,44 @@
 # Changelog
 
+## [9] agent-configure-view-redesign — 2026-02-23
+
+**Why:** The initial `AgentConfigureView` squeezed content with a bottom AI button, had no way to change voice/language post-creation, used a uniform grid with poor visual hierarchy, had no collapsible sections for the list fields, clipped content on scroll, and was unusable on mobile.
+
+**What:** Full redesign of `AgentConfigureView` with a sticky header, an inline `VoiceBar` for changing voice/language, a responsive two-column layout (LHS: string sections, RHS: collapsible list sections), a floating AI rewrite popover per section header, thin custom scrollbars globally, and full mobile responsiveness.
+
+**Changes:**
+- `src/index.css` — added global thin webkit scrollbar CSS: 4 px wide, transparent track, gray-200 thumb with rounded pill shape
+- `src/components/agentspace/wizard/voiceConfig.ts` — **new**; shared constants file (`FLAG_MAP`, `VOICE_NAMES`, `PREF_LABELS`, `getVoiceName()`); extracted from `LanguageVoiceSelector.tsx` to satisfy the `react-refresh/only-export-components` lint rule that forbids non-component exports from component files
+- `src/components/agentspace/wizard/LanguageVoiceSelector.tsx` — removed local constant definitions; imports `FLAG_MAP`, `getVoiceName` from `./voiceConfig`
+- `src/components/agentspace/wizard/AgentConfigureView.tsx` — full rewrite:
+  - **Props extended**: `agentLanguage: string`, `agentVoice: string`, `onAgentUpdated?: (updates: { agent_language, agent_voice }) => void`
+  - **Header**: sticky `top-0 z-10` bar; on mobile scales to `text-sm`, `px-3 py-1.5 text-xs` button, subtitle hidden; on desktop restores full size
+  - **VoiceBar** sub-component: info row shows flag emoji + persona name (extracted from `voice_character.name` via `/Your name is (.+?)\.?\s*$/` regex, falls back to `getVoiceName(lang, 'female1')`) + language subtitle; "Change Voice" expands an `AnimatePresence` drawer; drawer has a language `<select>` populated from `fetchVoices()` (cached after first open) + 4 voice cards with persona names, audio play/stop preview, active state in indigo; "Update Voice" calls `updateAgent()` with `agent_language`, `agent_voice`, and updated `voice_character`; pre-selects the current voice on open by matching stored wavenet voice name to preference key from the API response
+  - **StringSection** sub-component: white bordered card with a header row (label + AI sparkle button) + `<textarea>` with `resize-none`
+  - **CollapsibleSection** sub-component: header `<button>` toggles `AnimatePresence` height animation (`height: 0 → auto`); AI button uses `e.stopPropagation()` to avoid toggling; numbered list items with individual textareas
+  - **AiButton** sub-component: `relative` container; sparkle button opens a floating popover (`w-72 max-w-[calc(100vw-2.5rem)]`, `absolute right-0 top-9 z-20`); instruction input + submit + close; calls `rewriteAgentSection()` on submit
+  - **Two-column body**: `flex flex-col md:flex-row md:items-start`; LHS `w-full md:w-[55%]` with Identity & Persona (rows=10) + Task Definition (rows=7); RHS `flex-1` with Objectives (defaultOpen=true), Transcript (defaultOpen=false), Guardrails (defaultOpen=false); separator is `border-b md:border-b-0 md:border-r border-gray-100`
+  - **Scroll model**: root is `min-h-full` (no overflow constraint); parent in `AgentSpace.tsx` is `overflow-y-auto`; sticky header pins correctly with this model
+- `src/lib/api.ts` — added `updateAgent(token, agentId, updates)` for partial PATCH (`agent_prompt?`, `agent_language?`, `agent_voice?`); `updateAgentPrompt` now delegates to `updateAgent`
+- `src/pages/AgentSpace.tsx` — configure overlay is `fixed inset-0 z-50 bg-white flex flex-col` with a 56 px top bar (back button left, agent name centred, close button right) and `flex-1 overflow-y-auto` body; `AgentConfigureView` receives `agentLanguage`, `agentVoice`, `onAgentUpdated`; `onAgentUpdated` updates both `configuringAgent` and `agents` list in-place
+
+---
+
+## [8] agent-creation-wizard — 2026-02-22
+
+**Why:** Users needed a guided flow to create voice training agents from scratch — choose a language and voice, describe what the agent should do, let the AI plan all 5 prompt sections sequentially (asking clarifying questions only when meaningful), review and edit the compiled spec, then save.
+
+**What:** Added the full agent creation pipeline: a multi-step wizard modal, a linear planner flow UI that shows section-by-section progress with inline Q&A, a language+voice selector with audio preview, and a post-compile configure step for review before saving. API layer wired to all new backend endpoints. Agent list grid with agent cards added to the AgentSpace page.
+
+**Changes:**
+- `src/lib/api.ts` — added `VoiceOption`, `LanguageVoiceOption` interfaces; added 7 API functions: `fetchVoices()` (`GET /voices`), `fetchVoicePreviewBlob(language, pref)` (`GET /voices/{lang}/{pref}/preview`), `planAgentSection(token, payload)` (`POST /agents/plan-section`), `compileAgentPlan(token, payload)` (`POST /agents/compile`), `rewriteAgentSection(token, payload)` (`POST /agents/rewrite-section`), `saveAgent(token, agentspaceId, payload)` (`POST /agentspaces/{id}/agents`), `fetchAgents(token, agentspaceId)` (`GET /agentspaces/{id}/agents`); added interfaces `AgentPromptSpec`, `PlanQuestion`, `PlanSectionResult`, `CompileResult`, `Agent`
+- `src/components/agentspace/wizard/LanguageVoiceSelector.tsx` — **new**; searchable language grid (flag emoji + display name, 34 languages); collapses after selection; 4 voice cards per language showing WaveNet persona name, play/stop audio preview via blob URL + `<audio>` element with cancellation token pattern; active voice highlighted in indigo; "Continue" enabled only when both language and voice chosen; calls `onContinue(language, voicePreference, voiceName, personaName)`
+- `src/components/agentspace/wizard/PlannerFlow.tsx` — **new**; progress display consumed during the planning phase; renders all 5 sections with status icons (`pending` ring, `planning` spinner, `needs_input` amber `?` badge, `done` green check); when `needs_input`, shows question text + 2 suggestion chips + free-text input; auto-scrolls to bottom as sections update
+- `src/components/agentspace/CreateAgentWizard.tsx` — **new**; 6-step modal (`language-voice` → `prompt-input` → `planning` → `compiling` → `done` → `configure`); dot progress bar for the first 4 steps; `runPlanningPipeline()` iterates the 5 sections linearly — calls `planAgentSection()`, waits for user answers if `need_user_inputs`, appends to `plan_history`, then calls `compileAgentPlan()`; `handleAnswerQuestion()` appends `Q/A` lines to `plan_history` and resumes the pipeline; success screen with "Configure" (opens inline `AgentConfigureView`) and "Done" actions; slide transitions via `AnimatePresence`
+- `src/pages/AgentSpace.tsx` — added `agents`, `agentsLoading`, `configuringAgent` state; `useEffect` fetches agents on active-space change; added `AgentCard` sub-component (bot icon, agent name, language badge, persona name, wavenet voice in monospace, creator + relative date, Configure + Deploy buttons — Deploy disabled with "Soon" badge); `EmptyAgentsState` sub-component; `extractPersonaName()` and `formatRelativeDate()` helpers; agent grid `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`; `CreateAgentWizard` mounted with `agentspaceId`; `handleWizardClose()` refetches agents after wizard closes
+
+---
+
 ## [7] agentspace-management-system — 2026-02-21
 
 **Why:** Users needed a full invite-based membership system — admins invite people by email, invitees get a branded email, click the link, sign in if needed, and accept to join. Admins needed a settings panel to manage members and invites. Users needed an inbox for invites sent to them.

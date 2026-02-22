@@ -227,3 +227,190 @@ export async function acceptInvite(
   }
   return res.json()
 }
+
+// ── Voices ────────────────────────────────────────────────────────────────────
+
+export interface VoiceOption {
+  preference: string
+  voice_name: string
+}
+
+export interface LanguageVoiceOption {
+  key: string
+  display_name: string
+  tts_language_code: string
+  voices: VoiceOption[]
+}
+
+export async function fetchVoices(): Promise<{ languages: LanguageVoiceOption[] }> {
+  const res = await fetch(`${BASE}/api/v1/voices`)
+  if (!res.ok) throw new ApiError('Failed to fetch voices', res.status)
+  return res.json()
+}
+
+export async function fetchVoicePreviewBlob(language: string, voicePref: string): Promise<Blob> {
+  const res = await fetch(`${BASE}/api/v1/voices/${language}/${voicePref}/preview`)
+  if (!res.ok) throw new ApiError('Voice preview unavailable', res.status)
+  return res.blob()
+}
+
+// ── Agent Prompt Spec ─────────────────────────────────────────────────────────
+
+export interface AgentPromptSpec {
+  identity_and_persona: string
+  task_definition: string
+  objectives: string[]
+  transcript: string[]
+  guardrails: string[]
+  voice_character?: { name: string; persona: string }
+}
+
+// ── Agent Planning ────────────────────────────────────────────────────────────
+
+export interface PlanQuestion {
+  query_statement: string
+  suggestion1: { statement: string }
+  suggestion2: { statement: string }
+}
+
+export interface PlanSectionResult {
+  approach: string
+  need_user_inputs: boolean
+  questions: PlanQuestion[]
+}
+
+export async function planAgentSection(
+  accessToken: string,
+  payload: { seed_prompt: string; plan_history: string; section_name: string },
+): Promise<PlanSectionResult> {
+  const res = await fetch(`${BASE}/api/v1/agents/plan-section`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new ApiError((err as { detail?: string }).detail ?? 'Failed to plan section', res.status)
+  }
+  return res.json()
+}
+
+// CompileResult includes agent_name (returned by the compiler) plus the 5 spec sections
+export interface CompileResult extends AgentPromptSpec {
+  agent_name: string
+}
+
+export async function compileAgentPlan(
+  accessToken: string,
+  payload: { plan_history: string },
+): Promise<CompileResult> {
+  const res = await fetch(`${BASE}/api/v1/agents/compile`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new ApiError((err as { detail?: string }).detail ?? 'Failed to compile agent', res.status)
+  }
+  return res.json()
+}
+
+export async function rewriteAgentSection(
+  accessToken: string,
+  payload: { section_name: string; current_content: string; instruction: string },
+): Promise<{ updated_content: string }> {
+  const res = await fetch(`${BASE}/api/v1/agents/rewrite-section`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new ApiError((err as { detail?: string }).detail ?? 'Failed to rewrite section', res.status)
+  }
+  return res.json()
+}
+
+// ── Agents CRUD ───────────────────────────────────────────────────────────────
+
+export interface Agent {
+  id: string
+  created_at: string
+  agentspace_id: string
+  agent_name: string
+  agent_prompt: AgentPromptSpec
+  agent_language: string
+  agent_voice: string
+  created_by_id: string
+  created_by_name: string
+}
+
+export async function saveAgent(
+  accessToken: string,
+  agentspaceId: string,
+  payload: { agent_name: string; agent_prompt: AgentPromptSpec; agent_language: string; agent_voice: string },
+): Promise<Agent> {
+  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/agents`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new ApiError((err as { detail?: string }).detail ?? 'Failed to save agent', res.status)
+  }
+  return res.json()
+}
+
+export async function fetchAgents(accessToken: string, agentspaceId: string): Promise<Agent[]> {
+  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/agents`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new ApiError((err as { detail?: string }).detail ?? 'Failed to fetch agents', res.status)
+  }
+  const data: { agents: Agent[] } = await res.json()
+  return data.agents
+}
+
+export async function updateAgent(
+  accessToken: string,
+  agentId: string,
+  updates: { agent_prompt?: AgentPromptSpec; agent_language?: string; agent_voice?: string },
+): Promise<Agent> {
+  const res = await fetch(`${BASE}/api/v1/agents/${agentId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updates),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new ApiError((err as { detail?: string }).detail ?? 'Failed to update agent', res.status)
+  }
+  return res.json()
+}
+
+export async function updateAgentPrompt(
+  accessToken: string,
+  agentId: string,
+  agent_prompt: AgentPromptSpec,
+): Promise<Agent> {
+  return updateAgent(accessToken, agentId, { agent_prompt })
+}

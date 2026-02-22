@@ -34,7 +34,7 @@ export interface FeatureCategory {
 
 export const FEATURE_CATEGORIES: FeatureCategory[] = [
   {
-    title: 'Assessor Agents',
+    title: 'General Agents',
     comingSoon: false,
     features: [
       {
