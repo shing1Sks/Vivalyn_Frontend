@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, ChevronRight, Loader2, Volume2, VolumeX } from 'lucide-react'
 import { fetchVoices, fetchVoicePreviewBlob, type LanguageVoiceOption } from '../../../lib/api'
-import { FLAG_MAP, getVoiceName } from './voiceConfig'
+import { FLAG_MAP, PREF_LABELS, getVoiceName } from './voiceConfig'
 
 interface Props {
   onContinue: (language: string, voicePreference: string, voiceName: string, personaName: string) => void
@@ -77,7 +77,7 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
     setLoadingPref(null)
   }
 
-  async function handlePlay(pref: string, voiceName: string) {
+  async function handlePlay(pref: string) {
     // Toggle off if already loading or playing this pref
     if (loadingPref === pref || playingPref === pref) {
       stopAudio()
@@ -236,53 +236,59 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
                       <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
                         Choose a voice
                       </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div className="grid grid-cols-4 gap-2.5">
                         {activeLang.voices.map(voice => {
                           const isVoiceActive = selectedPref === voice.preference
                           const isLoading = loadingPref === voice.preference
                           const isPlaying = playingPref === voice.preference
+                          const isFemale = voice.preference.startsWith('female')
                           return (
                             <div
                               key={voice.preference}
                               onClick={() => setSelectedPref(voice.preference)}
-                              className={`flex flex-col gap-2 p-3 rounded-xl border cursor-pointer duration-[120ms] ${
+                              className={`flex flex-col gap-3 p-3.5 rounded-xl border cursor-pointer duration-[120ms] ${
                                 isVoiceActive
                                   ? 'border-indigo-600 bg-indigo-50'
-                                  : 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white'
+                                  : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
                               }`}
                             >
-                              <span className={`text-sm font-medium ${isVoiceActive ? 'text-indigo-700' : 'text-gray-700'}`}>
-                                {getVoiceName(selectedLang, voice.preference)}
+                              {/* Name + gender badge */}
+                              <div className="flex items-start justify-between gap-1.5">
+                                <span className={`text-sm font-semibold leading-tight ${isVoiceActive ? 'text-indigo-700' : 'text-gray-800'}`}>
+                                  {getVoiceName(selectedLang, voice.preference)}
+                                </span>
+                                <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                  isVoiceActive
+                                    ? 'bg-indigo-100 text-indigo-500'
+                                    : isFemale
+                                    ? 'bg-pink-50 text-pink-400'
+                                    : 'bg-sky-50 text-sky-400'
+                                }`}>
+                                  {isFemale ? '♀' : '♂'}
+                                </span>
+                              </div>
+                              <span className={`text-xs -mt-1.5 ${isVoiceActive ? 'text-indigo-400' : 'text-gray-400'}`}>
+                                {PREF_LABELS[voice.preference]}
                               </span>
-                              <span className="text-xs text-gray-400 truncate font-mono" title={voice.voice_name}>
-                                {voice.voice_name}
-                              </span>
-                              {/* Play / Loading / Stop button */}
+                              {/* Preview button */}
                               <button
-                                onClick={e => { e.stopPropagation(); handlePlay(voice.preference, voice.voice_name) }}
-                                className={`self-start flex items-center gap-1 text-xs px-2 py-1 rounded-md duration-[120ms] ${
+                                onClick={e => { e.stopPropagation(); handlePlay(voice.preference) }}
+                                className={`flex items-center justify-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg w-full duration-[120ms] ${
                                   isLoading
                                     ? 'bg-gray-100 text-gray-400 cursor-wait'
                                     : isPlaying
                                     ? 'bg-indigo-100 text-indigo-700'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    : isVoiceActive
+                                    ? 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'
+                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                                 }`}
                               >
                                 {isLoading ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    Loading
-                                  </>
+                                  <><Loader2 className="w-3 h-3 animate-spin" />Loading</>
                                 ) : isPlaying ? (
-                                  <>
-                                    <SoundWave />
-                                    Stop
-                                  </>
+                                  <><SoundWave />Stop</>
                                 ) : (
-                                  <>
-                                    <Volume2 className="w-3 h-3" />
-                                    Play
-                                  </>
+                                  <><Volume2 className="w-3 h-3" />Preview</>
                                 )}
                               </button>
                             </div>

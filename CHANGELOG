@@ -1,5 +1,18 @@
 # Changelog
 
+## [10] voice-ui-abstraction — 2026-02-23
+
+**Why:** Wavenet voice codes like `en-US-Wavenet-E` were leaking into the voice picker UI — users had no reason to see them. The abstraction layer (persona names like "Emma", "Ryan") already existed in `voiceConfig.ts` but the voice cards still displayed the raw internal code. Additionally the 2-column voice grid left each card mostly empty, wasting vertical space when 4 cards fit comfortably in a single row.
+
+**What:** Removed all Wavenet code rendering from voice cards. Redesigned each card to show the persona name, a gender badge (♀/♂), and a PREF_LABELS subtitle ("Female 1", "Male 1", etc.). Switched both voice grids from 2-col to 4-col. Updated `api.ts` to drop the now-unused `tts_language_code` field from `LanguageVoiceOption`. The `voice_name` (Wavenet code) is still transported in the API payload and saved to the DB — it is simply never rendered.
+
+**Changes:**
+- `src/lib/api.ts` — removed `tts_language_code` from `LanguageVoiceOption` interface (field was unused by the frontend); `VoiceOption.voice_name` kept as the internal Wavenet code (not displayed in UI, used to populate `agent_voice` on save)
+- `src/components/agentspace/wizard/LanguageVoiceSelector.tsx` — added `PREF_LABELS` import from `./voiceConfig`; removed `voice_name` display span; redesigned voice card: persona name (`getVoiceName`) + gender badge (`♀`/`♂`, pink-50/sky-50 colors, indigo-100 when active) + `PREF_LABELS[voice.preference]` subtitle; Preview button now full-width; grid changed `grid-cols-2 → grid-cols-4`; `selectedVoiceName` still derived from `voice.voice_name` for the `onContinue` payload
+- `src/components/agentspace/wizard/AgentConfigureView.tsx` — added `PREF_LABELS` import; removed `voice_name` display span; voice card redesign matches `LanguageVoiceSelector`; grid changed `grid-cols-2 → grid-cols-4`; `applyCurrentPref()` still matches by `v.voice_name === agentVoice` to correctly pre-select the current voice
+
+---
+
 ## [9] agent-configure-view-redesign — 2026-02-23
 
 **Why:** The initial `AgentConfigureView` squeezed content with a bottom AI button, had no way to change voice/language post-creation, used a uniform grid with poor visual hierarchy, had no collapsible sections for the list fields, clipped content on scroll, and was unusable on mobile.

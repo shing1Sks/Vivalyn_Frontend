@@ -232,13 +232,12 @@ export async function acceptInvite(
 
 export interface VoiceOption {
   preference: string
-  voice_name: string
+  voice_name: string  // internal wavenet code — not displayed in UI
 }
 
 export interface LanguageVoiceOption {
   key: string
   display_name: string
-  tts_language_code: string
   voices: VoiceOption[]
 }
 
