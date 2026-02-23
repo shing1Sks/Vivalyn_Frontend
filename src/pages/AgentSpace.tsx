@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Bot, Loader2, Plus, Rocket, Settings2, X } from 'lucide-react'
+import { ArrowLeft, Bot, Check, Copy, Link2, Loader2, Plus, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { AgentSpaceProvider, useAgentSpace } from '../context/AgentSpaceContext'
 import AgentSpaceHeader from '../components/agentspace/AgentSpaceHeader'
@@ -10,7 +10,7 @@ import AgentSpaceSettingsPanel from '../components/agentspace/AgentSpaceSettings
 import InboxPanel from '../components/agentspace/InboxPanel'
 import CreateAgentWizard from '../components/agentspace/CreateAgentWizard'
 import AgentConfigureView from '../components/agentspace/wizard/AgentConfigureView'
-import { fetchAgents, type Agent } from '../lib/api'
+import { fetchAgents, toggleAgentStatus, type Agent } from '../lib/api'
 import { fadeInUp, staggerContainer } from '../lib/motion'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -170,7 +170,11 @@ function AgentSpaceContent() {
                     <AgentCard
                       key={agent.id}
                       agent={agent}
+                      token={session?.access_token ?? ''}
                       onConfigure={() => setConfiguringAgent(agent)}
+                      onStatusChange={updated =>
+                        setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
+                      }
                     />
                   ))}
                 </div>
@@ -277,8 +281,49 @@ function AgentSpaceContent() {
 
 // ── Agent card ─────────────────────────────────────────────────────────────────
 
-function AgentCard({ agent, onConfigure }: { agent: Agent; onConfigure: () => void }) {
+interface AgentCardProps {
+  agent: Agent
+  token: string
+  onConfigure: () => void
+  onStatusChange: (updated: Agent) => void
+}
+
+function AgentCard({ agent, token, onConfigure, onStatusChange }: AgentCardProps) {
   const personaName = extractPersonaName(agent)
+  const isLive = agent.agent_status === 'live'
+
+  const [toggling, setToggling] = useState(false)
+  const [copiedLive, setCopiedLive] = useState(false)
+  const [copiedTest, setCopiedTest] = useState(false)
+
+  async function handleToggleStatus() {
+    if (toggling) return
+    const next: 'live' | 'idle' = isLive ? 'idle' : 'live'
+    setToggling(true)
+    try {
+      const updated = await toggleAgentStatus(token, agent.id, next)
+      onStatusChange(updated)
+    } catch {
+      // silently revert — UI stays as-is
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  function copyLink(url: string, which: 'live' | 'test') {
+    navigator.clipboard.writeText(url).then(() => {
+      if (which === 'live') {
+        setCopiedLive(true)
+        setTimeout(() => setCopiedLive(false), 2000)
+      } else {
+        setCopiedTest(true)
+        setTimeout(() => setCopiedTest(false), 2000)
+      }
+    })
+  }
+
+  const liveUrl = `${window.location.origin}/agent/${agent.id}`
+  const testUrl = `${window.location.origin}/agent/${agent.id}?mode=test`
 
   return (
     <motion.div
@@ -293,7 +338,18 @@ function AgentCard({ agent, onConfigure }: { agent: Agent; onConfigure: () => vo
           <Bot className="w-[1.125rem] h-[1.125rem] text-indigo-600" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900 leading-tight truncate">{agent.agent_name}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-gray-900 leading-tight truncate flex-1">{agent.agent_name}</p>
+            {/* Status badge */}
+            <span
+              className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
+                isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+              {isLive ? 'Live' : 'Idle'}
+            </span>
+          </div>
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5">
               {agent.agent_language}
@@ -317,23 +373,57 @@ function AgentCard({ agent, onConfigure }: { agent: Agent; onConfigure: () => vo
         </p>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+      {/* Configure button — always visible */}
+      <div className="pt-1 border-t border-gray-100 flex flex-col gap-2">
         <button
           onClick={onConfigure}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-indigo-200 text-indigo-600 text-xs font-medium hover:bg-indigo-50 duration-[120ms]"
+          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-indigo-200 text-indigo-600 text-xs font-medium hover:bg-indigo-50 duration-[120ms]"
         >
           <Settings2 className="w-3.5 h-3.5" />
           Configure
         </button>
+
+        {/* Live toggle */}
+        <div className="flex items-center justify-between px-0.5 py-0.5">
+          <span className="text-xs text-gray-500">Go Live</span>
+          <button
+            onClick={handleToggleStatus}
+            disabled={toggling}
+            title={isLive ? 'Pause agent' : 'Deploy agent live'}
+            className="flex items-center gap-1 disabled:opacity-50 duration-[120ms]"
+          >
+            {toggling ? (
+              <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+            ) : isLive ? (
+              <ToggleRight className="w-6 h-6 text-emerald-500" />
+            ) : (
+              <ToggleLeft className="w-6 h-6 text-gray-300" />
+            )}
+          </button>
+        </div>
+
+        {/* Copy Live Link — all members */}
         <button
-          disabled
-          title="Coming soon"
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-gray-200 text-gray-400 text-xs font-medium cursor-not-allowed"
+          onClick={() => copyLink(liveUrl, 'live')}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 duration-[120ms]"
         >
-          <Rocket className="w-3.5 h-3.5" />
-          Deploy
-          <span className="text-[10px] bg-gray-100 rounded-full px-1.5 py-0.5 leading-none">Soon</span>
+          {copiedLive ? (
+            <><Check className="w-3 h-3" /> Copied!</>
+          ) : (
+            <><Link2 className="w-3 h-3" /> Copy Live Link</>
+          )}
+        </button>
+
+        {/* Copy Test Link — all members */}
+        <button
+          onClick={() => copyLink(testUrl, 'test')}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 duration-[120ms]"
+        >
+          {copiedTest ? (
+            <><Check className="w-3 h-3" /> Copied!</>
+          ) : (
+            <><Copy className="w-3 h-3" /> Copy Test Link</>
+          )}
         </button>
       </div>
     </motion.div>

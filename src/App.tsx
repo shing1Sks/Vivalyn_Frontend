@@ -3,6 +3,7 @@ import Landing from './pages/Landing'
 import Auth from './pages/Auth'
 import AgentSpace from './pages/AgentSpace'
 import InviteAccept from './pages/InviteAccept'
+import AgentLive from './pages/AgentLive'
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
       <Route path="/auth" element={<Auth />} />
       <Route path="/agent-space" element={<AgentSpace />} />
       <Route path="/invite/:inviteId" element={<InviteAccept />} />
+      <Route path="/agent/:agentId" element={<AgentLive />} />
     </Routes>
   )
 }

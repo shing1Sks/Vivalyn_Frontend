@@ -352,6 +352,7 @@ export interface Agent {
   agent_voice: string
   created_by_id: string
   created_by_name: string
+  agent_status: 'live' | 'idle'
 }
 
 export async function saveAgent(
@@ -412,4 +413,41 @@ export async function updateAgentPrompt(
   agent_prompt: AgentPromptSpec,
 ): Promise<Agent> {
   return updateAgent(accessToken, agentId, { agent_prompt })
+}
+
+export async function toggleAgentStatus(
+  accessToken: string,
+  agentId: string,
+  status: 'live' | 'idle',
+): Promise<Agent> {
+  const res = await fetch(`${BASE}/api/v1/agents/${agentId}/status`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new ApiError((err as { detail?: string }).detail ?? 'Failed to update status', res.status)
+  }
+  return res.json()
+}
+
+// ── Live Sessions ─────────────────────────────────────────────────────────────
+
+export interface AgentPublicConfig {
+  agent_name: string
+  agent_language: string
+  agent_status: string
+}
+
+export async function fetchAgentPublicConfig(agentId: string): Promise<AgentPublicConfig> {
+  const res = await fetch(`${BASE}/api/v1/agents/${agentId}/public-config`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new ApiError((err as { detail?: string }).detail ?? 'Agent not found', res.status)
+  }
+  return res.json()
 }
