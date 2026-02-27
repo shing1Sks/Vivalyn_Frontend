@@ -187,13 +187,9 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       // Extract agent_name from compiler result; the rest are the 5 prompt sections
       const { agent_name, ...promptSections } = spec
 
-      // Inject voice persona so the agent knows its name and character
       const agentPromptFull = {
         ...promptSections,
-        voice_character: {
-          name: `Your name is ${selectedPersonaName}.`,
-          persona: `You are ${selectedPersonaName}. Introduce yourself by name at the start of each session and maintain a warm, natural conversational style throughout.`,
-        },
+        name: selectedPersonaName,
       }
       setConfiguredSpec(agentPromptFull)
 
@@ -391,6 +387,8 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
               <AgentConfigureView
                 spec={configuredSpec}
                 agentId={savedAgent.id}
+                agentLanguage={savedAgent.agent_language}
+                agentVoice={savedAgent.agent_voice}
                 onSaved={spec => setConfiguredSpec(spec)}
               />
             )}

@@ -1,5 +1,24 @@
 # Changelog
 
+## [12] session-ui-and-persona-name — 2026-02-25
+
+**Why:** Four gaps remained after agent-live-ui ([11]) and voice-ui-abstraction ([10]): (1) The live session screen only showed the agent avatar — users had no visual representation in the call, making it feel one-sided. (2) `AgentPublicConfig` didn't expose the agent's persona name (e.g. "Arjun"), so the session screen always displayed the raw `agent_name` instead of the configured persona. (3) The `AgentCard` deploy section was gated to admins only, but link sharing is useful to all space members. (4) `voiceConfig.ts` still exported WaveNet-specific helpers (`VOICE_NAMES`, `getVoiceName()`) that were meaningless after the Inworld migration since Inworld voices are already named strings.
+
+**What:** Added a `UserAvatar` component to the live session screen and redesigned `SessionScreen` into a two-card side-by-side layout (agent + user). Extended `AgentPublicConfig` with `persona_name` and wired it through `AgentLive` so the session displays the persona name. Removed the admin gate from `AgentCard`'s deploy section. Cleaned up `voiceConfig.ts`. Updated `AgentConfigureView.tsx` VoiceBar to persist the Inworld voice name as `agent_prompt.name` (top-level persona field) instead of the old `voice_character` sub-object.
+
+**Changes:**
+- `src/lib/api.ts` — added `persona_name?: string | null` to `AgentPublicConfig`; added `name: string` to `AgentPromptSpec` (top-level persona name, replaces the old `voice_character: {name}` sub-object pattern)
+- `src/pages/AgentLive.tsx` — `ActiveSession` now passes `config?.persona_name ?? config?.agent_name` as `agentName` so the session screen uses the persona name; `SessionScreen` now also receives `userName` prop
+- `src/components/agentlive/SessionScreen.tsx` — **redesigned**: two-card side-by-side layout (agent card + user card), each a frosted-glass `rounded-2xl border border-gray-700/60 bg-linear-to-b from-gray-800/70 to-gray-900/80 backdrop-blur-sm` panel; added `userName` prop; uses new `UserAvatar` component for user card; `isUserSpeaking` derived from `agentState === 'listening' && micEnabled`; user card subtitle shows "Speaking" / "Muted" / blank
+- `src/components/agentlive/UserAvatar.tsx` — **new**; 144 px violet gradient circle with user initials (`getInitials()` handles multi-word names, max 2 chars); `isSpeaking`: two staggered emerald Framer Motion ripple rings (scale+opacity loop); `!micEnabled`: `MicOff` badge (bottom-right, `w-7 h-7 rounded-full bg-gray-800 border border-gray-700`) + circle dims to `opacity-60`
+- `src/pages/AgentSpace.tsx` — `AgentCard`: removed `userRole` prop; deploy section (Go Live toggle + Copy Live Link + Copy Test Link) is now visible to **all space members**, not admin-only; Configure button rendered as a always-visible full-width bordered button (`border-indigo-200 text-indigo-600`)
+- `src/components/agentspace/CreateAgentWizard.tsx` — `runCompiler()` now includes `name: selectedPersonaName` in the `agent_prompt` payload on auto-save; `DoneStep` replaces the old "Done" action button with a disabled "Deploy" button carrying a "Soon" badge, encouraging users to Configure first
+- `src/components/agentspace/wizard/voiceConfig.ts` — removed `VOICE_NAMES` (WaveNet preference-to-persona-name map) and `getVoiceName()` helper; now only exports `FLAG_MAP` and `PREF_LABELS` — Inworld voice names are used directly as display names
+- `src/components/agentspace/wizard/AgentConfigureView.tsx` — `VoiceBar.handleUpdate()` now patches `agent_prompt: { ...editedSpec, name: personaName }` where `personaName = selectedVoiceName` (the Inworld voice name doubles as the persona name); `onUpdated` callback signature updated to `(lang, voice, personaName)`; `handleVoiceUpdated` in parent sets `edited.name = personaName` so the next "Save Changes" persists it; `displayPersona` shows `editedSpec.name ?? agentVoice`
+- `src/components/agentspace/wizard/LanguageVoiceSelector.tsx` — voice cards now show `voice.voice_name` (Inworld name e.g. "Ashley") directly instead of `getVoiceName(...)` (which was WaveNet-specific)
+
+---
+
 ## [11] agent-live-ui — 2026-02-23
 
 **Why:** Agents could be configured and saved but had no way to be run by end-users. Admins needed a way to mark an agent live (or pause it) and share a direct link. External users needed a video-call-style interface to interact with a deployed agent via voice. Internal members needed a test link that bypasses the live/idle restriction so they can validate the agent before going live.

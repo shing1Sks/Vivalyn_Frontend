@@ -192,7 +192,8 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
           break
 
         case 'agent_text_delta':
-          setAgentState('thinking')
+          // Don't override 'speaking' — audio chunks and text deltas can arrive concurrently
+          setAgentState(prev => prev === 'speaking' ? 'speaking' : 'thinking')
           break
 
         case 'audio_done': {

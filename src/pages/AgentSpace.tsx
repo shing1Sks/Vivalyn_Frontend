@@ -16,12 +16,7 @@ import { fadeInUp, staggerContainer } from '../lib/motion'
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function extractPersonaName(agent: Agent): string {
-  const vc = agent.agent_prompt.voice_character
-  if (vc?.name) {
-    const match = vc.name.match(/Your name is (.+?)\.?\s*$/)
-    return match?.[1] ?? ''
-  }
-  return ''
+  return agent.agent_prompt.name ?? ''
 }
 
 function formatRelativeDate(iso: string): string {

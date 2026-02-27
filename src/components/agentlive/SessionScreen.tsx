@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Mic, MicOff, PhoneOff } from 'lucide-react'
 import AgentAvatar from './AgentAvatar'
+import UserAvatar from './UserAvatar'
 import type { AgentState } from '../../hooks/useAgentSession'
 
 interface SessionScreenProps {
   agentName: string
+  userName: string
   mode: 'live' | 'test'
   agentState: AgentState
   micEnabled: boolean
@@ -31,6 +33,7 @@ function useElapsed() {
 
 export default function SessionScreen({
   agentName,
+  userName,
   mode,
   agentState,
   micEnabled,
@@ -38,20 +41,17 @@ export default function SessionScreen({
   onEndCall,
 }: SessionScreenProps) {
   const elapsed = useElapsed()
+  const isUserSpeaking = agentState === 'listening' && micEnabled
 
   return (
-    <div className="flex flex-col items-center justify-between h-full py-8 px-6">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="w-full flex items-center justify-between">
-        <div>
-          <p className="text-xs text-gray-400 mb-0.5">Agent</p>
-          <h2 className="text-base font-semibold text-gray-900">{agentName}</h2>
-        </div>
+      <div className="flex items-center justify-between px-6 py-4">
         <span
           className={`text-[11px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1.5 ${
             mode === 'live'
-              ? 'bg-emerald-50 text-emerald-700'
-              : 'bg-indigo-50 text-indigo-700'
+              ? 'bg-emerald-900/60 text-emerald-400'
+              : 'bg-indigo-900/60 text-indigo-400'
           }`}
         >
           <span
@@ -61,32 +61,52 @@ export default function SessionScreen({
           />
           {mode === 'live' ? 'Live' : 'Test'}
         </span>
+
+        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+          {elapsed}
+        </div>
       </div>
 
-      {/* Agent avatar */}
-      <div className="flex flex-col items-center gap-4">
-        <AgentAvatar agentName={agentName} agentState={agentState} />
-        <span className="text-sm text-gray-500 font-medium min-h-[20px]">
-          {STATE_LABELS[agentState]}
-        </span>
-      </div>
+      {/* Main avatars area */}
+      <div className="flex-1 flex items-center justify-center gap-6">
+        {/* Agent card */}
+        <div className="flex flex-col items-center gap-5 px-14 py-10 rounded-2xl border border-gray-700/60 bg-linear-to-b from-gray-800/70 to-gray-900/80 backdrop-blur-sm">
+          <AgentAvatar agentName={agentName} agentState={agentState} />
+          <div className="text-center">
+            <p className="text-sm font-semibold text-white">{agentName}</p>
+            <p className="text-xs text-gray-500 mt-0.5 min-h-[16px]">
+              {STATE_LABELS[agentState]}
+            </p>
+          </div>
+        </div>
 
-      {/* Session timer */}
-      <div className="flex items-center gap-1.5 text-xs text-gray-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-        {elapsed}
+        {/* User card */}
+        <div className="flex flex-col items-center gap-5 px-14 py-10 rounded-2xl border border-gray-700/60 bg-linear-to-b from-gray-800/70 to-gray-900/80 backdrop-blur-sm">
+          <UserAvatar
+            userName={userName}
+            isSpeaking={isUserSpeaking}
+            micEnabled={micEnabled}
+          />
+          <div className="text-center">
+            <p className="text-sm font-semibold text-white">{userName}</p>
+            <p className="text-xs text-gray-500 mt-0.5 min-h-[16px]">
+              {isUserSpeaking ? 'Speaking' : !micEnabled ? 'Muted' : ''}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-5">
+      <div className="flex items-center justify-center gap-5 pb-8">
         {/* Mic toggle */}
         <button
           onClick={onToggleMic}
           title={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
           className={`w-14 h-14 rounded-full flex items-center justify-center shadow-sm border duration-[120ms] ${
             micEnabled
-              ? 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-              : 'bg-gray-900 border-gray-900 text-white'
+              ? 'bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700'
+              : 'bg-gray-950 border-gray-800 text-gray-400 hover:bg-gray-900'
           }`}
         >
           {micEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}

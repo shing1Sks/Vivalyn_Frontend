@@ -43,6 +43,7 @@ function ActiveSession({
   token,
   onEnded,
 }: ActiveSessionProps) {
+  const userName = name
   const { phase, agentState, transcript, micEnabled, toggleMic, endSession, error } =
     useAgentSession({ agentId, email, name, mode, token })
 
@@ -75,11 +76,12 @@ function ActiveSession({
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex">
+    <div className="h-screen bg-gray-900 flex">
       {/* Main call area */}
       <div className="flex-1 flex flex-col">
         <SessionScreen
           agentName={agentName}
+          userName={userName}
           mode={mode}
           agentState={agentState}
           micEnabled={micEnabled}
@@ -212,7 +214,7 @@ export default function AgentLive() {
     return (
       <ActiveSession
         agentId={agentId}
-        agentName={config?.agent_name ?? 'Agent'}
+        agentName={config?.persona_name ?? config?.agent_name ?? 'Agent'}
         email={joinEmail}
         name={joinName}
         mode={mode}

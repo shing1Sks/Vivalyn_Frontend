@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, ChevronRight, Loader2, Volume2, VolumeX } from 'lucide-react'
 import { fetchVoices, fetchVoicePreviewBlob, type LanguageVoiceOption } from '../../../lib/api'
-import { FLAG_MAP, PREF_LABELS, getVoiceName } from './voiceConfig'
+import { FLAG_MAP, PREF_LABELS } from './voiceConfig'
 
 interface Props {
   onContinue: (language: string, voicePreference: string, voiceName: string, personaName: string) => void
@@ -255,7 +255,7 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
                               {/* Name + gender badge */}
                               <div className="flex items-start justify-between gap-1.5">
                                 <span className={`text-sm font-semibold leading-tight ${isVoiceActive ? 'text-indigo-700' : 'text-gray-800'}`}>
-                                  {getVoiceName(selectedLang, voice.preference)}
+                                  {voice.voice_name}
                                 </span>
                                 <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
                                   isVoiceActive
@@ -317,14 +317,14 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
               <span className="text-gray-700">
                 <span className="font-medium">{activeLang?.display_name}</span>
                 {' · '}
-                <span>{getVoiceName(selectedLang, selectedPref!)}</span>
+                <span>{selectedVoiceName}</span>
               </span>
             ) : (
               'Select a language and voice to continue'
             )}
           </p>
           <button
-            onClick={() => canContinue && onContinue(selectedLang!, selectedPref!, selectedVoiceName, getVoiceName(selectedLang, selectedPref!))}
+            onClick={() => canContinue && onContinue(selectedLang!, selectedPref!, selectedVoiceName, selectedVoiceName)}
             disabled={!canContinue}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium duration-[120ms] ${
               canContinue

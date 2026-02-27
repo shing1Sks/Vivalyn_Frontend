@@ -10,7 +10,7 @@ import {
   type LanguageVoiceOption,
 } from '../../../lib/api'
 import { useAuth } from '../../../context/AuthContext'
-import { FLAG_MAP, PREF_LABELS, getVoiceName } from './voiceConfig'
+import { FLAG_MAP, PREF_LABELS } from './voiceConfig'
 
 interface Props {
   spec: AgentPromptSpec
@@ -74,14 +74,8 @@ export default function AgentConfigureView({
   }
 
   function handleVoiceUpdated(lang: string, voice: string, personaName: string) {
-    // Update voice_character locally so next "Save Changes" persists it too
-    setEdited(prev => ({
-      ...prev,
-      voice_character: {
-        name: `Your name is ${personaName}.`,
-        persona: `You are ${personaName}. Introduce yourself by name at the start of each session and maintain a warm, natural conversational style throughout.`,
-      },
-    }))
+    // Update name locally so next "Save Changes" persists it too
+    setEdited(prev => ({ ...prev, name: personaName }))
     onAgentUpdated?.({ agent_language: lang, agent_voice: voice })
   }
 
@@ -280,7 +274,7 @@ function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }:
 
   async function handleUpdate() {
     if (!session || !selectedPref) return
-    const personaName = getVoiceName(selectedLang, selectedPref)
+    const personaName = selectedVoiceName
     setUpdating(true)
     try {
       await updateAgent(session.access_token, agentId, {
@@ -288,10 +282,7 @@ function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }:
         agent_voice: selectedVoiceName,
         agent_prompt: {
           ...editedSpec,
-          voice_character: {
-            name: `Your name is ${personaName}.`,
-            persona: `You are ${personaName}. Introduce yourself by name at the start of each session and maintain a warm, natural conversational style throughout.`,
-          },
+          name: personaName,
         },
       })
       onUpdated(selectedLang, selectedVoiceName, personaName)
@@ -302,10 +293,7 @@ function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }:
     }
   }
 
-  // Extract persona name from voice_character (set on agent creation/update)
-  const vcName = editedSpec.voice_character?.name ?? ''
-  const personaMatch = vcName.match(/Your name is (.+?)\.?\s*$/)
-  const displayPersona = personaMatch?.[1] ?? getVoiceName(agentLanguage, 'female1')
+  const displayPersona = editedSpec.name ?? agentVoice
 
   return (
     <div className="border-b border-gray-100 bg-white">
@@ -370,7 +358,7 @@ function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }:
                           const isActive = selectedPref === voice.preference
                           const isLoading = loadingPref === voice.preference
                           const isPlaying = playingPref === voice.preference
-                          const personaName = getVoiceName(selectedLang, voice.preference)
+                          const personaName = voice.voice_name
                           const isFemale = voice.preference.startsWith('female')
                           return (
                             <div
