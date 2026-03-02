@@ -1,5 +1,29 @@
 # Changelog
 
+## [16] agentspace-dashboard-redo — 2026-03-03
+
+**Why:** The dashboard had two UX problems: (1) A redundant "Personal AgentSpace / Admin" block below the header duplicated information already visible in the header switcher. (2) The agents were displayed in a card grid with no way to see run records — admins had no visibility into session history, scores, or test-vs-live breakdowns without leaving the dashboard.
+
+**What:** Removed the redundant header row. Added a small admin indicator (`Shield` icon) inline in the `AgentSpaceSwitcher` button. Converted the agents card grid to a compact list format. Added a two-tab layout ("Agents" / "Records") where the Records tab is a full-featured run records table with search, sort, type filter (All / Live / Test), inline row expansion to show per-metric scores and feedback, and CSV export.
+
+**Changes:**
+- `src/components/agentspace/AgentSpaceSwitcher.tsx` — added `Shield` from lucide-react; renders `<Shield className="w-3 h-3 text-indigo-400 shrink-0" />` inside the trigger button after the space name, visible only when `activeSpace?.role === 'admin'`
+- `src/lib/api.ts` — added `agent_name: string` and `is_test: boolean` to `RunRecord` interface; made `transcript` optional (`transcript?`) since the new agentspace-level endpoint omits it for payload efficiency; added `fetchAgentspaceRuns(accessToken, agentspaceId) -> RunRecord[]` (`GET /api/v1/agentspaces/{id}/runs`, auth required)
+- `src/pages/AgentSpace.tsx` — full rewrite: removed redundant space-name + role `<motion.div>` block; added `DashTab = 'agents' | 'records'` type with pill tab bar (`bg-gray-100 rounded-lg p-1 w-fit`); replaced `AgentCard` grid component with `AgentRow` list component (icon, name+language tag, persona, status badge, date, copy-live icon, copy-test icon, live toggle, configure icon — all in one `flex items-center` row); added `SortField`, `FilterType` types; added `SortIcon` helper component (outside render, accepts `field/sortField/sortDir` props); added `RecordsTab` component with search input, All/Live/Test filter pill buttons, sortable column headers (User, Agent, Date — click cycles asc/desc), `RunRow` component with `AnimatePresence` inline expand showing per-metric score chips, `transcript_summary`, and feedback bullets, "Export CSV" button (calls `exportCsv()` which builds a Blob and triggers download); `avgScore()` helper computes average of `evaluation_report.scoring` values; both data-fetching `useEffect`s restructured as inner async `load()` functions to avoid synchronous setState-in-effect lint errors
+
+---
+
+## [15] eval-tab-ux-simplification — 2026-03-03
+
+**Why:** The Evaluation tab in the agent configure view had an awkward two-step flow: users typed a free-text criteria description into a textarea, clicked "Generate with AI" to produce metrics, then saw the results in a read-only preview card. This meant the AI output couldn't be edited without clearing and regenerating, and the "Describe criteria" textarea added unnecessary friction for users who already knew exactly which metrics they wanted.
+
+**What:** Replaced the two-step flow with directly editable fields for metrics and eval prompt. Moved the AI generation capability to a small circular `Sparkles` button in the card header — the same pattern used by other section headers throughout the configure view. The AI button opens a compact popover where users type a brief criteria description; on submit it calls `generateEvaluationCriteria` and populates both editable fields, which can then be tweaked before saving.
+
+**Changes:**
+- `src/components/agentspace/wizard/AgentConfigureView.tsx` — removed criteria `<textarea>` + description text + full-width "Generate with AI" button from `EvaluationTab`; removed read-only animated metrics preview card and "Clear" / "Save Metrics" buttons; replaced with: `EvalAiButton` sub-component (circular `w-7 h-7` sparkles button, opens `AnimatePresence` popover with "Describe what to evaluate" label + text input + submit + close, calls `generateEvaluationCriteria` on submit, populates parent state via `onGenerated` callback); `Metrics` card with editable badge list (each metric has an inline `X` remove button) + "Add a metric" input row (`Enter` or "Add" button); `Eval Prompt` card with directly editable `<textarea>` for `report_curator_prompt`; single "Save" button at the bottom persists `{ metrics: metricNames, report_curator_prompt: evalPrompt }` (or `null` if both empty) via `updateAgent`; state initialized directly from `initialMetrics` props
+
+---
+
 ## [14] session-reporting-flow — 2026-03-02
 
 **Why:** Four related problems needed fixing together: (1) The frontend closed the WebSocket immediately after `endSession()`, so the `session_report` message (sent by the backend after generating the evaluation) could never be received — the frontend polled a REST endpoint instead, which consistently returned 404 before generation finished. (2) Certain audio chunks from Inworld TTS had odd byte lengths, crashing `Int16Array` with `RangeError: byte length of Int16Array should be a multiple of 2`. (3) After session end, the UX was a jarring dark loading screen followed by an abrupt jump to `ReportScreen` — the design should show `EndedScreen` immediately, with a live spinner while the report generates and a "View Report" button once it arrives. (4) The error page used a `🔒` emoji which broke the UI design system, and the agent configure view had no way to edit evaluation metrics post-creation.

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings, LogOut, Bell } from 'lucide-react'
+import { Settings, LogOut, Bell, Shield } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useProfile } from '../../context/ProfileContext'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
@@ -61,6 +61,15 @@ export default function AgentSpaceHeader({
           <span className="text-gray-300 text-lg select-none">/</span>
 
           <AgentSpaceSwitcher onCreateClick={onCreateSpaceClick} />
+
+          {isAdmin && (
+            <div className="relative group">
+              <Shield className="w-3.5 h-3.5 text-indigo-400 cursor-default" />
+              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 bg-gray-900 text-white text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none duration-[120ms]">
+                Admin
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right: Inbox + Settings + Avatar */}

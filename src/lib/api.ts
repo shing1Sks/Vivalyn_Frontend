@@ -606,10 +606,12 @@ export interface RunRecord {
   id: string;
   created_at: string;
   agent_id: string;
+  agent_name: string;
   user_email: string;
   user_name: string;
-  transcript: Array<{ role: string; content: string; timestamp: string }>;
+  transcript?: Array<{ role: string; content: string; timestamp: string }>;
   evaluation_report: EvaluationReport | null;
+  is_test: boolean;
 }
 
 export async function fetchLatestRunRecord(
@@ -621,5 +623,16 @@ export async function fetchLatestRunRecord(
   );
   if (res.status === 404) return null;
   if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchAgentspaceRuns(
+  accessToken: string,
+  agentspaceId: string,
+): Promise<RunRecord[]> {
+  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/runs`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return [];
   return res.json();
 }

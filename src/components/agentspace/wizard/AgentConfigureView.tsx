@@ -215,6 +215,90 @@ export default function AgentConfigureView({
 
 // ── Evaluation tab ───────────────────────────────────────────────────────────────
 
+interface EvalAiButtonProps {
+  taskDefinition: string
+  onGenerated: (result: EvaluationMetrics) => void
+}
+
+function EvalAiButton({ taskDefinition, onGenerated }: EvalAiButtonProps) {
+  const { session } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit() {
+    if (!input.trim() || !session) return
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await generateEvaluationCriteria(session.access_token, {
+        task_definition: taskDefinition,
+        users_raw_evaluation_criteria: input.trim(),
+      })
+      onGenerated(result)
+      setInput('')
+      setOpen(false)
+    } catch {
+      setError('Failed to generate. Try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => { setOpen(v => !v); setInput(''); setError(null) }}
+        title="Generate with AI"
+        className={`w-7 h-7 rounded-full flex items-center justify-center duration-[120ms] ${
+          open ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-500 hover:bg-indigo-100 hover:text-indigo-600'
+        }`}
+      >
+        <Sparkles className="w-3.5 h-3.5" />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            className="absolute right-0 top-9 z-20 w-72 max-w-[calc(100vw-2.5rem)] bg-white border border-gray-200 rounded-xl shadow-lg p-3"
+          >
+            <p className="text-xs text-gray-500 mb-2">Describe what to evaluate</p>
+            {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+            <div className="flex gap-2">
+              <input
+                autoFocus
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder="e.g. Communication quality, follow-up questions..."
+                className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+              />
+              <button
+                onClick={handleSubmit}
+                disabled={!input.trim() || loading}
+                className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed duration-[120ms] flex items-center gap-1"
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                onClick={() => { setOpen(false); setInput('') }}
+                className="p-1.5 text-gray-400 hover:text-gray-600 duration-[120ms]"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 interface EvaluationTabProps {
   agentId: string
   taskDefinition: string
@@ -223,37 +307,35 @@ interface EvaluationTabProps {
 
 function EvaluationTab({ agentId, taskDefinition, initialMetrics }: EvaluationTabProps) {
   const { session } = useAuth()
-  const [criteria, setCriteria] = useState('')
-  const [metrics, setMetrics] = useState<EvaluationMetrics | null>(initialMetrics)
-  const [generating, setGenerating] = useState(false)
+  const [metricNames, setMetricNames] = useState<string[]>(initialMetrics?.metrics ?? [])
+  const [evalPrompt, setEvalPrompt] = useState(initialMetrics?.report_curator_prompt ?? '')
+  const [newMetric, setNewMetric] = useState('')
   const [saving, setSaving] = useState(false)
   const [savedOk, setSavedOk] = useState(false)
-  const [genError, setGenError] = useState<string | null>(null)
 
-  async function handleGenerate() {
-    if (!session || !criteria.trim()) return
-    setGenerating(true)
-    setGenError(null)
-    try {
-      const result = await generateEvaluationCriteria(session.access_token, {
-        task_definition: taskDefinition,
-        users_raw_evaluation_criteria: criteria.trim(),
-      })
-      setMetrics(result)
-    } catch {
-      setGenError('Failed to generate criteria. Please try again.')
-    } finally {
-      setGenerating(false)
-    }
+  function handleAddMetric() {
+    if (!newMetric.trim()) return
+    setMetricNames(prev => [...prev, newMetric.trim()])
+    setNewMetric('')
+  }
+
+  function handleRemoveMetric(idx: number) {
+    setMetricNames(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function onAiGenerated(result: EvaluationMetrics) {
+    setMetricNames(result.metrics)
+    setEvalPrompt(result.report_curator_prompt)
   }
 
   async function handleSave() {
-    if (!session || !metrics) return
+    if (!session) return
     setSaving(true)
     setSavedOk(false)
     try {
+      const hasContent = metricNames.length > 0 || evalPrompt.trim()
       await updateAgent(session.access_token, agentId, {
-        transcript_evaluation_metrics: metrics,
+        transcript_evaluation_metrics: hasContent ? { metrics: metricNames, report_curator_prompt: evalPrompt } : null,
       })
       setSavedOk(true)
       setTimeout(() => setSavedOk(false), 3000)
@@ -262,111 +344,84 @@ function EvaluationTab({ agentId, taskDefinition, initialMetrics }: EvaluationTa
     }
   }
 
-  async function handleClear() {
-    if (!session) return
-    setSaving(true)
-    try {
-      await updateAgent(session.access_token, agentId, {
-        transcript_evaluation_metrics: null,
-      })
-      setMetrics(null)
-      setCriteria('')
-    } catch { /* silent */ } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <div className="px-5 py-5 max-w-2xl flex flex-col gap-5">
-      {/* Input area */}
+      {/* Metrics */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Evaluation Criteria</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Metrics</span>
+          <EvalAiButton taskDefinition={taskDefinition} onGenerated={onAiGenerated} />
         </div>
         <div className="px-5 py-4 flex flex-col gap-3">
-          <p className="text-xs text-gray-400 leading-relaxed">
-            Describe what you want to evaluate after each session — the AI will turn this into structured metrics and a scoring rubric.
-          </p>
-          <textarea
-            value={criteria}
-            onChange={e => setCriteria(e.target.value)}
-            rows={5}
-            placeholder="e.g. How well does the user communicate their problem? Did they ask relevant follow-up questions? Were they polite and professional?"
-            className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
-          />
-          {genError && <p className="text-xs text-red-500">{genError}</p>}
-          <div className="flex justify-end">
+          {metricNames.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {metricNames.map((m, idx) => (
+                <span
+                  key={idx}
+                  className="flex items-center gap-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1"
+                >
+                  {m}
+                  <button
+                    onClick={() => handleRemoveMetric(idx)}
+                    className="ml-0.5 text-indigo-400 hover:text-indigo-600 duration-[120ms]"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input
+              value={newMetric}
+              onChange={e => setNewMetric(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAddMetric()}
+              placeholder="Add a metric…"
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+            />
             <button
-              onClick={handleGenerate}
-              disabled={!criteria.trim() || generating}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed duration-[120ms]"
+              onClick={handleAddMetric}
+              disabled={!newMetric.trim()}
+              className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
             >
-              {generating ? (
-                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</>
-              ) : (
-                <><Sparkles className="w-3.5 h-3.5" /> Generate with AI</>
-              )}
+              Add
             </button>
           </div>
         </div>
       </div>
 
-      {/* Generated metrics preview */}
-      {metrics && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="bg-white border border-gray-200 rounded-xl overflow-hidden"
-        >
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Generated Metrics</span>
-            <button
-              onClick={handleClear}
-              disabled={saving}
-              className="text-xs text-gray-400 hover:text-red-500 duration-[120ms]"
-            >
-              Clear
-            </button>
-          </div>
-          <div className="px-5 py-4 flex flex-col gap-3">
-            <div className="flex flex-wrap gap-2">
-              {metrics.metrics.map(m => (
-                <span
-                  key={m}
-                  className="text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1"
-                >
-                  {m}
-                </span>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500 leading-relaxed">{metrics.report_curator_prompt}</p>
-            <div className="flex justify-end pt-1">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed duration-[120ms]"
-              >
-                {saving ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</>
-                ) : savedOk ? (
-                  <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
-                ) : (
-                  'Save Metrics'
-                )}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Empty state when no metrics */}
-      {!metrics && (
-        <div className="bg-white border border-dashed border-gray-200 rounded-xl px-5 py-8 text-center">
-          <p className="text-sm text-gray-400">No evaluation metrics configured yet.</p>
-          <p className="text-xs text-gray-300 mt-1">Describe your criteria above and generate metrics with AI.</p>
+      {/* Eval prompt */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Eval Prompt</span>
         </div>
-      )}
+        <div className="px-5 py-4">
+          <textarea
+            value={evalPrompt}
+            onChange={e => setEvalPrompt(e.target.value)}
+            rows={6}
+            placeholder="Scoring rubric and instructions for evaluating sessions…"
+            className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
+          />
+        </div>
+      </div>
+
+      {/* Save */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed duration-[120ms]"
+        >
+          {saving ? (
+            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</>
+          ) : savedOk ? (
+            <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
+          ) : (
+            'Save'
+          )}
+        </button>
+      </div>
     </div>
   )
 }

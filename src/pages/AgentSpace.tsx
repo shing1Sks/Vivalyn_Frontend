@@ -1,7 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Bot, Check, Copy, Link2, Loader2, Plus, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Download,
+  Link2,
+  Loader2,
+  Plus,
+  Search,
+  Settings2,
+  ToggleLeft,
+  ToggleRight,
+  X,
+} from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { AgentSpaceProvider, useAgentSpace } from '../context/AgentSpaceContext'
 import AgentSpaceHeader from '../components/agentspace/AgentSpaceHeader'
@@ -10,7 +26,14 @@ import AgentSpaceSettingsPanel from '../components/agentspace/AgentSpaceSettings
 import InboxPanel from '../components/agentspace/InboxPanel'
 import CreateAgentWizard from '../components/agentspace/CreateAgentWizard'
 import AgentConfigureView from '../components/agentspace/wizard/AgentConfigureView'
-import { fetchAgents, toggleAgentStatus, type Agent } from '../lib/api'
+import {
+  fetchAgents,
+  fetchAgentspaceRuns,
+  toggleAgentStatus,
+  type Agent,
+  type EvaluationReport,
+  type RunRecord,
+} from '../lib/api'
 import { fadeInUp, staggerContainer } from '../lib/motion'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -29,7 +52,464 @@ function formatRelativeDate(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+function avgScore(report: EvaluationReport | null): string {
+  if (!report?.scoring) return '—'
+  const vals = Object.values(report.scoring) as number[]
+  if (!vals.length) return '—'
+  return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)
+}
+
+function exportCsv(rows: RunRecord[]) {
+  const headers = ['Date', 'User', 'Email', 'Agent', 'Score', 'Type']
+  const csvRows = rows.map(r => {
+    const score = avgScore(r.evaluation_report)
+    return [
+      new Date(r.created_at).toLocaleDateString(),
+      r.user_name,
+      r.user_email,
+      r.agent_name,
+      score,
+      r.is_test ? 'Test' : 'Live',
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+  })
+  const csv = [headers.join(','), ...csvRows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'run-records.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ── Agent list row ──────────────────────────────────────────────────────────────
+
+interface AgentRowProps {
+  agent: Agent
+  token: string
+  onConfigure: () => void
+  onStatusChange: (updated: Agent) => void
+}
+
+function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) {
+  const personaName = extractPersonaName(agent)
+  const isLive = agent.agent_status === 'live'
+  const [toggling, setToggling] = useState(false)
+  const [copiedLive, setCopiedLive] = useState(false)
+  const [copiedTest, setCopiedTest] = useState(false)
+
+  async function handleToggleStatus() {
+    if (toggling) return
+    const next: 'live' | 'idle' = isLive ? 'idle' : 'live'
+    setToggling(true)
+    try {
+      const updated = await toggleAgentStatus(token, agent.id, next)
+      onStatusChange(updated)
+    } catch { /* silent */ } finally {
+      setToggling(false)
+    }
+  }
+
+  function copyLink(url: string, which: 'live' | 'test') {
+    navigator.clipboard.writeText(url).then(() => {
+      if (which === 'live') {
+        setCopiedLive(true)
+        setTimeout(() => setCopiedLive(false), 2000)
+      } else {
+        setCopiedTest(true)
+        setTimeout(() => setCopiedTest(false), 2000)
+      }
+    })
+  }
+
+  const liveUrl = `${window.location.origin}/agent/${agent.id}`
+  const testUrl = `${window.location.origin}/agent/${agent.id}?mode=test`
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
+      className="bg-white border border-gray-200 rounded-xl px-5 py-3.5 flex items-center gap-4 hover:border-gray-300 hover:shadow-sm duration-[120ms]"
+    >
+      {/* Icon */}
+      <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+        <Bot className="w-4 h-4 text-indigo-600" />
+      </div>
+
+      {/* Name + tags */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gray-900 truncate">{agent.agent_name}</p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5">
+            {agent.agent_language}
+          </span>
+          {personaName && (
+            <span className="text-xs text-gray-400 truncate">{personaName}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Status badge */}
+      <span
+        className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
+          isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'
+        }`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+        {isLive ? 'Live' : 'Idle'}
+      </span>
+
+      {/* Date */}
+      <span className="text-xs text-gray-400 shrink-0 hidden sm:block">
+        {formatRelativeDate(agent.created_at)}
+      </span>
+
+      {/* Copy links */}
+      <button
+        onClick={() => copyLink(liveUrl, 'live')}
+        title="Copy live link"
+        className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
+      >
+        {copiedLive ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Link2 className="w-3.5 h-3.5" />}
+      </button>
+
+      <button
+        onClick={() => copyLink(testUrl, 'test')}
+        title="Copy test link"
+        className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
+      >
+        {copiedTest ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+      </button>
+
+      {/* Live toggle */}
+      <button
+        onClick={handleToggleStatus}
+        disabled={toggling}
+        title={isLive ? 'Pause agent' : 'Deploy agent live'}
+        className="shrink-0 flex items-center disabled:opacity-50 duration-[120ms]"
+      >
+        {toggling ? (
+          <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+        ) : isLive ? (
+          <ToggleRight className="w-6 h-6 text-emerald-500" />
+        ) : (
+          <ToggleLeft className="w-6 h-6 text-gray-300" />
+        )}
+      </button>
+
+      {/* Configure */}
+      <button
+        onClick={onConfigure}
+        title="Configure agent"
+        className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
+      >
+        <Settings2 className="w-4 h-4" />
+      </button>
+    </motion.div>
+  )
+}
+
+// ── Records tab ────────────────────────────────────────────────────────────────
+
+type SortField = 'created_at' | 'user_name' | 'agent_name'
+type FilterType = 'all' | 'live' | 'test'
+
+interface RecordsTabProps {
+  agentspaceId: string
+  token: string
+}
+
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: 'asc' | 'desc' }) {
+  if (sortField !== field) return <ChevronDown className="w-3 h-3 text-gray-300" />
+  return sortDir === 'asc'
+    ? <ChevronUp className="w-3 h-3 text-gray-500" />
+    : <ChevronDown className="w-3 h-3 text-gray-500" />
+}
+
+function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
+  const [runs, setRuns] = useState<RunRecord[]>([])
+  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [sortField, setSortField] = useState<SortField>('created_at')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [filterType, setFilterType] = useState<FilterType>('all')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      try {
+        const data = await fetchAgentspaceRuns(token, agentspaceId)
+        setRuns(data)
+      } catch {
+        setRuns([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    void load()
+  }, [agentspaceId, token])
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('desc')
+    }
+  }
+
+  const filtered = runs
+    .filter(r => {
+      if (filterType === 'live') return !r.is_test
+      if (filterType === 'test') return r.is_test
+      return true
+    })
+    .filter(r => {
+      if (!search.trim()) return true
+      const q = search.toLowerCase()
+      return (
+        r.user_name.toLowerCase().includes(q) ||
+        r.user_email.toLowerCase().includes(q) ||
+        r.agent_name.toLowerCase().includes(q)
+      )
+    })
+    .sort((a, b) => {
+      let av: string, bv: string
+      if (sortField === 'created_at') {
+        av = a.created_at; bv = b.created_at
+      } else if (sortField === 'user_name') {
+        av = a.user_name; bv = b.user_name
+      } else {
+        av = a.agent_name; bv = b.agent_name
+      }
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name, email or agent…"
+            className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+          />
+        </div>
+
+        {/* Type filter */}
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {(['all', 'live', 'test'] as FilterType[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilterType(f)}
+              className={`px-3 py-1 text-xs font-medium rounded-md duration-[120ms] capitalize ${
+                filterType === f
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+
+        {/* Export */}
+        <button
+          onClick={() => exportCsv(filtered)}
+          disabled={filtered.length === 0}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Export CSV
+        </button>
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-white border border-dashed border-gray-200 rounded-xl">
+          <p className="text-sm text-gray-400">No sessions yet.</p>
+          {(search || filterType !== 'all') && (
+            <button
+              onClick={() => { setSearch(''); setFilterType('all') }}
+              className="text-xs text-indigo-500 mt-2 hover:text-indigo-700 duration-[120ms]"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          {/* Table header */}
+          <div className="grid grid-cols-[1fr_1fr_1fr_80px_90px_72px] gap-x-3 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+            <button
+              onClick={() => toggleSort('user_name')}
+              className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 duration-[120ms]"
+            >
+              User <SortIcon field="user_name" sortField={sortField} sortDir={sortDir} />
+            </button>
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</span>
+            <button
+              onClick={() => toggleSort('agent_name')}
+              className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 duration-[120ms]"
+            >
+              Agent <SortIcon field="agent_name" sortField={sortField} sortDir={sortDir} />
+            </button>
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Score</span>
+            <button
+              onClick={() => toggleSort('created_at')}
+              className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 duration-[120ms]"
+            >
+              Date <SortIcon field="created_at" sortField={sortField} sortDir={sortDir} />
+            </button>
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</span>
+          </div>
+
+          {/* Rows */}
+          <div className="divide-y divide-gray-50">
+            {filtered.map(run => (
+              <RunRow
+                key={run.id}
+                run={run}
+                expanded={expandedId === run.id}
+                onToggle={() => setExpandedId(prev => prev === run.id ? null : run.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Run row ────────────────────────────────────────────────────────────────────
+
+interface RunRowProps {
+  run: RunRecord
+  expanded: boolean
+  onToggle: () => void
+}
+
+function RunRow({ run, expanded, onToggle }: RunRowProps) {
+  const score = avgScore(run.evaluation_report)
+  const report = run.evaluation_report
+
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        className="w-full grid grid-cols-[1fr_1fr_1fr_80px_90px_72px] gap-x-3 px-5 py-3 hover:bg-gray-50/60 duration-[120ms] text-left"
+      >
+        <span className="text-sm text-gray-800 font-medium truncate">{run.user_name}</span>
+        <span className="text-sm text-gray-500 truncate">{run.user_email}</span>
+        <span className="text-sm text-gray-600 truncate">{run.agent_name}</span>
+        <span className={`text-sm font-semibold ${score === '—' ? 'text-gray-300' : 'text-gray-800'}`}>
+          {score !== '—' ? `${score}/10` : score}
+        </span>
+        <span className="text-xs text-gray-400">{formatRelativeDate(run.created_at)}</span>
+        <span
+          className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full w-fit ${
+            run.is_test
+              ? 'bg-indigo-50 text-indigo-600'
+              : 'bg-emerald-50 text-emerald-600'
+          }`}
+        >
+          {run.is_test ? 'Test' : 'Live'}
+        </span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="expand"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className="px-5 pb-4 pt-1 border-t border-gray-100 bg-gray-50/40">
+              {report ? (
+                <div className="flex flex-col gap-3">
+                  {/* Per-metric scores */}
+                  {report.scoring && Object.keys(report.scoring).length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(report.scoring).map(([metric, val]) => (
+                        <div
+                          key={metric}
+                          className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-1.5"
+                        >
+                          <span className="text-xs text-gray-500">{metric}</span>
+                          <span className="text-xs font-semibold text-gray-800">{val}/10</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Summary */}
+                  {report.transcript_summary && (
+                    <p className="text-xs text-gray-600 leading-relaxed">{report.transcript_summary}</p>
+                  )}
+
+                  {/* Feedback bullets */}
+                  {report.feedback && report.feedback.length > 0 && (
+                    <ul className="space-y-1">
+                      {report.feedback.map((f, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-gray-500">
+                          <span className="mt-0.5 w-1 h-1 rounded-full bg-gray-400 shrink-0" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">No evaluation report for this session.</p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ── Empty agents state ──────────────────────────────────────────────────────────
+
+function EmptyAgentsState({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+        <Bot className="w-6 h-6 text-gray-400" />
+      </div>
+      <p className="text-sm font-medium text-gray-700 mb-1">No training agents yet</p>
+      <p className="text-xs text-gray-400 mb-5 max-w-xs">
+        Create your first voice training agent using the planner — it only takes a few minutes.
+      </p>
+      <button
+        onClick={onCreate}
+        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms]"
+      >
+        <Plus className="w-4 h-4" />
+        Create Training Agent
+      </button>
+    </div>
+  )
+}
+
 // ── Main content ───────────────────────────────────────────────────────────────
+
+type DashTab = 'agents' | 'records'
 
 function AgentSpaceContent() {
   const { activeSpace, spaces, spacesLoading, spacesError, refetchSpaces } = useAgentSpace()
@@ -39,6 +519,7 @@ function AgentSpaceContent() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inboxOpen, setInboxOpen] = useState(false)
   const [createAgentOpen, setCreateAgentOpen] = useState(false)
+  const [dashTab, setDashTab] = useState<DashTab>('agents')
 
   const [agents, setAgents] = useState<Agent[]>([])
   const [agentsLoading, setAgentsLoading] = useState(false)
@@ -56,15 +537,24 @@ function AgentSpaceContent() {
     }
   }, [spacesLoading, spaces.length, spacesError, refetchSpaces])
 
-  // Fetch agents whenever the active space changes
+  const spaceId = activeSpace?.id
+  const spaceToken = session?.access_token
+
   useEffect(() => {
-    if (!activeSpace || !session) return
-    setAgentsLoading(true)
-    fetchAgents(session.access_token, activeSpace.id)
-      .then(setAgents)
-      .catch(() => setAgents([]))
-      .finally(() => setAgentsLoading(false))
-  }, [activeSpace?.id, session])
+    if (!spaceId || !spaceToken) return
+    async function load() {
+      setAgentsLoading(true)
+      try {
+        const data = await fetchAgents(spaceToken!, spaceId!)
+        setAgents(data)
+      } catch {
+        setAgents([])
+      } finally {
+        setAgentsLoading(false)
+      }
+    }
+    void load()
+  }, [spaceId, spaceToken])
 
   async function handleSignOut() {
     await signOut()
@@ -119,60 +609,77 @@ function AgentSpaceContent() {
         onInboxClick={() => setInboxOpen(true)}
       />
 
-      <main className="flex-1 px-6 py-8">
+      <main className="flex-1 px-6 py-6">
         {activeSpace ? (
-          <motion.div variants={staggerContainer} initial="hidden" animate="visible">
+          <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="flex flex-col gap-5">
 
-            {/* Space header row */}
+            {/* Tab bar */}
             <motion.div variants={fadeInUp}>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-xl font-semibold text-gray-900">{activeSpace.name}</h1>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {activeSpace.role === 'admin' ? 'Admin' : 'Member'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setCreateAgentOpen(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms] flex-shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  Create Training Agent
-                </button>
+              <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+                {(['agents', 'records'] as DashTab[]).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setDashTab(t)}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md duration-[120ms] capitalize ${
+                      dashTab === t
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
               </div>
             </motion.div>
 
-            {/* Agents list */}
-            <motion.div variants={fadeInUp} className="mt-8">
-              <div className="flex items-center gap-2 mb-5">
-                <h2 className="text-sm font-semibold text-gray-900">Training Agents</h2>
-                {!agentsLoading && (
-                  <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
-                    {agents.length}
-                  </span>
-                )}
-              </div>
+            {/* Tab content */}
+            <motion.div variants={fadeInUp}>
+              {dashTab === 'agents' ? (
+                <div>
+                  {/* Agents header */}
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm font-semibold text-gray-900">
+                      Agents{' '}
+                      {!agentsLoading && (
+                        <span className="text-gray-400 font-normal">({agents.length})</span>
+                      )}
+                    </span>
+                    <button
+                      onClick={() => setCreateAgentOpen(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms]"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Create Training Agent
+                    </button>
+                  </div>
 
-              {agentsLoading ? (
-                <div className="flex items-center justify-center py-16">
-                  <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+                  {agentsLoading ? (
+                    <div className="flex items-center justify-center py-16">
+                      <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+                    </div>
+                  ) : agents.length === 0 ? (
+                    <EmptyAgentsState onCreate={() => setCreateAgentOpen(true)} />
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {agents.map(agent => (
+                        <AgentRow
+                          key={agent.id}
+                          agent={agent}
+                          token={session?.access_token ?? ''}
+                          onConfigure={() => setConfiguringAgent(agent)}
+                          onStatusChange={updated =>
+                            setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : agents.length === 0 ? (
-                <EmptyAgentsState onCreate={() => setCreateAgentOpen(true)} />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {agents.map(agent => (
-                    <AgentCard
-                      key={agent.id}
-                      agent={agent}
-                      token={session?.access_token ?? ''}
-                      onConfigure={() => setConfiguringAgent(agent)}
-                      onStatusChange={updated =>
-                        setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
-                      }
-                    />
-                  ))}
-                </div>
+                <RecordsTab
+                  agentspaceId={activeSpace.id}
+                  token={session?.access_token ?? ''}
+                />
               )}
             </motion.div>
 
@@ -226,8 +733,8 @@ function AgentSpaceContent() {
             transition={{ duration: 0.15 }}
             className="fixed inset-0 z-50 bg-white flex flex-col"
           >
-            <div className="h-14 border-b border-gray-100 flex items-center px-6 gap-4 flex-shrink-0">
-              <div className="w-24 flex-shrink-0">
+            <div className="h-14 border-b border-gray-100 flex items-center px-6 gap-4 shrink-0">
+              <div className="w-24 shrink-0">
                 <button
                   onClick={() => setConfiguringAgent(null)}
                   className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 duration-[120ms]"
@@ -238,7 +745,7 @@ function AgentSpaceContent() {
               <div className="flex-1 flex justify-center min-w-0">
                 <span className="text-sm font-medium text-gray-700 truncate">{configuringAgent.agent_name}</span>
               </div>
-              <div className="w-24 flex-shrink-0 flex justify-end">
+              <div className="w-24 shrink-0 flex justify-end">
                 <button
                   onClick={() => setConfiguringAgent(null)}
                   className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 duration-[120ms]"
@@ -272,180 +779,6 @@ function AgentSpaceContent() {
         )}
       </AnimatePresence>
     </>
-  )
-}
-
-// ── Agent card ─────────────────────────────────────────────────────────────────
-
-interface AgentCardProps {
-  agent: Agent
-  token: string
-  onConfigure: () => void
-  onStatusChange: (updated: Agent) => void
-}
-
-function AgentCard({ agent, token, onConfigure, onStatusChange }: AgentCardProps) {
-  const personaName = extractPersonaName(agent)
-  const isLive = agent.agent_status === 'live'
-
-  const [toggling, setToggling] = useState(false)
-  const [copiedLive, setCopiedLive] = useState(false)
-  const [copiedTest, setCopiedTest] = useState(false)
-
-  async function handleToggleStatus() {
-    if (toggling) return
-    const next: 'live' | 'idle' = isLive ? 'idle' : 'live'
-    setToggling(true)
-    try {
-      const updated = await toggleAgentStatus(token, agent.id, next)
-      onStatusChange(updated)
-    } catch {
-      // silently revert — UI stays as-is
-    } finally {
-      setToggling(false)
-    }
-  }
-
-  function copyLink(url: string, which: 'live' | 'test') {
-    navigator.clipboard.writeText(url).then(() => {
-      if (which === 'live') {
-        setCopiedLive(true)
-        setTimeout(() => setCopiedLive(false), 2000)
-      } else {
-        setCopiedTest(true)
-        setTimeout(() => setCopiedTest(false), 2000)
-      }
-    })
-  }
-
-  const liveUrl = `${window.location.origin}/agent/${agent.id}`
-  const testUrl = `${window.location.origin}/agent/${agent.id}?mode=test`
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col gap-4 hover:border-gray-300 hover:shadow-sm duration-[120ms]"
-    >
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Bot className="w-[1.125rem] h-[1.125rem] text-indigo-600" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-gray-900 leading-tight truncate flex-1">{agent.agent_name}</p>
-            {/* Status badge */}
-            <span
-              className={`flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
-                isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-              {isLive ? 'Live' : 'Idle'}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5">
-              {agent.agent_language}
-            </span>
-            {personaName && (
-              <span className="text-xs text-gray-500">{personaName}</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Voice + meta */}
-      <div className="space-y-1.5">
-        <p className="text-[11px] text-gray-400 font-mono truncate" title={agent.agent_voice}>
-          {agent.agent_voice}
-        </p>
-        <p className="text-xs text-gray-400">
-          <span className="text-gray-500">{agent.created_by_name}</span>
-          <span className="mx-1.5">·</span>
-          {formatRelativeDate(agent.created_at)}
-        </p>
-      </div>
-
-      {/* Configure button — always visible */}
-      <div className="pt-1 border-t border-gray-100 flex flex-col gap-2">
-        <button
-          onClick={onConfigure}
-          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-indigo-200 text-indigo-600 text-xs font-medium hover:bg-indigo-50 duration-[120ms]"
-        >
-          <Settings2 className="w-3.5 h-3.5" />
-          Configure
-        </button>
-
-        {/* Live toggle */}
-        <div className="flex items-center justify-between px-0.5 py-0.5">
-          <span className="text-xs text-gray-500">Go Live</span>
-          <button
-            onClick={handleToggleStatus}
-            disabled={toggling}
-            title={isLive ? 'Pause agent' : 'Deploy agent live'}
-            className="flex items-center gap-1 disabled:opacity-50 duration-[120ms]"
-          >
-            {toggling ? (
-              <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
-            ) : isLive ? (
-              <ToggleRight className="w-6 h-6 text-emerald-500" />
-            ) : (
-              <ToggleLeft className="w-6 h-6 text-gray-300" />
-            )}
-          </button>
-        </div>
-
-        {/* Copy Live Link — all members */}
-        <button
-          onClick={() => copyLink(liveUrl, 'live')}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 duration-[120ms]"
-        >
-          {copiedLive ? (
-            <><Check className="w-3 h-3" /> Copied!</>
-          ) : (
-            <><Link2 className="w-3 h-3" /> Copy Live Link</>
-          )}
-        </button>
-
-        {/* Copy Test Link — all members */}
-        <button
-          onClick={() => copyLink(testUrl, 'test')}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50 duration-[120ms]"
-        >
-          {copiedTest ? (
-            <><Check className="w-3 h-3" /> Copied!</>
-          ) : (
-            <><Copy className="w-3 h-3" /> Copy Test Link</>
-          )}
-        </button>
-      </div>
-    </motion.div>
-  )
-}
-
-// ── Empty state ────────────────────────────────────────────────────────────────
-
-function EmptyAgentsState({ onCreate }: { onCreate: () => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-        <Bot className="w-6 h-6 text-gray-400" />
-      </div>
-      <p className="text-sm font-medium text-gray-700 mb-1">No training agents yet</p>
-      <p className="text-xs text-gray-400 mb-5 max-w-xs">
-        Create your first voice training agent using the planner — it only takes a few minutes.
-      </p>
-      <button
-        onClick={onCreate}
-        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms]"
-      >
-        <Plus className="w-4 h-4" />
-        Create Training Agent
-      </button>
-    </div>
   )
 }
 
