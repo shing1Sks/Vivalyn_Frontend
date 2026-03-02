@@ -253,6 +253,7 @@ function AgentSpaceContent() {
                 agentId={configuringAgent.id}
                 agentLanguage={configuringAgent.agent_language}
                 agentVoice={configuringAgent.agent_voice}
+                evaluationMetrics={configuringAgent.transcript_evaluation_metrics}
                 onSaved={spec => {
                   setConfiguringAgent(prev => prev ? { ...prev, agent_prompt: spec } : null)
                   setAgents(prev =>

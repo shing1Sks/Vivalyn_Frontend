@@ -12,15 +12,21 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { EvaluationReport } from '../lib/api'
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000'
 
 export type AgentState = 'listening' | 'thinking' | 'speaking'
-export type SessionPhase = 'connecting' | 'active' | 'ended' | 'error'
+export type SessionPhase = 'connecting' | 'active' | 'reporting' | 'ended' | 'error'
 
 export interface TranscriptEntry {
   role: 'user' | 'agent'
   text: string
+}
+
+export interface SessionReport {
+  report: EvaluationReport | null
+  runId: string | null
 }
 
 interface UseAgentSessionOptions {
@@ -39,6 +45,7 @@ interface UseAgentSessionReturn {
   toggleMic: () => void
   endSession: () => void
   error: string | null
+  sessionReport: SessionReport | null
 }
 
 export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionReturn {
@@ -49,6 +56,7 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
   const [micEnabled, setMicEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sessionReport, setSessionReport] = useState<SessionReport | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const micCtxRef = useRef<AudioContext | null>(null)
@@ -76,7 +84,9 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
     const playCtx = playCtxRef.current
     if (!playCtx || playCtx.state === 'closed') return
 
-    const int16 = new Int16Array(rawBuffer)
+    // Int16Array requires even byte length — drop a trailing odd byte if present
+    const buf = rawBuffer.byteLength % 2 !== 0 ? rawBuffer.slice(0, rawBuffer.byteLength - 1) : rawBuffer
+    const int16 = new Int16Array(buf)
     const float32 = new Float32Array(int16.length)
     for (let i = 0; i < int16.length; i++) {
       float32[i] = int16[i] / 32768
@@ -164,7 +174,7 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
         return
       }
 
-      let msg: { type: string; text?: string; message?: string }
+      let msg: { type: string; text?: string; message?: string; report?: EvaluationReport; run_id?: string }
       try {
         msg = JSON.parse(event.data as string)
       } catch {
@@ -223,6 +233,12 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
           setAgentState('listening')
           sendAudioRef.current = true
           break
+
+        case 'session_report':
+          setSessionReport({ report: msg.report ?? null, runId: msg.run_id ?? null })
+          setPhase('ended')
+          cleanup()
+          break
       }
     }
 
@@ -263,6 +279,16 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Safety timeout: if backend never sends session_report, transition to ended after 25s
+  useEffect(() => {
+    if (phase !== 'reporting') return
+    const timer = setTimeout(() => {
+      setPhase('ended')
+      cleanup()
+    }, 25000)
+    return () => clearTimeout(timer)
+  }, [phase, cleanup])
+
   const toggleMic = useCallback(() => {
     setMicEnabled(prev => {
       const next = !prev
@@ -276,14 +302,21 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'end_session' }))
     }
-    setPhase('ended')
-    cleanup()
-  }, [cleanup])
+    // Stop mic only — keep WS open so we can receive session_report from backend
+    processorRef.current?.disconnect()
+    processorRef.current = null
+    micStreamRef.current?.getTracks().forEach(t => t.stop())
+    micStreamRef.current = null
+    micCtxRef.current?.close().catch(() => {})
+    micCtxRef.current = null
+    sendAudioRef.current = false
+    setPhase('reporting')
+  }, [])
 
   // Gate audio sending on micEnabled + agentState
   useEffect(() => {
     sendAudioRef.current = micEnabled && agentState === 'listening'
   }, [micEnabled, agentState])
 
-  return { phase, agentState, transcript, micEnabled, toggleMic, endSession, error }
+  return { phase, agentState, transcript, micEnabled, toggleMic, endSession, error, sessionReport }
 }

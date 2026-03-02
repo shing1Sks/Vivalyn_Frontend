@@ -5,22 +5,28 @@
  *   /agent/:agentId          — live mode (agent must be live, asks email + name)
  *   /agent/:agentId?mode=test — test mode (requires auth, members only)
  *
- * State machine: loading → entry → session → ended / error
+ * State machine: loading → entry → session → ended → report / error
  */
 
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Lock } from 'lucide-react'
 
-import { fetchAgentPublicConfig, type AgentPublicConfig } from '../lib/api'
+import {
+  fetchAgentPublicConfig,
+  fetchLatestRunRecord,
+  type AgentPublicConfig,
+  type EvaluationReport,
+} from '../lib/api'
 import { useAuth } from '../context/AuthContext'
-import { useAgentSession } from '../hooks/useAgentSession'
+import { useAgentSession, type SessionReport } from '../hooks/useAgentSession'
 import EntryScreen from '../components/agentlive/EntryScreen'
 import SessionScreen from '../components/agentlive/SessionScreen'
 import TranscriptPanel from '../components/agentlive/TranscriptPanel'
 import EndedScreen from '../components/agentlive/EndedScreen'
+import ReportScreen from '../components/agentlive/ReportScreen'
 
-type PageState = 'loading' | 'entry' | 'session' | 'ended' | 'error'
+type PageState = 'loading' | 'entry' | 'session' | 'ended' | 'report' | 'error'
 
 // ── Inner session component (mounts useAgentSession once join details are known) ──
 
@@ -31,7 +37,8 @@ interface ActiveSessionProps {
   name: string
   mode: 'live' | 'test'
   token?: string
-  onEnded: (turnCount: number) => void
+  turnCount: number
+  onEnded: (turnCount: number, report: SessionReport | null) => void
 }
 
 function ActiveSession({
@@ -43,15 +50,14 @@ function ActiveSession({
   token,
   onEnded,
 }: ActiveSessionProps) {
-  const userName = name
-  const { phase, agentState, transcript, micEnabled, toggleMic, endSession, error } =
+  const { phase, agentState, transcript, micEnabled, toggleMic, endSession, error, sessionReport } =
     useAgentSession({ agentId, email, name, mode, token })
 
   useEffect(() => {
     if (phase === 'ended') {
-      onEnded(transcript.filter(e => e.role === 'user').length)
+      onEnded(transcript.filter(e => e.role === 'user').length, sessionReport)
     }
-  }, [phase, transcript, onEnded])
+  }, [phase, transcript, onEnded, sessionReport])
 
   if (phase === 'connecting') {
     return (
@@ -75,13 +81,24 @@ function ActiveSession({
     )
   }
 
+  // 'reporting' phase: WS open, backend is generating — show EndedScreen with spinner
+  if (phase === 'reporting') {
+    return (
+      <EndedScreen
+        agentName={agentName}
+        turnCount={transcript.filter(e => e.role === 'user').length}
+        isGeneratingReport
+      />
+    )
+  }
+
   return (
     <div className="h-screen bg-gray-900 flex">
       {/* Main call area */}
       <div className="flex-1 flex flex-col">
         <SessionScreen
           agentName={agentName}
-          userName={userName}
+          userName={name}
           mode={mode}
           agentState={agentState}
           micEnabled={micEnabled}
@@ -119,13 +136,14 @@ export default function AgentLive() {
   const [joinName, setJoinName] = useState('')
   const [sessionStarted, setSessionStarted] = useState(false)
   const [endedTurnCount, setEndedTurnCount] = useState(0)
+  const [reportData, setReportData] = useState<EvaluationReport | null>(null)
+  const [isPollingReport, setIsPollingReport] = useState(false)
 
   // 1. Load public agent config
   useEffect(() => {
     if (!agentId) return
     fetchAgentPublicConfig(agentId)
       .then(cfg => {
-        // If live mode and agent is idle, block
         if (mode === 'live' && cfg.agent_status !== 'live') {
           setLoadError('This agent is not currently live.')
           setPageState('error')
@@ -154,10 +172,49 @@ export default function AgentLive() {
     setPageState('session')
   }
 
-  const handleEnded = (turnCount: number) => {
+  const handleEnded = (turnCount: number, report: SessionReport | null) => {
     setEndedTurnCount(turnCount)
-    setPageState('ended')
+    const hasScoring = report?.report && Object.keys(report.report.scoring ?? {}).length > 0
+    if (hasScoring && report?.report) {
+      // Report delivered over WebSocket — show it immediately
+      setReportData(report.report)
+      setPageState('ended')
+    } else if (report !== null) {
+      // Graceful end but no evaluation configured — just show ended screen
+      setPageState('ended')
+    } else {
+      // Abrupt disconnect — try to poll as fallback
+      setIsPollingReport(true)
+      setPageState('ended')
+    }
   }
+
+  // Fallback poll only for abrupt disconnects
+  useEffect(() => {
+    if (pageState !== 'ended' || !isPollingReport || !agentId) return
+    let cancelled = false
+
+    async function pollReport() {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const record = await fetchLatestRunRecord(agentId!, joinEmail)
+          if (cancelled) return
+          if (record?.evaluation_report && Object.keys(record.evaluation_report.scoring ?? {}).length > 0) {
+            setReportData(record.evaluation_report)
+            setIsPollingReport(false)
+            return
+          }
+        } catch { /* ignore */ }
+        if (!cancelled && attempt < 1) {
+          await new Promise(r => setTimeout(r, 3000))
+        }
+      }
+      if (!cancelled) setIsPollingReport(false)
+    }
+
+    pollReport()
+    return () => { cancelled = true }
+  }, [pageState, isPollingReport, agentId, joinEmail])
 
   // ── Render states ───────────────────────────────────────────────────────────
 
@@ -174,7 +231,7 @@ export default function AgentLive() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="max-w-sm text-center">
           <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">🔒</span>
+            <Lock className="w-6 h-6 text-gray-500" />
           </div>
           <h2 className="text-base font-semibold text-gray-900 mb-2">
             {loadError ?? 'Something went wrong'}
@@ -189,11 +246,25 @@ export default function AgentLive() {
     )
   }
 
+  if (pageState === 'report') {
+    return (
+      <ReportScreen
+        report={reportData!}
+        agentName={config?.agent_name ?? 'Agent'}
+        userName={joinName}
+        turnCount={endedTurnCount}
+      />
+    )
+  }
+
   if (pageState === 'ended') {
     return (
       <EndedScreen
         agentName={config?.agent_name ?? 'Agent'}
         turnCount={endedTurnCount}
+        isGeneratingReport={isPollingReport}
+        reportAvailable={!!reportData}
+        onViewReport={() => setPageState('report')}
       />
     )
   }
@@ -219,6 +290,7 @@ export default function AgentLive() {
         name={joinName}
         mode={mode}
         token={mode === 'test' ? (authSession?.access_token ?? '') : undefined}
+        turnCount={endedTurnCount}
         onEnded={handleEnded}
       />
     )

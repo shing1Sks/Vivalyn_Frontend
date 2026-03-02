@@ -6,7 +6,9 @@ import {
   fetchVoicePreviewBlob,
   rewriteAgentSection,
   updateAgent,
+  generateEvaluationCriteria,
   type AgentPromptSpec,
+  type EvaluationMetrics,
   type LanguageVoiceOption,
 } from '../../../lib/api'
 import { useAuth } from '../../../context/AuthContext'
@@ -17,16 +19,20 @@ interface Props {
   agentId: string
   agentLanguage: string
   agentVoice: string
+  evaluationMetrics?: EvaluationMetrics | null
   onSaved: (spec: AgentPromptSpec) => void
   onAgentUpdated?: (updates: { agent_language: string; agent_voice: string }) => void
 }
 
+type Tab = 'session' | 'evaluation'
+
 // ── Main component ──────────────────────────────────────────────────────────────
 
 export default function AgentConfigureView({
-  spec, agentId, agentLanguage, agentVoice, onSaved, onAgentUpdated,
+  spec, agentId, agentLanguage, agentVoice, evaluationMetrics, onSaved, onAgentUpdated,
 }: Props) {
   const { session } = useAuth()
+  const [activeTab, setActiveTab] = useState<Tab>('session')
   const [edited, setEdited] = useState<AgentPromptSpec>({ ...spec })
   const [saving, setSaving] = useState(false)
   const [savedOk, setSavedOk] = useState(false)
@@ -74,7 +80,6 @@ export default function AgentConfigureView({
   }
 
   function handleVoiceUpdated(lang: string, voice: string, personaName: string) {
-    // Update name locally so next "Save Changes" persists it too
     setEdited(prev => ({ ...prev, name: personaName }))
     onAgentUpdated?.({ agent_language: lang, agent_voice: voice })
   }
@@ -87,85 +92,281 @@ export default function AgentConfigureView({
           <h2 className="text-sm md:text-base font-semibold text-gray-900">Configure Agent</h2>
           <p className="hidden md:block text-xs text-gray-400 mt-0.5">Edit sections directly or use AI to refine content.</p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed duration-[120ms]"
+        {activeTab === 'session' && (
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed duration-[120ms]"
+          >
+            {saving ? (
+              <><Loader2 className="w-3 h-3 md:w-3.5 md:h-3.5 animate-spin" /> Saving…</>
+            ) : savedOk ? (
+              <><CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5" /> Saved</>
+            ) : (
+              'Save Changes'
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
+      <div className="px-4 md:px-6 pt-3 bg-white border-b border-gray-100">
+        <div className="inline-flex bg-gray-100 rounded-lg p-1 gap-1">
+          <button
+            onClick={() => setActiveTab('session')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-md duration-[120ms] ${
+              activeTab === 'session'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Session
+          </button>
+          <button
+            onClick={() => setActiveTab('evaluation')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-md duration-[120ms] ${
+              activeTab === 'evaluation'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Evaluation
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'session' ? (
+        <>
+          {/* ── Voice bar ────────────────────────────────────────────────────── */}
+          <VoiceBar
+            agentId={agentId}
+            agentLanguage={agentLanguage}
+            agentVoice={agentVoice}
+            editedSpec={edited}
+            onUpdated={handleVoiceUpdated}
+          />
+
+          {/* ── Two-column body ──────────────────────────────────────────────── */}
+          <div className="flex flex-col md:flex-row md:items-start">
+            {/* LHS — string sections */}
+            <div className="w-full md:w-[55%] flex flex-col gap-4 px-5 py-5 border-b md:border-b-0 md:border-r border-gray-100">
+              <StringSection
+                sectionKey="identity_and_persona"
+                label="Identity & Persona"
+                value={edited.identity_and_persona}
+                rows={10}
+                agentId={agentId}
+                onChange={v => updateStringField('identity_and_persona', v)}
+                onAiRewrite={c => applyAiRewrite('identity_and_persona', false, c)}
+              />
+              <StringSection
+                sectionKey="task_definition"
+                label="Task Definition"
+                value={edited.task_definition}
+                rows={7}
+                agentId={agentId}
+                onChange={v => updateStringField('task_definition', v)}
+                onAiRewrite={c => applyAiRewrite('task_definition', false, c)}
+              />
+            </div>
+
+            {/* RHS — collapsible list sections */}
+            <div className="flex-1 flex flex-col gap-3 px-5 py-5">
+              <CollapsibleSection
+                sectionKey="objectives"
+                label="Objectives"
+                value={edited.objectives}
+                defaultOpen={true}
+                agentId={agentId}
+                onItemChange={(i, v) => updateListItem('objectives', i, v)}
+                onAiRewrite={c => applyAiRewrite('objectives', true, c)}
+              />
+              <CollapsibleSection
+                sectionKey="transcript"
+                label="Transcript"
+                value={edited.transcript}
+                defaultOpen={false}
+                agentId={agentId}
+                onItemChange={(i, v) => updateListItem('transcript', i, v)}
+                onAiRewrite={c => applyAiRewrite('transcript', true, c)}
+              />
+              <CollapsibleSection
+                sectionKey="guardrails"
+                label="Guardrails"
+                value={edited.guardrails}
+                defaultOpen={false}
+                agentId={agentId}
+                onItemChange={(i, v) => updateListItem('guardrails', i, v)}
+                onAiRewrite={c => applyAiRewrite('guardrails', true, c)}
+              />
+            </div>
+          </div>
+        </>
+      ) : (
+        <EvaluationTab
+          agentId={agentId}
+          taskDefinition={edited.task_definition}
+          initialMetrics={evaluationMetrics ?? null}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Evaluation tab ───────────────────────────────────────────────────────────────
+
+interface EvaluationTabProps {
+  agentId: string
+  taskDefinition: string
+  initialMetrics: EvaluationMetrics | null
+}
+
+function EvaluationTab({ agentId, taskDefinition, initialMetrics }: EvaluationTabProps) {
+  const { session } = useAuth()
+  const [criteria, setCriteria] = useState('')
+  const [metrics, setMetrics] = useState<EvaluationMetrics | null>(initialMetrics)
+  const [generating, setGenerating] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [savedOk, setSavedOk] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
+
+  async function handleGenerate() {
+    if (!session || !criteria.trim()) return
+    setGenerating(true)
+    setGenError(null)
+    try {
+      const result = await generateEvaluationCriteria(session.access_token, {
+        task_definition: taskDefinition,
+        users_raw_evaluation_criteria: criteria.trim(),
+      })
+      setMetrics(result)
+    } catch {
+      setGenError('Failed to generate criteria. Please try again.')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  async function handleSave() {
+    if (!session || !metrics) return
+    setSaving(true)
+    setSavedOk(false)
+    try {
+      await updateAgent(session.access_token, agentId, {
+        transcript_evaluation_metrics: metrics,
+      })
+      setSavedOk(true)
+      setTimeout(() => setSavedOk(false), 3000)
+    } catch { /* silent */ } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleClear() {
+    if (!session) return
+    setSaving(true)
+    try {
+      await updateAgent(session.access_token, agentId, {
+        transcript_evaluation_metrics: null,
+      })
+      setMetrics(null)
+      setCriteria('')
+    } catch { /* silent */ } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="px-5 py-5 max-w-2xl flex flex-col gap-5">
+      {/* Input area */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Evaluation Criteria</span>
+        </div>
+        <div className="px-5 py-4 flex flex-col gap-3">
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Describe what you want to evaluate after each session — the AI will turn this into structured metrics and a scoring rubric.
+          </p>
+          <textarea
+            value={criteria}
+            onChange={e => setCriteria(e.target.value)}
+            rows={5}
+            placeholder="e.g. How well does the user communicate their problem? Did they ask relevant follow-up questions? Were they polite and professional?"
+            className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
+          />
+          {genError && <p className="text-xs text-red-500">{genError}</p>}
+          <div className="flex justify-end">
+            <button
+              onClick={handleGenerate}
+              disabled={!criteria.trim() || generating}
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed duration-[120ms]"
+            >
+              {generating ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</>
+              ) : (
+                <><Sparkles className="w-3.5 h-3.5" /> Generate with AI</>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Generated metrics preview */}
+      {metrics && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+          className="bg-white border border-gray-200 rounded-xl overflow-hidden"
         >
-          {saving ? (
-            <><Loader2 className="w-3 h-3 md:w-3.5 md:h-3.5 animate-spin" /> Saving…</>
-          ) : savedOk ? (
-            <><CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5" /> Saved</>
-          ) : (
-            'Save Changes'
-          )}
-        </button>
-      </div>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Generated Metrics</span>
+            <button
+              onClick={handleClear}
+              disabled={saving}
+              className="text-xs text-gray-400 hover:text-red-500 duration-[120ms]"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="px-5 py-4 flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">
+              {metrics.metrics.map(m => (
+                <span
+                  key={m}
+                  className="text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1"
+                >
+                  {m}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">{metrics.report_curator_prompt}</p>
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed duration-[120ms]"
+              >
+                {saving ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</>
+                ) : savedOk ? (
+                  <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
+                ) : (
+                  'Save Metrics'
+                )}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
-      {/* ── Voice bar ──────────────────────────────────────────────────────── */}
-      <VoiceBar
-        agentId={agentId}
-        agentLanguage={agentLanguage}
-        agentVoice={agentVoice}
-        editedSpec={edited}
-        onUpdated={handleVoiceUpdated}
-      />
-
-      {/* ── Two-column body ────────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-start">
-        {/* LHS — string sections */}
-        <div className="w-full md:w-[55%] flex flex-col gap-4 px-5 py-5 border-b md:border-b-0 md:border-r border-gray-100">
-          <StringSection
-            sectionKey="identity_and_persona"
-            label="Identity & Persona"
-            value={edited.identity_and_persona}
-            rows={10}
-            agentId={agentId}
-            onChange={v => updateStringField('identity_and_persona', v)}
-            onAiRewrite={c => applyAiRewrite('identity_and_persona', false, c)}
-          />
-          <StringSection
-            sectionKey="task_definition"
-            label="Task Definition"
-            value={edited.task_definition}
-            rows={7}
-            agentId={agentId}
-            onChange={v => updateStringField('task_definition', v)}
-            onAiRewrite={c => applyAiRewrite('task_definition', false, c)}
-          />
+      {/* Empty state when no metrics */}
+      {!metrics && (
+        <div className="bg-white border border-dashed border-gray-200 rounded-xl px-5 py-8 text-center">
+          <p className="text-sm text-gray-400">No evaluation metrics configured yet.</p>
+          <p className="text-xs text-gray-300 mt-1">Describe your criteria above and generate metrics with AI.</p>
         </div>
-
-        {/* RHS — collapsible list sections */}
-        <div className="flex-1 flex flex-col gap-3 px-5 py-5">
-          <CollapsibleSection
-            sectionKey="objectives"
-            label="Objectives"
-            value={edited.objectives}
-            defaultOpen={true}
-            agentId={agentId}
-            onItemChange={(i, v) => updateListItem('objectives', i, v)}
-            onAiRewrite={c => applyAiRewrite('objectives', true, c)}
-          />
-          <CollapsibleSection
-            sectionKey="transcript"
-            label="Transcript"
-            value={edited.transcript}
-            defaultOpen={false}
-            agentId={agentId}
-            onItemChange={(i, v) => updateListItem('transcript', i, v)}
-            onAiRewrite={c => applyAiRewrite('transcript', true, c)}
-          />
-          <CollapsibleSection
-            sectionKey="guardrails"
-            label="Guardrails"
-            value={edited.guardrails}
-            defaultOpen={false}
-            agentId={agentId}
-            onItemChange={(i, v) => updateListItem('guardrails', i, v)}
-            onAiRewrite={c => applyAiRewrite('guardrails', true, c)}
-          />
-        </div>
-      </div>
+      )}
     </div>
   )
 }

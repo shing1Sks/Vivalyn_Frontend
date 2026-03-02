@@ -1,12 +1,21 @@
 import { motion } from 'framer-motion'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Loader2, FileText } from 'lucide-react'
 
 interface EndedScreenProps {
   agentName: string
   turnCount: number
+  isGeneratingReport?: boolean
+  reportAvailable?: boolean
+  onViewReport?: () => void
 }
 
-export default function EndedScreen({ agentName, turnCount }: EndedScreenProps) {
+export default function EndedScreen({
+  agentName,
+  turnCount,
+  isGeneratingReport = false,
+  reportAvailable = false,
+  onViewReport,
+}: EndedScreenProps) {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <motion.div
@@ -30,9 +39,27 @@ export default function EndedScreen({ agentName, turnCount }: EndedScreenProps) 
         )}
 
         <div className="mt-8 pt-6 border-t border-gray-100">
-          <p className="text-xs text-gray-400">
-            Your conversation transcript has been saved.
-          </p>
+          {isGeneratingReport ? (
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                Generating your report…
+              </div>
+              <p className="text-xs text-gray-300">This usually takes a few seconds</p>
+            </div>
+          ) : reportAvailable ? (
+            <button
+              onClick={onViewReport}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 duration-[120ms]"
+            >
+              <FileText className="w-4 h-4" />
+              View Report
+            </button>
+          ) : (
+            <p className="text-xs text-gray-400">
+              Your conversation transcript has been saved.
+            </p>
+          )}
         </div>
       </motion.div>
     </div>

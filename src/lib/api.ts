@@ -325,6 +325,47 @@ export interface AgentPromptSpec {
   name: string;
 }
 
+// ── Evaluation ────────────────────────────────────────────────────────────────
+
+export interface EvaluationMetrics {
+  report_curator_prompt: string;
+  metrics: string[]; // exactly 4
+}
+
+export interface EvaluationReport {
+  scoring: Record<string, number>;
+  highlights: string[];
+  transcript_summary: string;
+  feedback: string[];
+  summary: string;
+}
+
+export async function generateEvaluationCriteria(
+  accessToken: string,
+  payload: { task_definition: string; users_raw_evaluation_criteria: string },
+): Promise<EvaluationMetrics> {
+  const res = await fetch(
+    `${BASE}/api/v1/agents/generate-evaluation-criteria`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (err as { detail?: string }).detail ??
+        "Failed to generate evaluation criteria",
+      res.status,
+    );
+  }
+  return res.json();
+}
+
 // ── Agent Planning ────────────────────────────────────────────────────────────
 
 export interface PlanQuestion {
@@ -427,6 +468,7 @@ export interface Agent {
   created_by_id: string;
   created_by_name: string;
   agent_status: "live" | "idle";
+  transcript_evaluation_metrics?: EvaluationMetrics | null;
 }
 
 export async function saveAgent(
@@ -437,6 +479,7 @@ export async function saveAgent(
     agent_prompt: AgentPromptSpec;
     agent_language: string;
     agent_voice: string;
+    transcript_evaluation_metrics?: EvaluationMetrics;
   },
 ): Promise<Agent> {
   const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/agents`, {
@@ -482,6 +525,7 @@ export async function updateAgent(
     agent_prompt?: AgentPromptSpec;
     agent_language?: string;
     agent_voice?: string;
+    transcript_evaluation_metrics?: EvaluationMetrics | null;
   },
 ): Promise<Agent> {
   const res = await fetch(`${BASE}/api/v1/agents/${agentId}`, {
@@ -553,5 +597,29 @@ export async function fetchAgentPublicConfig(
       res.status,
     );
   }
+  return res.json();
+}
+
+// ── Run Records ───────────────────────────────────────────────────────────────
+
+export interface RunRecord {
+  id: string;
+  created_at: string;
+  agent_id: string;
+  user_email: string;
+  user_name: string;
+  transcript: Array<{ role: string; content: string; timestamp: string }>;
+  evaluation_report: EvaluationReport | null;
+}
+
+export async function fetchLatestRunRecord(
+  agentId: string,
+  email: string,
+): Promise<RunRecord | null> {
+  const res = await fetch(
+    `${BASE}/api/v1/agents/${agentId}/runs/latest?email=${encodeURIComponent(email)}`,
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) return null;
   return res.json();
 }

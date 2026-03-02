@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, CheckCircle2, Loader2, Rocket, Settings2, X } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Loader2, Rocket, Settings2, Sparkles, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
   compileAgentPlan,
+  generateEvaluationCriteria,
   planAgentSection,
   saveAgent,
   type Agent,
   type AgentPromptSpec,
   type CompileResult,
+  type EvaluationMetrics,
   type PlanQuestion,
 } from '../../lib/api'
 import LanguageVoiceSelector from './wizard/LanguageVoiceSelector'
@@ -22,6 +24,7 @@ type WizardStep =
   | 'prompt-input'
   | 'planning'
   | 'compiling'
+  | 'evaluation'
   | 'done'
   | 'configure'
 
@@ -79,6 +82,11 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   const [savedAgent, setSavedAgent] = useState<Agent | null>(null)
   const [configuredSpec, setConfiguredSpec] = useState<AgentPromptSpec | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Evaluation step state
+  const [evaluationCriteria, setEvaluationCriteria] = useState('')
+  const [generatedMetrics, setGeneratedMetrics] = useState<EvaluationMetrics | null>(null)
+  const [isGeneratingMetrics, setIsGeneratingMetrics] = useState(false)
+  const [isSavingAgent, setIsSavingAgent] = useState(false)
 
   // Track whether planning has kicked off (avoid double-trigger in strict mode)
   const planningStarted = useRef(false)
@@ -108,6 +116,10 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       setSavedAgent(null)
       setConfiguredSpec(null)
       setError(null)
+      setEvaluationCriteria('')
+      setGeneratedMetrics(null)
+      setIsGeneratingMetrics(false)
+      setIsSavingAgent(false)
       planningStarted.current = false
     }
   }, [open])
@@ -184,31 +196,58 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       })
       setFinalSpec(spec)
 
-      // Extract agent_name from compiler result; the rest are the 5 prompt sections
-      const { agent_name, ...promptSections } = spec
-
-      const agentPromptFull = {
-        ...promptSections,
-        name: selectedPersonaName,
-      }
+      const { agent_name: _name, ...promptSections } = spec
+      const agentPromptFull = { ...promptSections, name: selectedPersonaName }
       setConfiguredSpec(agentPromptFull)
 
-      // Auto-save agent
-      const agent = await saveAgent(session.access_token, agentspaceId, {
-        agent_name,
-        agent_prompt: agentPromptFull,
-        agent_language: selectedLanguage,
-        agent_voice: selectedVoiceName,
-      })
-      setSavedAgent(agent)
       setIsCompiling(false)
-      setStep('done')
+      setStep('evaluation')
     } catch (e: any) {
       setIsCompiling(false)
       setError(e?.message ?? 'Compilation failed. Please try again.')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, agentspaceId, selectedLanguage, selectedVoiceName, selectedPersonaName])
+  }, [session, selectedPersonaName])
+
+  const handleGenerateMetrics = useCallback(async () => {
+    if (!session || !finalSpec || !evaluationCriteria.trim()) return
+    setIsGeneratingMetrics(true)
+    setGeneratedMetrics(null)
+    try {
+      const metrics = await generateEvaluationCriteria(session.access_token, {
+        task_definition: finalSpec.task_definition,
+        users_raw_evaluation_criteria: evaluationCriteria.trim(),
+      })
+      setGeneratedMetrics(metrics)
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to generate metrics. Please try again.')
+    } finally {
+      setIsGeneratingMetrics(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, finalSpec, evaluationCriteria])
+
+  const handleSaveAgent = useCallback(async () => {
+    if (!session || !finalSpec || !configuredSpec) return
+    setIsSavingAgent(true)
+    try {
+      const { agent_name } = finalSpec
+      const agent = await saveAgent(session.access_token, agentspaceId, {
+        agent_name,
+        agent_prompt: configuredSpec,
+        agent_language: selectedLanguage,
+        agent_voice: selectedVoiceName,
+        ...(generatedMetrics ? { transcript_evaluation_metrics: generatedMetrics } : {}),
+      })
+      setSavedAgent(agent)
+      setStep('done')
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to save agent. Please try again.')
+    } finally {
+      setIsSavingAgent(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, agentspaceId, finalSpec, configuredSpec, selectedLanguage, selectedVoiceName, generatedMetrics])
 
   // ── User answers a question ─────────────────────────────────────────────────
 
@@ -377,6 +416,18 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
               />
             )}
 
+            {step === 'evaluation' && (
+              <EvaluationStep
+                criteria={evaluationCriteria}
+                onCriteriaChange={setEvaluationCriteria}
+                onGenerate={handleGenerateMetrics}
+                isGenerating={isGeneratingMetrics}
+                generatedMetrics={generatedMetrics}
+                onContinue={handleSaveAgent}
+                isSaving={isSavingAgent}
+              />
+            )}
+
             {step === 'done' && savedAgent && configuredSpec && (
               <DoneStep
                 onConfigure={() => setStep('configure')}
@@ -389,6 +440,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
                 agentId={savedAgent.id}
                 agentLanguage={savedAgent.agent_language}
                 agentVoice={savedAgent.agent_voice}
+                evaluationMetrics={savedAgent.transcript_evaluation_metrics}
                 onSaved={spec => setConfiguredSpec(spec)}
               />
             )}
@@ -454,6 +506,112 @@ function PromptInputStep({ value, onChange, onSubmit, language, personaName }: P
             <Rocket className="w-4 h-4" />
             Launch Planning Agent
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Evaluation step ────────────────────────────────────────────────────────────
+
+interface EvaluationStepProps {
+  criteria: string
+  onCriteriaChange: (v: string) => void
+  onGenerate: () => void
+  isGenerating: boolean
+  generatedMetrics: EvaluationMetrics | null
+  onContinue: () => void
+  isSaving: boolean
+}
+
+function EvaluationStep({
+  criteria, onCriteriaChange, onGenerate, isGenerating, generatedMetrics, onContinue, isSaving,
+}: EvaluationStepProps) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto">
+        <div className="min-h-full px-6 py-8 flex items-center justify-center">
+        <div className="w-full max-w-xl">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">How should sessions be evaluated?</h2>
+          <p className="text-sm text-gray-500 mb-6">
+            Describe what good performance looks like for this agent. We'll generate 4 precise scoring metrics automatically.
+          </p>
+
+          <textarea
+            autoFocus
+            value={criteria}
+            onChange={e => onCriteriaChange(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && criteria.trim() && !isGenerating) onGenerate()
+            }}
+            rows={5}
+            placeholder="e.g. Focus on whether the candidate articulates their reasoning clearly, handles objections with confidence, and demonstrates product knowledge throughout…"
+            className="w-full border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+          />
+
+          <button
+            onClick={onGenerate}
+            disabled={!criteria.trim() || isGenerating}
+            className={`mt-4 w-full py-3 rounded-xl text-sm font-semibold duration-[120ms] flex items-center justify-center gap-2 ${
+              criteria.trim() && !isGenerating
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            {isGenerating ? (
+              <><Loader2 className="w-4 h-4 animate-spin" />Generating metrics…</>
+            ) : (
+              <><Sparkles className="w-4 h-4" />Generate Metrics</>
+            )}
+          </button>
+
+          {/* Generated metrics preview */}
+          <AnimatePresence>
+            {generatedMetrics && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="mt-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-400 mb-3">Scoring Metrics</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {generatedMetrics.metrics.map(m => (
+                    <span
+                      key={m}
+                      className="text-xs font-medium text-indigo-700 bg-white border border-indigo-200 rounded-full px-3 py-1"
+                    >
+                      {m}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-indigo-600 leading-relaxed">{generatedMetrics.report_curator_prompt}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex gap-3 mt-5">
+            <button
+              onClick={onContinue}
+              disabled={isSaving}
+              className={`flex-1 py-3 rounded-xl text-sm font-semibold duration-[120ms] flex items-center justify-center gap-2 ${
+                isSaving
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
+              }`}
+            >
+              {isSaving ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Saving…</>
+              ) : (
+                generatedMetrics ? 'Save & Continue' : 'Skip & Save'
+              )}
+            </button>
+          </div>
+          {!generatedMetrics && (
+            <p className="text-xs text-gray-400 mt-2 text-center">You can skip this step — sessions can still be recorded.</p>
+          )}
+        </div>
         </div>
       </div>
     </div>
