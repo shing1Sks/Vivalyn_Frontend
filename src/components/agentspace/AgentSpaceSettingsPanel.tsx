@@ -321,6 +321,13 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
                       {members.length === 0 && (
                         <p className="text-sm text-gray-400 py-6 text-center">No members found.</p>
                       )}
+                      <button
+                        onClick={() => setTab('invites')}
+                        className="mt-4 flex items-center gap-2 w-full py-2.5 px-3 border border-dashed border-gray-200 rounded-lg text-sm text-gray-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors duration-[120ms]"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        Invite a member
+                      </button>
                     </div>
                   )}
                 </>
@@ -332,25 +339,29 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
                   {/* Send invite form */}
                   <form onSubmit={handleSendInvite} className="mb-5 pt-2">
                     <p className="text-xs font-medium text-gray-700 mb-3">Send an invite</p>
-                    <div className="flex gap-2 mb-2">
-                      <input
-                        type="email"
-                        value={inviteEmail}
-                        onChange={(e) => setInviteEmail(e.target.value)}
-                        placeholder="colleague@company.com"
-                        required
-                        disabled={inviteSending}
-                        className="flex-1 py-2.5 px-3 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-600 transition-all duration-[120ms] disabled:opacity-50"
-                      />
-                      <select
-                        value={inviteRole}
-                        onChange={(e) => setInviteRole(e.target.value as 'member' | 'admin')}
-                        disabled={inviteSending}
-                        className="py-2.5 px-3 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-600 transition-all duration-[120ms] cursor-pointer disabled:opacity-50"
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </select>
+                    <input
+                      type="email"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="colleague@company.com"
+                      required
+                      disabled={inviteSending}
+                      className="w-full py-2.5 px-3 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all duration-[120ms] disabled:opacity-50 mb-2"
+                    />
+                    <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-2">
+                      {(['member', 'admin'] as const).map(r => (
+                        <button
+                          key={r}
+                          type="button"
+                          disabled={inviteSending}
+                          onClick={() => setInviteRole(r)}
+                          className={`flex-1 py-1.5 text-xs font-medium rounded-md capitalize transition-all duration-[120ms] disabled:opacity-50 ${
+                            inviteRole === r ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                          }`}
+                        >
+                          {r === 'admin' ? 'Admin' : 'Member'}
+                        </button>
+                      ))}
                     </div>
                     {inviteSendError && (
                       <p className="text-xs text-red-500 mb-2">{inviteSendError}</p>

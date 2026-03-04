@@ -261,6 +261,18 @@ placeholder: gray-400
 radius: rounded-lg
 ```
 
+## Dropdowns / Select
+
+**Never use native `<select>`.** Always build a custom dropdown:
+
+- Trigger: secondary button style (`border gray-200`, `rounded-lg`, fixed width so it never resizes on selection change)
+- Chevron icon rotates 180° when open (`rotate-180`)
+- Panel: `bg-white border gray-200 rounded-xl shadow-lg py-1`, animated with Framer Motion (`opacity 0→1, y -4→0, duration 0.12`)
+- Options: `px-3 py-2 text-sm`, active = `bg-indigo-50 text-indigo-700 font-medium`, hover = `hover:bg-gray-50`
+- Click-outside closes via `mousedown` listener on `document`
+
+**For 2-option selects** (e.g. Member/Admin): use a segmented control (`bg-gray-100 rounded-lg p-1`) — same pattern as tab bars — instead of a dropdown.
+
 ---
 
 # Page Layout Spec — Landing Page

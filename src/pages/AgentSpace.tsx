@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -210,7 +210,7 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
 
 // ── Records tab ────────────────────────────────────────────────────────────────
 
-type SortField = 'created_at' | 'user_name' | 'agent_name'
+type SortField = 'created_at' | 'user_name' | 'agent_name' | 'score'
 type FilterType = 'all' | 'live' | 'test'
 
 interface RecordsTabProps {
@@ -232,7 +232,26 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
   const [sortField, setSortField] = useState<SortField>('created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [filterType, setFilterType] = useState<FilterType>('all')
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('all')
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
+  const agentDropdownRef = useRef<HTMLDivElement>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const agentOptions = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const r of runs) seen.set(r.agent_id, r.agent_name)
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [runs])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+        setAgentDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -264,6 +283,7 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
       if (filterType === 'test') return r.is_test
       return true
     })
+    .filter(r => selectedAgentId === 'all' || r.agent_id === selectedAgentId)
     .filter(r => {
       if (!search.trim()) return true
       const q = search.toLowerCase()
@@ -274,6 +294,13 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
       )
     })
     .sort((a, b) => {
+      if (sortField === 'score') {
+        const an = parseFloat(avgScore(a.evaluation_report))
+        const bn = parseFloat(avgScore(b.evaluation_report))
+        const av = isNaN(an) ? -1 : an
+        const bv = isNaN(bn) ? -1 : bn
+        return sortDir === 'asc' ? av - bv : bv - av
+      }
       let av: string, bv: string
       if (sortField === 'created_at') {
         av = a.created_at; bv = b.created_at
@@ -318,6 +345,48 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
           ))}
         </div>
 
+        {/* Agent selector */}
+        {agentOptions.length > 0 && (
+          <div ref={agentDropdownRef} className="relative">
+            <button
+              onClick={() => setAgentDropdownOpen(o => !o)}
+              className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 duration-[120ms] w-44"
+            >
+              <Bot className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <span className="flex-1 text-left truncate">
+                {selectedAgentId === 'all' ? 'All agents' : (agentOptions.find(([id]) => id === selectedAgentId)?.[1] ?? 'All agents')}
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 text-gray-400 duration-[120ms] ${agentDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {agentDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute left-0 top-full mt-1 z-20 min-w-[160px] bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-hidden"
+                >
+                  {[['all', 'All agents'] as [string, string], ...agentOptions].map(([id, name]) => (
+                    <button
+                      key={id}
+                      onClick={() => { setSelectedAgentId(id); setAgentDropdownOpen(false) }}
+                      className={`w-full text-left px-3 py-2 text-sm duration-[120ms] truncate ${
+                        selectedAgentId === id
+                          ? 'bg-indigo-50 text-indigo-700 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
         {/* Export */}
         <button
           onClick={() => exportCsv(filtered)}
@@ -337,9 +406,9 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center bg-white border border-dashed border-gray-200 rounded-xl">
           <p className="text-sm text-gray-400">No sessions yet.</p>
-          {(search || filterType !== 'all') && (
+          {(search || filterType !== 'all' || selectedAgentId !== 'all') && (
             <button
-              onClick={() => { setSearch(''); setFilterType('all') }}
+              onClick={() => { setSearch(''); setFilterType('all'); setSelectedAgentId('all') }}
               className="text-xs text-indigo-500 mt-2 hover:text-indigo-700 duration-[120ms]"
             >
               Clear filters
@@ -363,7 +432,12 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
             >
               Agent <SortIcon field="agent_name" sortField={sortField} sortDir={sortDir} />
             </button>
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Score</span>
+            <button
+              onClick={() => toggleSort('score')}
+              className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 duration-[120ms]"
+            >
+              Score <SortIcon field="score" sortField={sortField} sortDir={sortDir} />
+            </button>
             <button
               onClick={() => toggleSort('created_at')}
               className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 duration-[120ms]"
