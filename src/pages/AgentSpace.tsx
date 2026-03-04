@@ -126,33 +126,28 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
   const testUrl = `${window.location.origin}/agent/${agent.id}?mode=test`
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
-      className="bg-white border border-gray-200 rounded-xl px-5 py-3.5 flex items-center gap-4 hover:border-gray-300 hover:shadow-sm duration-[120ms]"
-    >
-      {/* Icon */}
-      <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
-        <Bot className="w-4 h-4 text-indigo-600" />
-      </div>
-
-      {/* Name + tags */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-gray-900 truncate">{agent.agent_name}</p>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5">
-            {agent.agent_language}
-          </span>
+    <div className="grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-3 items-center hover:bg-gray-50/60 duration-[120ms]">
+      {/* Agent name + persona */}
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+          <Bot className="w-3.5 h-3.5 text-indigo-600" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-900 truncate">{agent.agent_name}</p>
           {personaName && (
-            <span className="text-xs text-gray-400 truncate">{personaName}</span>
+            <p className="text-xs text-gray-400 truncate">{personaName}</p>
           )}
         </div>
       </div>
 
-      {/* Status badge */}
+      {/* Language */}
+      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 w-fit">
+        {agent.agent_language}
+      </span>
+
+      {/* Status */}
       <span
-        className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
+        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 w-fit ${
           isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'
         }`}
       >
@@ -160,53 +155,56 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
         {isLive ? 'Live' : 'Idle'}
       </span>
 
-      {/* Date */}
-      <span className="text-xs text-gray-400 shrink-0 hidden sm:block">
-        {formatRelativeDate(agent.created_at)}
-      </span>
+      {/* Created */}
+      <span className="text-xs text-gray-400">{formatRelativeDate(agent.created_at)}</span>
 
-      {/* Copy links */}
-      <button
-        onClick={() => copyLink(liveUrl, 'live')}
-        title="Copy live link"
-        className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
-      >
-        {copiedLive ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Link2 className="w-3.5 h-3.5" />}
-      </button>
+      {/* Links */}
+      <div className="flex items-center justify-center gap-1">
+        <button
+          onClick={() => copyLink(liveUrl, 'live')}
+          title="Copy live link"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
+        >
+          {copiedLive ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Link2 className="w-3.5 h-3.5" />}
+        </button>
+        <button
+          onClick={() => copyLink(testUrl, 'test')}
+          title="Copy test link"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
+        >
+          {copiedTest ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+        </button>
+      </div>
 
-      <button
-        onClick={() => copyLink(testUrl, 'test')}
-        title="Copy test link"
-        className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
-      >
-        {copiedTest ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-      </button>
-
-      {/* Live toggle */}
-      <button
-        onClick={handleToggleStatus}
-        disabled={toggling}
-        title={isLive ? 'Pause agent' : 'Deploy agent live'}
-        className="shrink-0 flex items-center disabled:opacity-50 duration-[120ms]"
-      >
-        {toggling ? (
-          <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
-        ) : isLive ? (
-          <ToggleRight className="w-6 h-6 text-emerald-500" />
-        ) : (
-          <ToggleLeft className="w-6 h-6 text-gray-300" />
-        )}
-      </button>
+      {/* Deploy toggle */}
+      <div className="flex items-center justify-center">
+        <button
+          onClick={handleToggleStatus}
+          disabled={toggling}
+          title={isLive ? 'Pause agent' : 'Deploy agent live'}
+          className="group flex items-center p-1 rounded-lg hover:bg-indigo-50 disabled:opacity-50 duration-[120ms]"
+        >
+          {toggling ? (
+            <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+          ) : isLive ? (
+            <ToggleRight className="w-6 h-6 text-emerald-500 group-hover:text-indigo-600 duration-[120ms]" />
+          ) : (
+            <ToggleLeft className="w-6 h-6 text-gray-300 group-hover:text-indigo-600 duration-[120ms]" />
+          )}
+        </button>
+      </div>
 
       {/* Configure */}
-      <button
-        onClick={onConfigure}
-        title="Configure agent"
-        className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
-      >
-        <Settings2 className="w-4 h-4" />
-      </button>
-    </motion.div>
+      <div className="flex items-center justify-center">
+        <button
+          onClick={onConfigure}
+          title="Configure agent"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
+        >
+          <Settings2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -524,6 +522,8 @@ function AgentSpaceContent() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [agentsLoading, setAgentsLoading] = useState(false)
   const [configuringAgent, setConfiguringAgent] = useState<Agent | null>(null)
+  const [agentSearch, setAgentSearch] = useState('')
+  const [agentFilter, setAgentFilter] = useState<'all' | 'live' | 'idle'>('all')
 
   const retryCount = useRef(0)
 
@@ -636,14 +636,32 @@ function AgentSpaceContent() {
             <motion.div variants={fadeInUp}>
               {dashTab === 'agents' ? (
                 <div>
-                  {/* Agents header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-sm font-semibold text-gray-900">
-                      Agents{' '}
-                      {!agentsLoading && (
-                        <span className="text-gray-400 font-normal">({agents.length})</span>
-                      )}
-                    </span>
+                  {/* Toolbar */}
+                  <div className="flex items-center gap-3 flex-wrap mb-4">
+                    <div className="relative flex-1 min-w-[180px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                      <input
+                        value={agentSearch}
+                        onChange={e => setAgentSearch(e.target.value)}
+                        placeholder="Search agents…"
+                        className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                      />
+                    </div>
+                    <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                      {(['all', 'live', 'idle'] as const).map(f => (
+                        <button
+                          key={f}
+                          onClick={() => setAgentFilter(f)}
+                          className={`px-3 py-1 text-xs font-medium rounded-md duration-[120ms] capitalize ${
+                            agentFilter === f
+                              ? 'bg-white text-gray-900 shadow-sm'
+                              : 'text-gray-500 hover:text-gray-700'
+                          }`}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                    </div>
                     <button
                       onClick={() => setCreateAgentOpen(true)}
                       className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms]"
@@ -653,27 +671,73 @@ function AgentSpaceContent() {
                     </button>
                   </div>
 
-                  {agentsLoading ? (
-                    <div className="flex items-center justify-center py-16">
-                      <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-                    </div>
-                  ) : agents.length === 0 ? (
-                    <EmptyAgentsState onCreate={() => setCreateAgentOpen(true)} />
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {agents.map(agent => (
-                        <AgentRow
-                          key={agent.id}
-                          agent={agent}
-                          token={session?.access_token ?? ''}
-                          onConfigure={() => setConfiguringAgent(agent)}
-                          onStatusChange={updated =>
-                            setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
-                          }
-                        />
-                      ))}
-                    </div>
-                  )}
+                  {(() => {
+                    const filteredAgents = agents
+                      .filter(a => {
+                        if (agentFilter === 'live') return a.agent_status === 'live'
+                        if (agentFilter === 'idle') return a.agent_status !== 'live'
+                        return true
+                      })
+                      .filter(a => {
+                        if (!agentSearch.trim()) return true
+                        return a.agent_name.toLowerCase().includes(agentSearch.toLowerCase())
+                      })
+
+                    if (agentsLoading) {
+                      return (
+                        <div className="flex items-center justify-center py-16">
+                          <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+                        </div>
+                      )
+                    }
+
+                    if (agents.length === 0) {
+                      return <EmptyAgentsState onCreate={() => setCreateAgentOpen(true)} />
+                    }
+
+                    if (filteredAgents.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-16 text-center bg-white border border-dashed border-gray-200 rounded-xl">
+                          <p className="text-sm text-gray-400">No agents match your filters.</p>
+                          <button
+                            onClick={() => { setAgentSearch(''); setAgentFilter('all') }}
+                            className="text-xs text-indigo-500 mt-2 hover:text-indigo-700 duration-[120ms]"
+                          >
+                            Clear filters
+                          </button>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        {/* Table header */}
+                        <div className="grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Agent</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Language</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Links</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Deploy</span>
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Config</span>
+                        </div>
+                        {/* Rows */}
+                        <div className="divide-y divide-gray-50">
+                          {filteredAgents.map(agent => (
+                            <AgentRow
+                              key={agent.id}
+                              agent={agent}
+                              token={session?.access_token ?? ''}
+                              onConfigure={() => setConfiguringAgent(agent)}
+                              onStatusChange={updated =>
+                                setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               ) : (
                 <RecordsTab
