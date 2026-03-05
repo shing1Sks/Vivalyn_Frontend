@@ -55,7 +55,7 @@ function RadarChart({ scoring }: { scoring: Record<string, number> }) {
   const cx = size / 2
   const cy = size / 2
   const maxRadius = 78
-  const labelPadding = 22
+  const labelPadding = 26
   const n = entries.length
 
   function polar(angle: number, r: number) {
@@ -68,7 +68,7 @@ function RadarChart({ scoring }: { scoring: Record<string, number> }) {
   const polygonPoints = dataPoints.map(p => `${p.x},${p.y}`).join(' ')
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} overflow="visible" style={{ display: 'block' }}>
       {/* Background rings */}
       {[0.33, 0.66, 1.0].map((ratio, ri) => (
         <polygon
@@ -115,7 +115,7 @@ function RadarChart({ scoring }: { scoring: Record<string, number> }) {
             fill="#6b7280"
             fontFamily="Inter, system-ui, sans-serif"
           >
-            {metric.length > 14 ? metric.slice(0, 13) + '…' : metric}
+            {metric.length > 18 ? metric.slice(0, 17) + '…' : metric}
           </text>
         )
       })}
@@ -314,7 +314,7 @@ export default function RunDetailPanel({ run, agentspaceId, token, onClose }: Ru
 
                 {/* Radar chart */}
                 {report.scoring && Object.keys(report.scoring).length > 0 && (
-                  <div className="flex justify-center">
+                  <div className="flex justify-center px-10 overflow-visible">
                     <RadarChart scoring={report.scoring} />
                   </div>
                 )}
