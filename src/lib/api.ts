@@ -609,7 +609,7 @@ export interface RunRecord {
   agent_name: string;
   user_email: string;
   user_name: string;
-  transcript?: Array<{ role: string; content: string; timestamp: string }>;
+  transcript?: Array<{ role: string; content: string | Record<string, unknown>; timestamp: string }>;
   evaluation_report: EvaluationReport | null;
   is_test: boolean;
 }
@@ -634,5 +634,17 @@ export async function fetchAgentspaceRuns(
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchRunRecordById(
+  accessToken: string,
+  agentspaceId: string,
+  runId: string,
+): Promise<RunRecord> {
+  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/runs/${runId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error('Failed to fetch run record');
   return res.json();
 }

@@ -1,5 +1,46 @@
 # Changelog
 
+## [19] agentspace-mobile-layout — 2026-03-05
+
+**Why:** The AgentSpace page was built desktop-first with no responsive breakpoints. The agents table (7 fixed columns, ~530px minimum width) and records table (6 columns) overflowed on mobile viewports. The RunDetailPanel was fixed at 500px, covering the whole screen on phones. The header avatar was oversized relative to the icon buttons at small widths.
+
+**What:** Added full mobile responsiveness across the AgentSpace page using a dual-render pattern (mobile card + hidden desktop table row) for both `AgentRow` and `RunRow`. Table headers are hidden below `md`. Toolbars reflow correctly. Panels go full-width on mobile. Avatar scales down responsively.
+
+**Changes:**
+- `src/pages/AgentSpace.tsx` — main content padding: `px-4 md:px-6 py-4 md:py-6`; agents toolbar "Create Training Agent" button: `w-full md:w-auto justify-center` so it goes full-width when wrapped on mobile; agent table header: `hidden md:grid`; `AgentRow`: dual-render — mobile card shows agent name + persona + status/language badges in row 1, action buttons (copy live, copy test, toggle, configure) + date in row 2 (`md:hidden`), existing 7-column grid row prefixed `hidden md:grid`; records table header: `hidden md:grid`; `RunRow`: dual-render — mobile card shows name + score in row 1, email + type badge + date in row 2, agent name in row 3 (`md:hidden`), existing 6-column grid row prefixed `hidden md:grid`; Export CSV button label: `hidden sm:inline` (icon stays visible on all sizes)
+- `src/components/agentspace/AgentSpaceHeader.tsx` — outer padding `px-3 md:px-5`; "Vivalyn" brand text: `hidden sm:block`; "/" separator: `hidden sm:block` (icon remains at all sizes)
+- `src/components/agentspace/RunDetailPanel.tsx` — detail panel width: `w-full md:w-[500px]`; transcript panel positioning updated from `lg:` to `md:` breakpoints (`md:right-[500px] md:w-[420px] md:z-40`) to match the detail panel's breakpoint
+- `src/components/ui/UserAvatar.tsx` — `sm` size changed from `w-9 h-9 text-sm` to `w-7 h-7 sm:w-9 sm:h-9 text-xs sm:text-sm` so the header avatar scales down on mobile to match the visual weight of adjacent icon buttons
+
+---
+
+## [18] records-transcript-panel — 2026-03-05
+
+**Why:** The inline transcript load appended all chat bubbles at the bottom of the detail panel, creating an extremely long scrollable column. The "Load Transcript" button added unnecessary friction since transcript is always needed.
+
+**What:** Removed the inline transcript section from `RunDetailPanel`. Transcript now auto-fetches on mount via `useEffect`. A compact "View Transcript" row (with message count badge once loaded) opens a separate `TranscriptPanel` — on desktop (≥ `md`) it slides in to the left of the detail panel so both are visible simultaneously; on mobile it slides over the detail panel as a full-screen overlay. Fixed a runtime crash where structured transcript content objects (`{why, type, excerpt}`) were rendered directly as React children.
+
+**Changes:**
+- `backend/main_web_server/routes/run_records.py` — added `GET /api/v1/agentspaces/{agentspace_id}/runs/{run_id}`: JWT auth + agentspace membership check; fetches single run record with full `transcript` field; verifies the run's agent belongs to the requested agentspace before returning
+- `src/lib/api.ts` — added `fetchRunRecordById(token, agentspaceId, runId) -> RunRecord` (`GET /api/v1/agentspaces/{id}/runs/{runId}`, auth required); updated `RunRecord.transcript` content type from `string` to `string | Record<string, unknown>` to match actual DB payloads
+- `src/components/agentspace/RunDetailPanel.tsx` — added `resolveContent()` helper that extracts a displayable string from structured content objects (checks `excerpt`, `text`, `content` keys before falling back to `JSON.stringify`); `TranscriptBubble` now calls `resolveContent(content)` instead of rendering `content` directly; removed `loadTranscript` button pattern; added `useEffect` that calls `fetchRunRecordById` on mount (auto-fetch, no user action required); replaced inline transcript section with a single "View Transcript" button row showing a spinner while loading, message count badge once loaded, or retry link on error; added `transcriptOpen` state; added `TranscriptPanel` sub-component (fixed positioned, `md:right-[500px] md:w-[420px] md:z-40`, slides over on mobile `z-50`, side-by-side on desktop); `TranscriptPanel` renders chat bubbles with user (right-aligned `bg-indigo-50`) and agent (left-aligned `bg-gray-100`) styles; rendered via `AnimatePresence` at root of `RunDetailPanel` return
+
+---
+
+## [17] records-detail-sidebar — 2026-03-05
+
+**Why:** The Records tab showed sessions as table rows that expanded inline to reveal metric chips and a text summary. The experience was cramped, didn't support viewing transcripts, and buried the evaluation scores in a wall of chips with no visual hierarchy.
+
+**What:** Replaced inline row expansion with a slide-in sidebar panel. Clicking any row opens `RunDetailPanel` from the right. The panel shows a pure-SVG radar chart for the 4 evaluation metrics, per-metric score chips (color-coded), summary, highlights, and areas to improve — all in a clean scrollable layout. A "View Transcript" entry point is included (implemented fully in [18]).
+
+**Changes:**
+- `backend/main_web_server/routes/run_records.py` — see [18] (same endpoint added)
+- `src/lib/api.ts` — added `fetchRunRecordById` (see [18]); added `fetchAgentspaceRuns` already in [16]
+- `src/pages/AgentSpace.tsx` — removed `expandedId` state; added `selectedRun: RunRecord | null` state; `RunRow` simplified from expand-toggle to `onSelect` callback; selected row highlighted with `bg-indigo-50/40`; `AnimatePresence` block at end of `RecordsTab` renders semi-transparent backdrop (`fixed inset-0 bg-black/10 z-30`) + `RunDetailPanel` when `selectedRun` is set; imported `RunDetailPanel`
+- `src/components/agentspace/RunDetailPanel.tsx` — **new**; pure-SVG `RadarChart` sub-component: N axes evenly spaced, 3 background rings at 33/66/100% scale, indigo-600 fill polygon at 12% opacity, axis labels outside rings (truncated to 14 chars); overall score display (`text-4xl font-semibold`); per-metric chips with `scoreColor()` helper (emerald ≥8, amber ≥6, red <5); Summary, Session Overview, Highlights (`CheckCircle` icons), Areas to Improve (`ArrowRight` icons) sections; transcript entry point (see [18] for full implementation); slides in with `x: "100%" → 0` Framer Motion animation; close button + backdrop click both call `onClose`
+
+---
+
 ## [16] agentspace-dashboard-redo — 2026-03-03
 
 **Why:** The dashboard had two UX problems: (1) A redundant "Personal AgentSpace / Admin" block below the header duplicated information already visible in the header switcher. (2) The agents were displayed in a card grid with no way to see run records — admins had no visibility into session history, scores, or test-vs-live breakdowns without leaving the dashboard.

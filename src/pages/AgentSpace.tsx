@@ -34,6 +34,7 @@ import {
   type EvaluationReport,
   type RunRecord,
 } from '../lib/api'
+import RunDetailPanel from '../components/agentspace/RunDetailPanel'
 import { fadeInUp, staggerContainer } from '../lib/motion'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -126,85 +127,110 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
   const testUrl = `${window.location.origin}/agent/${agent.id}?mode=test`
 
   return (
-    <div className="grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-3 items-center hover:bg-gray-50/60 duration-[120ms]">
-      {/* Agent name + persona */}
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
-          <Bot className="w-3.5 h-3.5 text-indigo-600" />
+    <>
+      {/* ── Mobile card (< md) ───────────────────────────────────────────── */}
+      <div className="md:hidden px-4 py-3 hover:bg-gray-50/60 duration-[120ms] border-b border-gray-50 last:border-0">
+        {/* Row 1: icon + name + status/language badges */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+              <Bot className="w-3.5 h-3.5 text-indigo-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">{agent.agent_name}</p>
+              {personaName && <p className="text-xs text-gray-400 truncate">{personaName}</p>}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 ${isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+              {isLive ? 'Live' : 'Idle'}
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5">
+              {agent.agent_language}
+            </span>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900 truncate">{agent.agent_name}</p>
-          {personaName && (
-            <p className="text-xs text-gray-400 truncate">{personaName}</p>
-          )}
+        {/* Row 2: action buttons + date */}
+        <div className="flex items-center justify-between mt-2.5">
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => copyLink(liveUrl, 'live')} title="Copy live link" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+              {copiedLive ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Link2 className="w-3.5 h-3.5" />}
+            </button>
+            <button onClick={() => copyLink(testUrl, 'test')} title="Copy test link" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+              {copiedTest ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+            <button onClick={handleToggleStatus} disabled={toggling} title={isLive ? 'Pause agent' : 'Deploy agent live'} className="group p-1.5 rounded-lg hover:bg-indigo-50 disabled:opacity-50 duration-[120ms]">
+              {toggling ? <Loader2 className="w-5 h-5 text-gray-400 animate-spin" /> : isLive ? <ToggleRight className="w-6 h-6 text-emerald-500 group-hover:text-indigo-600 duration-[120ms]" /> : <ToggleLeft className="w-6 h-6 text-gray-300 group-hover:text-indigo-600 duration-[120ms]" />}
+            </button>
+            <button onClick={onConfigure} title="Configure agent" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+              <Settings2 className="w-4 h-4" />
+            </button>
+          </div>
+          <span className="text-xs text-gray-400">{formatRelativeDate(agent.created_at)}</span>
         </div>
       </div>
 
-      {/* Language */}
-      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 w-fit">
-        {agent.agent_language}
-      </span>
+      {/* ── Desktop row (≥ md) ───────────────────────────────────────────── */}
+      <div className="hidden md:grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-3 items-center hover:bg-gray-50/60 duration-[120ms]">
+        {/* Agent name + persona */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+            <Bot className="w-3.5 h-3.5 text-indigo-600" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">{agent.agent_name}</p>
+            {personaName && (
+              <p className="text-xs text-gray-400 truncate">{personaName}</p>
+            )}
+          </div>
+        </div>
 
-      {/* Status */}
-      <span
-        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 w-fit ${
-          isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'
-        }`}
-      >
-        <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-        {isLive ? 'Live' : 'Idle'}
-      </span>
+        {/* Language */}
+        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 w-fit">
+          {agent.agent_language}
+        </span>
 
-      {/* Created */}
-      <span className="text-xs text-gray-400">{formatRelativeDate(agent.created_at)}</span>
+        {/* Status */}
+        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 w-fit ${isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+          {isLive ? 'Live' : 'Idle'}
+        </span>
 
-      {/* Links */}
-      <div className="flex items-center justify-center gap-1">
-        <button
-          onClick={() => copyLink(liveUrl, 'live')}
-          title="Copy live link"
-          className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
-        >
-          {copiedLive ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Link2 className="w-3.5 h-3.5" />}
-        </button>
-        <button
-          onClick={() => copyLink(testUrl, 'test')}
-          title="Copy test link"
-          className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
-        >
-          {copiedTest ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-        </button>
+        {/* Created */}
+        <span className="text-xs text-gray-400">{formatRelativeDate(agent.created_at)}</span>
+
+        {/* Links */}
+        <div className="flex items-center justify-center gap-1">
+          <button onClick={() => copyLink(liveUrl, 'live')} title="Copy live link" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+            {copiedLive ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Link2 className="w-3.5 h-3.5" />}
+          </button>
+          <button onClick={() => copyLink(testUrl, 'test')} title="Copy test link" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+            {copiedTest ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* Deploy toggle */}
+        <div className="flex items-center justify-center">
+          <button onClick={handleToggleStatus} disabled={toggling} title={isLive ? 'Pause agent' : 'Deploy agent live'} className="group flex items-center p-1 rounded-lg hover:bg-indigo-50 disabled:opacity-50 duration-[120ms]">
+            {toggling ? (
+              <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+            ) : isLive ? (
+              <ToggleRight className="w-6 h-6 text-emerald-500 group-hover:text-indigo-600 duration-[120ms]" />
+            ) : (
+              <ToggleLeft className="w-6 h-6 text-gray-300 group-hover:text-indigo-600 duration-[120ms]" />
+            )}
+          </button>
+        </div>
+
+        {/* Configure */}
+        <div className="flex items-center justify-center">
+          <button onClick={onConfigure} title="Configure agent" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+            <Settings2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
-
-      {/* Deploy toggle */}
-      <div className="flex items-center justify-center">
-        <button
-          onClick={handleToggleStatus}
-          disabled={toggling}
-          title={isLive ? 'Pause agent' : 'Deploy agent live'}
-          className="group flex items-center p-1 rounded-lg hover:bg-indigo-50 disabled:opacity-50 duration-[120ms]"
-        >
-          {toggling ? (
-            <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
-          ) : isLive ? (
-            <ToggleRight className="w-6 h-6 text-emerald-500 group-hover:text-indigo-600 duration-[120ms]" />
-          ) : (
-            <ToggleLeft className="w-6 h-6 text-gray-300 group-hover:text-indigo-600 duration-[120ms]" />
-          )}
-        </button>
-      </div>
-
-      {/* Configure */}
-      <div className="flex items-center justify-center">
-        <button
-          onClick={onConfigure}
-          title="Configure agent"
-          className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
-        >
-          <Settings2 className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
+    </>
   )
 }
 
@@ -235,7 +261,7 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
   const [selectedAgentId, setSelectedAgentId] = useState<string>('all')
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
   const agentDropdownRef = useRef<HTMLDivElement>(null)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [selectedRun, setSelectedRun] = useState<RunRecord | null>(null)
 
   const agentOptions = useMemo(() => {
     const seen = new Map<string, string>()
@@ -394,7 +420,7 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
         >
           <Download className="w-3.5 h-3.5" />
-          Export CSV
+          <span className="hidden sm:inline">Export CSV</span>
         </button>
       </div>
 
@@ -417,8 +443,8 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
         </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-[1fr_1fr_1fr_80px_90px_72px] gap-x-3 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+          {/* Table header — desktop only */}
+          <div className="hidden md:grid grid-cols-[1fr_1fr_1fr_80px_90px_72px] gap-x-3 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
             <button
               onClick={() => toggleSort('user_name')}
               className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 duration-[120ms]"
@@ -453,13 +479,37 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
               <RunRow
                 key={run.id}
                 run={run}
-                expanded={expandedId === run.id}
-                onToggle={() => setExpandedId(prev => prev === run.id ? null : run.id)}
+                selected={selectedRun?.id === run.id}
+                onSelect={() => setSelectedRun(run)}
               />
             ))}
           </div>
         </div>
       )}
+
+      {/* Detail sidebar */}
+      <AnimatePresence>
+        {selectedRun && (
+          <>
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-black/10 z-30"
+              onClick={() => setSelectedRun(null)}
+            />
+            <RunDetailPanel
+              key={selectedRun.id}
+              run={selectedRun}
+              agentspaceId={agentspaceId}
+              token={token}
+              onClose={() => setSelectedRun(null)}
+            />
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -468,19 +518,46 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
 
 interface RunRowProps {
   run: RunRecord
-  expanded: boolean
-  onToggle: () => void
+  selected: boolean
+  onSelect: () => void
 }
 
-function RunRow({ run, expanded, onToggle }: RunRowProps) {
+function RunRow({ run, selected, onSelect }: RunRowProps) {
   const score = avgScore(run.evaluation_report)
-  const report = run.evaluation_report
 
   return (
-    <div>
+    <>
+      {/* ── Mobile card (< md) ───────────────────────────────────────────── */}
       <button
-        onClick={onToggle}
-        className="w-full grid grid-cols-[1fr_1fr_1fr_80px_90px_72px] gap-x-3 px-5 py-3 hover:bg-gray-50/60 duration-[120ms] text-left"
+        onClick={onSelect}
+        className={`md:hidden w-full px-4 py-3 text-left flex flex-col gap-1 duration-[120ms] border-b border-gray-50 last:border-0 ${
+          selected ? 'bg-indigo-50/40' : 'hover:bg-gray-50/60'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-gray-900 truncate">{run.user_name}</span>
+          <span className={`text-sm font-semibold shrink-0 ${score === '—' ? 'text-gray-300' : 'text-gray-800'}`}>
+            {score !== '—' ? `${score}/10` : score}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-gray-400 truncate">{run.user_email}</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${run.is_test ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+              {run.is_test ? 'Test' : 'Live'}
+            </span>
+            <span className="text-xs text-gray-400">{formatRelativeDate(run.created_at)}</span>
+          </div>
+        </div>
+        <span className="text-xs text-gray-500">{run.agent_name}</span>
+      </button>
+
+      {/* ── Desktop row (≥ md) ───────────────────────────────────────────── */}
+      <button
+        onClick={onSelect}
+        className={`hidden md:grid w-full grid-cols-[1fr_1fr_1fr_80px_90px_72px] gap-x-3 px-5 py-3 text-left duration-[120ms] ${
+          selected ? 'bg-indigo-50/40' : 'hover:bg-gray-50/60'
+        }`}
       >
         <span className="text-sm text-gray-800 font-medium truncate">{run.user_name}</span>
         <span className="text-sm text-gray-500 truncate">{run.user_email}</span>
@@ -489,70 +566,11 @@ function RunRow({ run, expanded, onToggle }: RunRowProps) {
           {score !== '—' ? `${score}/10` : score}
         </span>
         <span className="text-xs text-gray-400">{formatRelativeDate(run.created_at)}</span>
-        <span
-          className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full w-fit ${
-            run.is_test
-              ? 'bg-indigo-50 text-indigo-600'
-              : 'bg-emerald-50 text-emerald-600'
-          }`}
-        >
+        <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full w-fit ${run.is_test ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
           {run.is_test ? 'Test' : 'Live'}
         </span>
       </button>
-
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="expand"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
-            <div className="px-5 pb-4 pt-1 border-t border-gray-100 bg-gray-50/40">
-              {report ? (
-                <div className="flex flex-col gap-3">
-                  {/* Per-metric scores */}
-                  {report.scoring && Object.keys(report.scoring).length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(report.scoring).map(([metric, val]) => (
-                        <div
-                          key={metric}
-                          className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-1.5"
-                        >
-                          <span className="text-xs text-gray-500">{metric}</span>
-                          <span className="text-xs font-semibold text-gray-800">{val}/10</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Summary */}
-                  {report.transcript_summary && (
-                    <p className="text-xs text-gray-600 leading-relaxed">{report.transcript_summary}</p>
-                  )}
-
-                  {/* Feedback bullets */}
-                  {report.feedback && report.feedback.length > 0 && (
-                    <ul className="space-y-1">
-                      {report.feedback.map((f, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-gray-500">
-                          <span className="mt-0.5 w-1 h-1 rounded-full bg-gray-400 shrink-0" />
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-gray-400">No evaluation report for this session.</p>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    </>
   )
 }
 
@@ -683,7 +701,7 @@ function AgentSpaceContent() {
         onInboxClick={() => setInboxOpen(true)}
       />
 
-      <main className="flex-1 px-6 py-6">
+      <main className="flex-1 px-4 md:px-6 py-4 md:py-6">
         {activeSpace ? (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="flex flex-col gap-5">
 
@@ -738,7 +756,7 @@ function AgentSpaceContent() {
                     </div>
                     <button
                       onClick={() => setCreateAgentOpen(true)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms]"
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms] w-full md:w-auto justify-center"
                     >
                       <Plus className="w-4 h-4" />
                       Create Training Agent
@@ -785,8 +803,8 @@ function AgentSpaceContent() {
 
                     return (
                       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                        {/* Table header */}
-                        <div className="grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+                        {/* Table header — desktop only */}
+                        <div className="hidden md:grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
                           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Agent</span>
                           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Language</span>
                           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</span>

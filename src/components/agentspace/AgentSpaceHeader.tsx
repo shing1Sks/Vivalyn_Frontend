@@ -45,7 +45,7 @@ export default function AgentSpaceHeader({
 
   return (
     <header className="h-16 sticky top-0 z-40 bg-white border-b border-gray-200">
-      <div className="px-5 flex items-center justify-between h-full">
+      <div className="px-3 md:px-5 flex items-center justify-between h-full">
         {/* Left: Logo + Switcher */}
         <div className="flex items-center gap-2.5">
           <button
@@ -55,10 +55,10 @@ export default function AgentSpaceHeader({
             <div className="w-7 h-7 rounded-lg overflow-hidden shrink-0">
               <img src="./icon.png" alt="" className="w-full h-full object-cover" />
             </div>
-            <span className="text-[15px] font-semibold text-gray-900">Vivalyn</span>
+            <span className="hidden sm:block text-[15px] font-semibold text-gray-900">Vivalyn</span>
           </button>
 
-          <span className="text-gray-300 text-lg select-none">/</span>
+          <span className="hidden sm:block text-gray-300 text-lg select-none">/</span>
 
           <AgentSpaceSwitcher onCreateClick={onCreateSpaceClick} />
 

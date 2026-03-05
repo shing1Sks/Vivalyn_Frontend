@@ -1,7 +1,7 @@
 import type { UserProfile } from '../../lib/api'
 
 const SIZE = {
-  sm: { box: 'w-9 h-9', text: 'text-sm' },
+  sm: { box: 'w-7 h-7 sm:w-9 sm:h-9', text: 'text-xs sm:text-sm' },
   md: { box: 'w-16 h-16', text: 'text-2xl' },
   lg: { box: 'w-20 h-20', text: 'text-3xl' },
 }
