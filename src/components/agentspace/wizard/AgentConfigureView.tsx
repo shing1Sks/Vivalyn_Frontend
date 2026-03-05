@@ -49,8 +49,15 @@ export default function AgentConfigureView({
     })
   }
 
-  function applyAiRewrite(key: keyof AgentPromptSpec, isList: boolean, newContent: string) {
-    if (isList) {
+  function updateDictItem(key: keyof AgentPromptSpec, field: string, value: string) {
+    setEdited(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] as Record<string, string>), [field]: value },
+    }))
+  }
+
+  function applyAiRewrite(key: keyof AgentPromptSpec, type: 'string' | 'list' | 'dict', newContent: string) {
+    if (type === 'list') {
       try {
         const parsed = JSON.parse(newContent)
         if (Array.isArray(parsed)) {
@@ -58,8 +65,14 @@ export default function AgentConfigureView({
           return
         }
       } catch { /* fall through */ }
-      const lines = newContent.split('\n').filter(l => l.trim())
-      setEdited(prev => ({ ...prev, [key]: lines }))
+      setEdited(prev => ({ ...prev, [key]: newContent.split('\n').filter(l => l.trim()) }))
+    } else if (type === 'dict') {
+      try {
+        const parsed = JSON.parse(newContent)
+        if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+          setEdited(prev => ({ ...prev, [key]: parsed }))
+        }
+      } catch { /* fall through */ }
     } else {
       setEdited(prev => ({ ...prev, [key]: newContent }))
     }
@@ -79,8 +92,7 @@ export default function AgentConfigureView({
     }
   }
 
-  function handleVoiceUpdated(lang: string, voice: string, personaName: string) {
-    setEdited(prev => ({ ...prev, name: personaName }))
+  function handleVoiceUpdated(lang: string, voice: string) {
     onAgentUpdated?.({ agent_language: lang, agent_voice: voice })
   }
 
@@ -157,38 +169,29 @@ export default function AgentConfigureView({
                 rows={10}
                 agentId={agentId}
                 onChange={v => updateStringField('identity_and_persona', v)}
-                onAiRewrite={c => applyAiRewrite('identity_and_persona', false, c)}
+                onAiRewrite={c => applyAiRewrite('identity_and_persona', 'string', c)}
               />
               <StringSection
-                sectionKey="task_definition"
-                label="Task Definition"
-                value={edited.task_definition}
-                rows={7}
+                sectionKey="session_brief"
+                label="Session Brief"
+                value={edited.session_brief}
+                rows={4}
                 agentId={agentId}
-                onChange={v => updateStringField('task_definition', v)}
-                onAiRewrite={c => applyAiRewrite('task_definition', false, c)}
+                onChange={v => updateStringField('session_brief', v)}
+                onAiRewrite={c => applyAiRewrite('session_brief', 'string', c)}
               />
             </div>
 
-            {/* RHS — collapsible list sections */}
+            {/* RHS — collapsible sections */}
             <div className="flex-1 flex flex-col gap-3 px-5 py-5">
-              <CollapsibleSection
-                sectionKey="objectives"
-                label="Objectives"
-                value={edited.objectives}
+              <DictSection
+                sectionKey="behavior_rules"
+                label="Behavior Rules"
+                value={edited.behavior_rules}
                 defaultOpen={true}
                 agentId={agentId}
-                onItemChange={(i, v) => updateListItem('objectives', i, v)}
-                onAiRewrite={c => applyAiRewrite('objectives', true, c)}
-              />
-              <CollapsibleSection
-                sectionKey="transcript"
-                label="Transcript"
-                value={edited.transcript}
-                defaultOpen={false}
-                agentId={agentId}
-                onItemChange={(i, v) => updateListItem('transcript', i, v)}
-                onAiRewrite={c => applyAiRewrite('transcript', true, c)}
+                onItemChange={(field, v) => updateDictItem('behavior_rules', field, v)}
+                onAiRewrite={c => applyAiRewrite('behavior_rules', 'dict', c)}
               />
               <CollapsibleSection
                 sectionKey="guardrails"
@@ -197,7 +200,7 @@ export default function AgentConfigureView({
                 defaultOpen={false}
                 agentId={agentId}
                 onItemChange={(i, v) => updateListItem('guardrails', i, v)}
-                onAiRewrite={c => applyAiRewrite('guardrails', true, c)}
+                onAiRewrite={c => applyAiRewrite('guardrails', 'list', c)}
               />
             </div>
           </div>
@@ -205,7 +208,7 @@ export default function AgentConfigureView({
       ) : (
         <EvaluationTab
           agentId={agentId}
-          taskDefinition={edited.task_definition}
+          sessionBrief={edited.session_brief}
           initialMetrics={evaluationMetrics ?? null}
         />
       )}
@@ -216,11 +219,11 @@ export default function AgentConfigureView({
 // ── Evaluation tab ───────────────────────────────────────────────────────────────
 
 interface EvalAiButtonProps {
-  taskDefinition: string
+  sessionBrief: string
   onGenerated: (result: EvaluationMetrics) => void
 }
 
-function EvalAiButton({ taskDefinition, onGenerated }: EvalAiButtonProps) {
+function EvalAiButton({ sessionBrief, onGenerated }: EvalAiButtonProps) {
   const { session } = useAuth()
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -233,7 +236,7 @@ function EvalAiButton({ taskDefinition, onGenerated }: EvalAiButtonProps) {
     setError(null)
     try {
       const result = await generateEvaluationCriteria(session.access_token, {
-        task_definition: taskDefinition,
+        session_brief: sessionBrief,
         users_raw_evaluation_criteria: input.trim(),
       })
       onGenerated(result)
@@ -301,11 +304,11 @@ function EvalAiButton({ taskDefinition, onGenerated }: EvalAiButtonProps) {
 
 interface EvaluationTabProps {
   agentId: string
-  taskDefinition: string
+  sessionBrief: string
   initialMetrics: EvaluationMetrics | null
 }
 
-function EvaluationTab({ agentId, taskDefinition, initialMetrics }: EvaluationTabProps) {
+function EvaluationTab({ agentId, sessionBrief, initialMetrics }: EvaluationTabProps) {
   const { session } = useAuth()
   const [metricNames, setMetricNames] = useState<string[]>(initialMetrics?.metrics ?? [])
   const [evalPrompt, setEvalPrompt] = useState(initialMetrics?.report_curator_prompt ?? '')
@@ -350,7 +353,7 @@ function EvaluationTab({ agentId, taskDefinition, initialMetrics }: EvaluationTa
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Metrics</span>
-          <EvalAiButton taskDefinition={taskDefinition} onGenerated={onAiGenerated} />
+          <EvalAiButton sessionBrief={sessionBrief} onGenerated={onAiGenerated} />
         </div>
         <div className="px-5 py-4 flex flex-col gap-3">
           {metricNames.length > 0 && (
@@ -433,7 +436,7 @@ interface VoiceBarProps {
   agentLanguage: string
   agentVoice: string
   editedSpec: AgentPromptSpec
-  onUpdated: (lang: string, voice: string, personaName: string) => void
+  onUpdated: (lang: string, voice: string) => void
 }
 
 function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }: VoiceBarProps) {
@@ -530,18 +533,13 @@ function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }:
 
   async function handleUpdate() {
     if (!session || !selectedPref) return
-    const personaName = selectedVoiceName
     setUpdating(true)
     try {
       await updateAgent(session.access_token, agentId, {
         agent_language: selectedLang,
         agent_voice: selectedVoiceName,
-        agent_prompt: {
-          ...editedSpec,
-          name: personaName,
-        },
       })
-      onUpdated(selectedLang, selectedVoiceName, personaName)
+      onUpdated(selectedLang, selectedVoiceName)
       setOpen(false)
       stopAudio()
     } catch { /* silent */ } finally {
@@ -549,7 +547,7 @@ function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }:
     }
   }
 
-  const displayPersona = editedSpec.name ?? agentVoice
+  const displayPersona = agentVoice
 
   return (
     <div className="border-b border-gray-100 bg-white">
@@ -774,6 +772,74 @@ function CollapsibleSection({
                     onChange={e => onItemChange(idx, e.target.value)}
                     rows={2}
                     className="flex-1 text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
+                  />
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ── Dict section (behavior_rules) ──────────────────────────────────────────────
+
+interface DictSectionProps {
+  sectionKey: string
+  label: string
+  value: Record<string, string>
+  defaultOpen: boolean
+  agentId: string
+  onItemChange: (field: string, val: string) => void
+  onAiRewrite: (content: string) => void
+}
+
+const BEHAVIOR_KEY_ORDER = ['opening', 'probing', 'adaptation', 'feedback', 'closing']
+
+function DictSection({
+  sectionKey, label, value, defaultOpen, agentId, onItemChange, onAiRewrite,
+}: DictSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  const keys = [
+    ...BEHAVIOR_KEY_ORDER.filter(k => k in value),
+    ...Object.keys(value).filter(k => !BEHAVIOR_KEY_ORDER.includes(k)),
+  ]
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setIsOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 duration-[120ms] group"
+      >
+        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</span>
+        <div className="flex items-center gap-2">
+          <div onClick={e => e.stopPropagation()}>
+            <AiButton sectionKey={sectionKey} label={label} isList={false} value={JSON.stringify(value)} agentId={agentId} onAiRewrite={onAiRewrite} />
+          </div>
+          <ChevronDown className={`w-4 h-4 text-gray-400 duration-[120ms] ${isOpen ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className="px-5 pb-5 pt-1 space-y-3 border-t border-gray-100">
+              {keys.map(key => (
+                <div key={key} className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{key}</span>
+                  <textarea
+                    value={value[key] ?? ''}
+                    onChange={e => onItemChange(key, e.target.value)}
+                    rows={2}
+                    className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
                   />
                 </div>
               ))}

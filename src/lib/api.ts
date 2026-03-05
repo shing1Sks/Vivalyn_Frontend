@@ -318,11 +318,9 @@ export async function fetchVoicePreviewBlob(
 
 export interface AgentPromptSpec {
   identity_and_persona: string;
-  task_definition: string;
-  objectives: string[];
-  transcript: string[];
+  session_brief: string;
+  behavior_rules: Record<string, string>;  // { opening, probing, adaptation, feedback, closing }
   guardrails: string[];
-  name: string;
 }
 
 // ── Evaluation ────────────────────────────────────────────────────────────────
@@ -342,7 +340,7 @@ export interface EvaluationReport {
 
 export async function generateEvaluationCriteria(
   accessToken: string,
-  payload: { task_definition: string; users_raw_evaluation_criteria: string },
+  payload: { session_brief: string; users_raw_evaluation_criteria: string },
 ): Promise<EvaluationMetrics> {
   const res = await fetch(
     `${BASE}/api/v1/agents/generate-evaluation-criteria`,
@@ -374,17 +372,17 @@ export interface PlanQuestion {
   suggestion2: { statement: string };
 }
 
-export interface PlanSectionResult {
-  approach: string;
-  need_user_inputs: boolean;
-  questions: PlanQuestion[];
+export interface PlanAgentResult {
+  status: string; // "need_inputs" | "ready"
+  questions?: PlanQuestion[];
+  plan?: Record<string, unknown>;
 }
 
-export async function planAgentSection(
+export async function planAgent(
   accessToken: string,
-  payload: { seed_prompt: string; plan_history: string; section_name: string },
-): Promise<PlanSectionResult> {
-  const res = await fetch(`${BASE}/api/v1/agents/plan-section`, {
+  payload: { seed_prompt: string; plan_history?: string },
+): Promise<PlanAgentResult> {
+  const res = await fetch(`${BASE}/api/v1/agents/plan`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -395,14 +393,14 @@ export async function planAgentSection(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new ApiError(
-      (err as { detail?: string }).detail ?? "Failed to plan section",
+      (err as { detail?: string }).detail ?? "Failed to plan agent",
       res.status,
     );
   }
   return res.json();
 }
 
-// CompileResult includes agent_name (returned by the compiler) plus the 5 spec sections
+// CompileResult includes agent_name plus the 4 spec sections
 export interface CompileResult extends AgentPromptSpec {
   agent_name: string;
 }

@@ -1,5 +1,28 @@
 # Changelog
 
+## [21] behavior-rules-dict-schema — 2026-03-06
+
+**Why:** The LLM prompt compiler always returned `behavior_rules` as a structured dict with semantic keys (`opening`, `probing`, `adaptation`, `feedback`, `closing`), but the frontend typed it as `string[]` and rendered it with a numeric index list. The `CollapsibleSection` component had no concept of labeled sub-sections. The AI rewrite flow for `behavior_rules` expected a JSON array back from the backend, and `applyAiRewrite` parsed only arrays and plain strings.
+
+**What:** Changed `AgentPromptSpec.behavior_rules` from `string[]` to `Record<string, string>`. Added a `DictSection` component that renders each key as a labeled subsection with its own textarea, displayed in canonical order (`opening → probing → adaptation → feedback → closing`). Added `updateDictItem` helper. Widened `applyAiRewrite` to handle a `'dict'` type that parses a JSON object response. Updated all `applyAiRewrite` call sites to pass an explicit `'string' | 'list' | 'dict'` type tag.
+
+**Changes:**
+- `src/lib/api.ts` — `AgentPromptSpec.behavior_rules` changed from `string[]` to `Record<string, string>` with a clarifying comment (`// { opening, probing, adaptation, feedback, closing }`)
+- `src/components/agentspace/wizard/AgentConfigureView.tsx` — added `updateDictItem(key, field, value)` helper that merges a single dict key into the edited spec via spread; `applyAiRewrite` signature changed from `(key, isList: boolean, content)` to `(key, type: 'string' | 'list' | 'dict', content)` — `'dict'` path parses a JSON object and replaces the whole dict, silently no-ops on parse failure; all `applyAiRewrite` call sites updated (identity_and_persona: `'string'`, session_brief: `'string'`, behavior_rules: `'dict'`, guardrails: `'list'`); `CollapsibleSection` for `behavior_rules` replaced with new `DictSection` component that uses `onItemChange: (field, val)` instead of `(idx, val)`; `CollapsibleSection` for guardrails unchanged; added `DictSection` sub-component: renders keys in `BEHAVIOR_KEY_ORDER = ['opening', 'probing', 'adaptation', 'feedback', 'closing']` order (unknown extra keys appended after), each key shown as a `text-[10px] font-semibold uppercase tracking-wider text-gray-400` label above a `rows=2` textarea; collapse/expand + AI button header matches `CollapsibleSection` layout
+
+---
+
+## [20] profile-load-sequencing — 2026-03-06
+
+**Why:** After clearing all DB rows, two concurrent calls to `GET /api/v1/profile/me` (React StrictMode double-fires effects) raced to create both the profile and the agentspace. The agentspace fetch in `AgentSpaceContext` fired before the profile creation finished — since profile creation is also what triggers default agentspace creation, the fetch returned an empty list and the UI showed a spinner indefinitely. Additionally, if profile creation failed entirely, the agentspace fetch would still proceed with a null profile.
+
+**What:** Added a `!profile` guard to `loadSpaces` so the agentspace fetch only fires once both `profileLoading === false` and `profile !== null`. Added `profile` to the `useCallback` dependency array so the fetch re-triggers as soon as the profile becomes available.
+
+**Changes:**
+- `src/context/AgentSpaceContext.tsx` — `loadSpaces` bails early if `profileLoading || !profile` (was `profileLoading` only); `profile` added to the `useCallback` dependency array alongside `session?.access_token` and `profileLoading`; ensures agentspace fetch never fires while profile is still being created, preventing a race between default agentspace creation and the spaces list fetch
+
+---
+
 ## [19] agentspace-mobile-layout — 2026-03-05
 
 **Why:** The AgentSpace page was built desktop-first with no responsive breakpoints. The agents table (7 fixed columns, ~530px minimum width) and records table (6 columns) overflowed on mobile viewports. The RunDetailPanel was fixed at 500px, covering the whole screen on phones. The header avatar was oversized relative to the icon buttons at small widths.

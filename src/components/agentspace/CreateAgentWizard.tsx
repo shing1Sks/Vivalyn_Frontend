@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import {
   compileAgentPlan,
   generateEvaluationCriteria,
-  planAgentSection,
+  planAgent,
   saveAgent,
   type Agent,
   type AgentPromptSpec,
@@ -14,7 +14,7 @@ import {
   type PlanQuestion,
 } from '../../lib/api'
 import LanguageVoiceSelector from './wizard/LanguageVoiceSelector'
-import PlannerFlow, { type SectionState } from './wizard/PlannerFlow'
+import PlannerFlow, { type PlannerStatus } from './wizard/PlannerFlow'
 import AgentConfigureView from './wizard/AgentConfigureView'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -23,30 +23,11 @@ type WizardStep =
   | 'language-voice'
   | 'prompt-input'
   | 'planning'
-  | 'compiling'
   | 'evaluation'
   | 'done'
   | 'configure'
 
-const PLAN_SECTIONS = [
-  'Identity & Persona',
-  'Task Definition',
-  'Objective',
-  'Transcript',
-  'Guardrails',
-] as const
-
 const STEP_DOTS: WizardStep[] = ['language-voice', 'prompt-input', 'planning', 'done']
-
-// ── plan_history helpers (mirror test_prompt_planning.py) ─────────────────────
-
-function appendApproach(history: string, sectionName: string, approach: string): string {
-  return history + `\n\n[Section: ${sectionName}]\nApproach: ${approach}`
-}
-
-function appendUserAnswer(history: string, queryStatement: string, answer: string): string {
-  return history + `\n  Q: ${queryStatement}\n  A (user): ${answer}`
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -66,18 +47,12 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   const [selectedVoiceName, setSelectedVoiceName] = useState('')
   const [selectedPersonaName, setSelectedPersonaName] = useState('')
   const [seedPrompt, setSeedPrompt] = useState('')
-  const [planHistoryRef] = useState({ current: '' })
-  const [sections, setSections] = useState<SectionState[]>(
-    PLAN_SECTIONS.map(name => ({
-      name,
-      status: 'pending',
-      approach: '',
-      questions: [] as PlanQuestion[],
-      answeredCount: 0,
-    })),
-  )
-  const [currentSectionIdx, setCurrentSectionIdx] = useState(0)
-  const [isCompiling, setIsCompiling] = useState(false)
+
+  // Planner state
+  const [plannerStatus, setPlannerStatus] = useState<PlannerStatus>('planning')
+  const [plannerQuestions, setPlannerQuestions] = useState<PlanQuestion[]>([])
+  const [plannerPlan, setPlannerPlan] = useState<Record<string, unknown> | null>(null)
+
   const [finalSpec, setFinalSpec] = useState<CompileResult | null>(null)
   const [savedAgent, setSavedAgent] = useState<Agent | null>(null)
   const [configuredSpec, setConfiguredSpec] = useState<AgentPromptSpec | null>(null)
@@ -88,7 +63,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   const [isGeneratingMetrics, setIsGeneratingMetrics] = useState(false)
   const [isSavingAgent, setIsSavingAgent] = useState(false)
 
-  // Track whether planning has kicked off (avoid double-trigger in strict mode)
+  // Avoid double-trigger in strict mode
   const planningStarted = useRef(false)
 
   // Reset on open
@@ -100,18 +75,9 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       setSelectedVoiceName('')
       setSelectedPersonaName('')
       setSeedPrompt('')
-      planHistoryRef.current = ''
-      setSections(
-        PLAN_SECTIONS.map(name => ({
-          name,
-          status: 'pending',
-          approach: '',
-          questions: [],
-          answeredCount: 0,
-        })),
-      )
-      setCurrentSectionIdx(0)
-      setIsCompiling(false)
+      setPlannerStatus('planning')
+      setPlannerQuestions([])
+      setPlannerPlan(null)
       setFinalSpec(null)
       setSavedAgent(null)
       setConfiguredSpec(null)
@@ -124,90 +90,81 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
     }
   }, [open])
 
-  // ── Planning loop ───────────────────────────────────────────────────────────
+  // ── Compiler ────────────────────────────────────────────────────────────────
 
-  const planSection = useCallback(async (idx: number, currentSeed: string) => {
+  const runCompiler = useCallback(async (plan: Record<string, unknown>) => {
     if (!session) return
-
-    // Mark section as planning
-    setSections(prev => {
-      const next = [...prev]
-      next[idx] = { ...next[idx], status: 'planning' }
-      return next
-    })
+    setPlannerStatus('compiling')
 
     try {
-      const result = await planAgentSection(session.access_token, {
-        seed_prompt: currentSeed,
-        plan_history: planHistoryRef.current,
-        section_name: PLAN_SECTIONS[idx],
+      const spec = await compileAgentPlan(session.access_token, {
+        plan_history: JSON.stringify(plan, null, 2),
       })
+      setFinalSpec(spec)
 
-      // Append approach immediately
-      planHistoryRef.current = appendApproach(
-        planHistoryRef.current,
-        PLAN_SECTIONS[idx],
-        result.approach,
-      )
+      const { agent_name: _name, ...promptSections } = spec
+      setConfiguredSpec(promptSections as AgentPromptSpec)
 
-      if (result.need_user_inputs && result.questions.length > 0) {
-        // Show questions to user
-        setSections(prev => {
-          const next = [...prev]
-          next[idx] = {
-            ...next[idx],
-            status: 'needs_input',
-            approach: result.approach,
-            questions: result.questions,
-            answeredCount: 0,
-          }
-          return next
-        })
-        // Planning continues when user answers (see handleAnswerQuestion)
+      setStep('evaluation')
+    } catch (e: any) {
+      setError(e?.message ?? 'Compilation failed. Please try again.')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session])
+
+  // ── First planner call ──────────────────────────────────────────────────────
+
+  const runPlanner = useCallback(async (seed: string) => {
+    if (!session) return
+    setPlannerStatus('planning')
+
+    try {
+      const result = await planAgent(session.access_token, { seed_prompt: seed })
+
+      if (result.status === 'need_inputs' && result.questions?.length) {
+        setPlannerQuestions(result.questions)
+        setPlannerStatus('awaiting_answers')
+      } else if (result.status === 'ready' && result.plan) {
+        setPlannerPlan(result.plan)
+        await runCompiler(result.plan)
       } else {
-        // No user input needed — mark done and plan next
-        setSections(prev => {
-          const next = [...prev]
-          next[idx] = { ...next[idx], status: 'done', approach: result.approach }
-          return next
-        })
-        const nextIdx = idx + 1
-        setCurrentSectionIdx(nextIdx)
-        if (nextIdx < PLAN_SECTIONS.length) {
-          planSection(nextIdx, currentSeed)
-        } else {
-          runCompiler()
-        }
+        setError('Unexpected planner response. Please try again.')
       }
     } catch (e: any) {
       setError(e?.message ?? 'Planning failed. Please try again.')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session])
+  }, [session, runCompiler])
 
-  const runCompiler = useCallback(async () => {
+  // ── Second planner call (with Q&A answers) ──────────────────────────────────
+
+  const handleAnswersSubmitted = useCallback(async (answers: string[]) => {
     if (!session) return
-    setIsCompiling(true)
-    setStep('compiling')
+    setPlannerStatus('planning')
+
+    const planHistory = plannerQuestions
+      .map((q, i) => `Q: ${q.query_statement}\nA: ${answers[i] ?? ''}`)
+      .join('\n')
 
     try {
-      const spec = await compileAgentPlan(session.access_token, {
-        plan_history: planHistoryRef.current,
+      const result = await planAgent(session.access_token, {
+        seed_prompt: seedPrompt,
+        plan_history: planHistory,
       })
-      setFinalSpec(spec)
 
-      const { agent_name: _name, ...promptSections } = spec
-      const agentPromptFull = { ...promptSections, name: selectedPersonaName }
-      setConfiguredSpec(agentPromptFull)
-
-      setIsCompiling(false)
-      setStep('evaluation')
+      if (result.status === 'ready' && result.plan) {
+        setPlannerPlan(result.plan)
+        await runCompiler(result.plan)
+      } else {
+        setError('Unexpected planner response. Please try again.')
+      }
     } catch (e: any) {
-      setIsCompiling(false)
-      setError(e?.message ?? 'Compilation failed. Please try again.')
+      setError(e?.message ?? 'Planning failed. Please try again.')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, selectedPersonaName])
+  }, [session, seedPrompt, plannerQuestions, runCompiler])
+
+  // ── Evaluation ──────────────────────────────────────────────────────────────
 
   const handleGenerateMetrics = useCallback(async () => {
     if (!session || !finalSpec || !evaluationCriteria.trim()) return
@@ -215,7 +172,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
     setGeneratedMetrics(null)
     try {
       const metrics = await generateEvaluationCriteria(session.access_token, {
-        task_definition: finalSpec.task_definition,
+        session_brief: finalSpec.session_brief,
         users_raw_evaluation_criteria: evaluationCriteria.trim(),
       })
       setGeneratedMetrics(metrics)
@@ -226,6 +183,8 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, finalSpec, evaluationCriteria])
+
+  // ── Save agent ──────────────────────────────────────────────────────────────
 
   const handleSaveAgent = useCallback(async () => {
     if (!session || !finalSpec || !configuredSpec) return
@@ -249,43 +208,6 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, agentspaceId, finalSpec, configuredSpec, selectedLanguage, selectedVoiceName, generatedMetrics])
 
-  // ── User answers a question ─────────────────────────────────────────────────
-
-  function handleAnswerQuestion(sectionIdx: number, questionIdx: number, answer: string) {
-    const section = sections[sectionIdx]
-    const q = section.questions[questionIdx]
-
-    // Append answer to history
-    planHistoryRef.current = appendUserAnswer(
-      planHistoryRef.current,
-      q.query_statement,
-      answer,
-    )
-
-    const newAnsweredCount = section.answeredCount + 1
-    const allAnswered = newAnsweredCount >= section.questions.length
-
-    setSections(prev => {
-      const next = [...prev]
-      next[sectionIdx] = {
-        ...next[sectionIdx],
-        answeredCount: newAnsweredCount,
-        status: allAnswered ? 'done' : 'needs_input',
-      }
-      return next
-    })
-
-    if (allAnswered) {
-      const nextIdx = sectionIdx + 1
-      setCurrentSectionIdx(nextIdx)
-      if (nextIdx < PLAN_SECTIONS.length) {
-        planSection(nextIdx, seedPrompt)
-      } else {
-        runCompiler()
-      }
-    }
-  }
-
   // ── Step handlers ───────────────────────────────────────────────────────────
 
   function handleLanguageVoiceContinue(lang: string, pref: string, voiceName: string, personaName: string) {
@@ -301,14 +223,12 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
     setStep('planning')
     if (!planningStarted.current) {
       planningStarted.current = true
-      planSection(0, seedPrompt.trim())
+      runPlanner(seedPrompt.trim())
     }
   }
 
   function handleBack() {
     if (step === 'prompt-input') setStep('language-voice')
-    else if (step === 'planning') {/* can't go back mid-planning */}
-    else if (step === 'done' || step === 'compiling') {/* no back */}
     else if (step === 'configure') setStep('done')
   }
 
@@ -346,8 +266,8 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
             {/* Step dots */}
             <div className="flex-1 flex justify-center gap-2">
               {STEP_DOTS.map((s, i) => {
-                const isActive = step === s || (step === 'planning' && s === 'planning') || (step === 'compiling' && s === 'planning')
-                const isPast = STEP_DOTS.indexOf(step) > i || step === 'compiling' || (step === 'done' && i < 3)
+                const isActive = step === s || (step === 'planning' && s === 'planning')
+                const isPast = STEP_DOTS.indexOf(step) > i || (step === 'done' && i < 3)
                 return (
                   <div
                     key={s}
@@ -407,12 +327,12 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
               />
             )}
 
-            {(step === 'planning' || step === 'compiling') && (
+            {step === 'planning' && (
               <PlannerFlow
                 seedPrompt={seedPrompt}
-                sections={sections}
-                isCompiling={step === 'compiling'}
-                onAnswerQuestion={handleAnswerQuestion}
+                status={plannerStatus}
+                questions={plannerQuestions}
+                onAnswerAll={handleAnswersSubmitted}
               />
             )}
 
@@ -492,7 +412,7 @@ function PromptInputStep({ value, onChange, onSubmit, language, personaName }: P
             placeholder="e.g. A sales coaching agent for B2B SaaS reps that helps them practice cold calls and objection handling…"
             className="w-full border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
           />
-          <p className="text-xs text-gray-400 mt-1.5">Press ⌘Enter or click Launch to start</p>
+          <p className="text-xs text-gray-400 mt-1.5">Press Cmd+Enter or click Launch to start</p>
 
           <button
             onClick={onSubmit}
