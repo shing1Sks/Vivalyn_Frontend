@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, CheckCircle2, Loader2, Rocket, Settings2, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, Check, Link2, Loader2, Copy, Rocket, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
   compileAgentPlan,
   generateEvaluationCriteria,
   planAgent,
   saveAgent,
+  toggleAgentStatus,
   type Agent,
   type AgentPromptSpec,
   type CompileResult,
-  type EvaluationMetrics,
   type PlanQuestion,
 } from '../../lib/api'
 import LanguageVoiceSelector from './wizard/LanguageVoiceSelector'
@@ -23,7 +23,6 @@ type WizardStep =
   | 'language-voice'
   | 'prompt-input'
   | 'planning'
-  | 'evaluation'
   | 'done'
   | 'configure'
 
@@ -51,17 +50,11 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   // Planner state
   const [plannerStatus, setPlannerStatus] = useState<PlannerStatus>('planning')
   const [plannerQuestions, setPlannerQuestions] = useState<PlanQuestion[]>([])
-  const [plannerPlan, setPlannerPlan] = useState<Record<string, unknown> | null>(null)
 
   const [finalSpec, setFinalSpec] = useState<CompileResult | null>(null)
   const [savedAgent, setSavedAgent] = useState<Agent | null>(null)
   const [configuredSpec, setConfiguredSpec] = useState<AgentPromptSpec | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Evaluation step state
-  const [evaluationCriteria, setEvaluationCriteria] = useState('')
-  const [generatedMetrics, setGeneratedMetrics] = useState<EvaluationMetrics | null>(null)
-  const [isGeneratingMetrics, setIsGeneratingMetrics] = useState(false)
-  const [isSavingAgent, setIsSavingAgent] = useState(false)
 
   // Avoid double-trigger in strict mode
   const planningStarted = useRef(false)
@@ -77,18 +70,44 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       setSeedPrompt('')
       setPlannerStatus('planning')
       setPlannerQuestions([])
-      setPlannerPlan(null)
       setFinalSpec(null)
       setSavedAgent(null)
       setConfiguredSpec(null)
       setError(null)
-      setEvaluationCriteria('')
-      setGeneratedMetrics(null)
-      setIsGeneratingMetrics(false)
-      setIsSavingAgent(false)
       planningStarted.current = false
     }
   }, [open])
+
+  // ── Eval + save ─────────────────────────────────────────────────────────────
+
+  const handleEvalSubmit = useCallback(async (criteria: string) => {
+    if (!session || !finalSpec || !configuredSpec) return
+    setPlannerStatus('generating_metrics')
+
+    try {
+      const metrics = await generateEvaluationCriteria(session.access_token, {
+        session_brief: finalSpec.session_brief,
+        users_raw_evaluation_criteria: criteria,
+      })
+
+      const { agent_name } = finalSpec
+      const agent = await saveAgent(session.access_token, agentspaceId, {
+        agent_name,
+        agent_prompt: configuredSpec,
+        agent_language: selectedLanguage,
+        agent_voice: selectedVoiceName,
+        transcript_evaluation_metrics: metrics,
+      })
+
+      setSavedAgent(agent)
+      setStep('done')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : undefined
+      setError(msg ?? 'Failed to save agent. Please try again.')
+      setPlannerStatus('awaiting_evaluation')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, agentspaceId, finalSpec, configuredSpec, selectedLanguage, selectedVoiceName])
 
   // ── Compiler ────────────────────────────────────────────────────────────────
 
@@ -105,9 +124,10 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       const { agent_name: _name, ...promptSections } = spec
       setConfiguredSpec(promptSections as AgentPromptSpec)
 
-      setStep('evaluation')
-    } catch (e: any) {
-      setError(e?.message ?? 'Compilation failed. Please try again.')
+      setPlannerStatus('awaiting_evaluation')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : undefined
+      setError(msg ?? 'Compilation failed. Please try again.')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
@@ -125,13 +145,13 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
         setPlannerQuestions(result.questions)
         setPlannerStatus('awaiting_answers')
       } else if (result.status === 'ready' && result.plan) {
-        setPlannerPlan(result.plan)
         await runCompiler(result.plan)
       } else {
         setError('Unexpected planner response. Please try again.')
       }
-    } catch (e: any) {
-      setError(e?.message ?? 'Planning failed. Please try again.')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : undefined
+      setError(msg ?? 'Planning failed. Please try again.')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, runCompiler])
@@ -153,60 +173,16 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       })
 
       if (result.status === 'ready' && result.plan) {
-        setPlannerPlan(result.plan)
         await runCompiler(result.plan)
       } else {
         setError('Unexpected planner response. Please try again.')
       }
-    } catch (e: any) {
-      setError(e?.message ?? 'Planning failed. Please try again.')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : undefined
+      setError(msg ?? 'Planning failed. Please try again.')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, seedPrompt, plannerQuestions, runCompiler])
-
-  // ── Evaluation ──────────────────────────────────────────────────────────────
-
-  const handleGenerateMetrics = useCallback(async () => {
-    if (!session || !finalSpec || !evaluationCriteria.trim()) return
-    setIsGeneratingMetrics(true)
-    setGeneratedMetrics(null)
-    try {
-      const metrics = await generateEvaluationCriteria(session.access_token, {
-        session_brief: finalSpec.session_brief,
-        users_raw_evaluation_criteria: evaluationCriteria.trim(),
-      })
-      setGeneratedMetrics(metrics)
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to generate metrics. Please try again.')
-    } finally {
-      setIsGeneratingMetrics(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, finalSpec, evaluationCriteria])
-
-  // ── Save agent ──────────────────────────────────────────────────────────────
-
-  const handleSaveAgent = useCallback(async () => {
-    if (!session || !finalSpec || !configuredSpec) return
-    setIsSavingAgent(true)
-    try {
-      const { agent_name } = finalSpec
-      const agent = await saveAgent(session.access_token, agentspaceId, {
-        agent_name,
-        agent_prompt: configuredSpec,
-        agent_language: selectedLanguage,
-        agent_voice: selectedVoiceName,
-        ...(generatedMetrics ? { transcript_evaluation_metrics: generatedMetrics } : {}),
-      })
-      setSavedAgent(agent)
-      setStep('done')
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to save agent. Please try again.')
-    } finally {
-      setIsSavingAgent(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, agentspaceId, finalSpec, configuredSpec, selectedLanguage, selectedVoiceName, generatedMetrics])
 
   // ── Step handlers ───────────────────────────────────────────────────────────
 
@@ -235,6 +211,9 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   const canGoBack = step === 'prompt-input' || step === 'configure'
 
   if (!open) return null
+
+  // Dot index logic: configure and done both count as past-all-done
+  const dotStepIdx = (step === 'configure') ? STEP_DOTS.indexOf('done') : STEP_DOTS.indexOf(step)
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -266,8 +245,8 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
             {/* Step dots */}
             <div className="flex-1 flex justify-center gap-2">
               {STEP_DOTS.map((s, i) => {
-                const isActive = step === s || (step === 'planning' && s === 'planning')
-                const isPast = STEP_DOTS.indexOf(step) > i || (step === 'done' && i < 3)
+                const isPast = dotStepIdx > i
+                const isActive = dotStepIdx === i
                 return (
                   <div
                     key={s}
@@ -333,24 +312,16 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
                 status={plannerStatus}
                 questions={plannerQuestions}
                 onAnswerAll={handleAnswersSubmitted}
+                onEvalSubmit={handleEvalSubmit}
               />
             )}
 
-            {step === 'evaluation' && (
-              <EvaluationStep
-                criteria={evaluationCriteria}
-                onCriteriaChange={setEvaluationCriteria}
-                onGenerate={handleGenerateMetrics}
-                isGenerating={isGeneratingMetrics}
-                generatedMetrics={generatedMetrics}
-                onContinue={handleSaveAgent}
-                isSaving={isSavingAgent}
-              />
-            )}
-
-            {step === 'done' && savedAgent && configuredSpec && (
+            {step === 'done' && savedAgent && (
               <DoneStep
+                savedAgent={savedAgent}
+                token={session?.access_token ?? ''}
                 onConfigure={() => setStep('configure')}
+                onClose={onClose}
               />
             )}
 
@@ -432,149 +403,148 @@ function PromptInputStep({ value, onChange, onSubmit, language, personaName }: P
   )
 }
 
-// ── Evaluation step ────────────────────────────────────────────────────────────
-
-interface EvaluationStepProps {
-  criteria: string
-  onCriteriaChange: (v: string) => void
-  onGenerate: () => void
-  isGenerating: boolean
-  generatedMetrics: EvaluationMetrics | null
-  onContinue: () => void
-  isSaving: boolean
-}
-
-function EvaluationStep({
-  criteria, onCriteriaChange, onGenerate, isGenerating, generatedMetrics, onContinue, isSaving,
-}: EvaluationStepProps) {
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto">
-        <div className="min-h-full px-6 py-8 flex items-center justify-center">
-        <div className="w-full max-w-xl">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-2">How should sessions be evaluated?</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            Describe what good performance looks like for this agent. We'll generate 4 precise scoring metrics automatically.
-          </p>
-
-          <textarea
-            autoFocus
-            value={criteria}
-            onChange={e => onCriteriaChange(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && criteria.trim() && !isGenerating) onGenerate()
-            }}
-            rows={5}
-            placeholder="e.g. Focus on whether the candidate articulates their reasoning clearly, handles objections with confidence, and demonstrates product knowledge throughout…"
-            className="w-full border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
-          />
-
-          <button
-            onClick={onGenerate}
-            disabled={!criteria.trim() || isGenerating}
-            className={`mt-4 w-full py-3 rounded-xl text-sm font-semibold duration-[120ms] flex items-center justify-center gap-2 ${
-              criteria.trim() && !isGenerating
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            {isGenerating ? (
-              <><Loader2 className="w-4 h-4 animate-spin" />Generating metrics…</>
-            ) : (
-              <><Sparkles className="w-4 h-4" />Generate Metrics</>
-            )}
-          </button>
-
-          {/* Generated metrics preview */}
-          <AnimatePresence>
-            {generatedMetrics && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                transition={{ duration: 0.25, ease: 'easeOut' }}
-                className="mt-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl"
-              >
-                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-400 mb-3">Scoring Metrics</p>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {generatedMetrics.metrics.map(m => (
-                    <span
-                      key={m}
-                      className="text-xs font-medium text-indigo-700 bg-white border border-indigo-200 rounded-full px-3 py-1"
-                    >
-                      {m}
-                    </span>
-                  ))}
-                </div>
-                <p className="text-xs text-indigo-600 leading-relaxed">{generatedMetrics.report_curator_prompt}</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div className="flex gap-3 mt-5">
-            <button
-              onClick={onContinue}
-              disabled={isSaving}
-              className={`flex-1 py-3 rounded-xl text-sm font-semibold duration-[120ms] flex items-center justify-center gap-2 ${
-                isSaving
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
-              }`}
-            >
-              {isSaving ? (
-                <><Loader2 className="w-4 h-4 animate-spin" />Saving…</>
-              ) : (
-                generatedMetrics ? 'Save & Continue' : 'Skip & Save'
-              )}
-            </button>
-          </div>
-          {!generatedMetrics && (
-            <p className="text-xs text-gray-400 mt-2 text-center">You can skip this step — sessions can still be recorded.</p>
-          )}
-        </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Done step ──────────────────────────────────────────────────────────────────
 
-function DoneStep({ onConfigure }: { onConfigure: () => void }) {
+interface DoneStepProps {
+  savedAgent: Agent
+  token: string
+  onConfigure: () => void
+  onClose: () => void
+}
+
+function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
+  const [isLive, setIsLive] = useState(savedAgent.agent_status === 'live')
+  const [toggling, setToggling] = useState(false)
+  const [copiedLive, setCopiedLive] = useState(false)
+  const [copiedTest, setCopiedTest] = useState(false)
+
+  const liveUrl = `${window.location.origin}/agent/${savedAgent.id}`
+  const testUrl = `${window.location.origin}/agent/${savedAgent.id}?mode=test`
+
+  async function handleToggle() {
+    if (toggling) return
+    const next: 'live' | 'idle' = isLive ? 'idle' : 'live'
+    setToggling(true)
+    try {
+      await toggleAgentStatus(token, savedAgent.id, next)
+      setIsLive(!isLive)
+    } catch { /* silent */ } finally {
+      setToggling(false)
+    }
+  }
+
+  function copyLink(url: string, which: 'live' | 'test') {
+    navigator.clipboard.writeText(url).then(() => {
+      if (which === 'live') {
+        setCopiedLive(true)
+        setTimeout(() => setCopiedLive(false), 2000)
+      } else {
+        setCopiedTest(true)
+        setTimeout(() => setCopiedTest(false), 2000)
+      }
+    })
+  }
+
+  const tileClass = 'border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 hover:border-indigo-300 hover:bg-indigo-50/50 duration-[120ms] cursor-pointer w-full text-left'
+
   return (
     <div className="flex items-center justify-center h-full px-6">
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}
-        className="text-center max-w-sm"
+        className="w-full max-w-sm"
       >
-        <div className="w-16 h-16 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center mx-auto mb-5">
-          <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center mx-auto mb-4">
+            <Check className="w-7 h-7 text-emerald-500" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-1">{savedAgent.agent_name}</h2>
+          <div className="flex items-center justify-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+            <span className={`text-xs font-medium ${isLive ? 'text-emerald-600' : 'text-gray-400'}`}>
+              {isLive ? 'Live' : 'Idle'}
+            </span>
+          </div>
         </div>
-        <h2 className="text-2xl font-semibold text-gray-900 mb-2">Agent Ready</h2>
-        <p className="text-sm text-gray-500 mb-8">
-          Your training agent has been created and saved. You can configure its prompt sections or deploy it now.
-        </p>
 
-        <div className="flex flex-col gap-3">
-          <button
+        {/* Action tiles */}
+        <motion.div
+          className="grid grid-cols-2 gap-2 mb-3"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: {},
+            visible: { transition: { staggerChildren: 0.06 } },
+          }}
+        >
+          {/* Copy live link */}
+          <motion.button
+            variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
+            onClick={() => copyLink(liveUrl, 'live')}
+            className={tileClass}
+          >
+            {copiedLive
+              ? <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+              : <Link2 className="w-4 h-4 text-gray-400 shrink-0" />
+            }
+            <span className="text-sm text-gray-700 font-medium truncate">
+              {copiedLive ? 'Copied!' : 'Live link'}
+            </span>
+          </motion.button>
+
+          {/* Copy test link */}
+          <motion.button
+            variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
+            onClick={() => copyLink(testUrl, 'test')}
+            className={tileClass}
+          >
+            {copiedTest
+              ? <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+              : <Copy className="w-4 h-4 text-gray-400 shrink-0" />
+            }
+            <span className="text-sm text-gray-700 font-medium truncate">
+              {copiedTest ? 'Copied!' : 'Test link'}
+            </span>
+          </motion.button>
+
+          {/* Toggle live/idle */}
+          <motion.button
+            variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
+            onClick={handleToggle}
+            disabled={toggling}
+            className={`${tileClass} disabled:opacity-60`}
+          >
+            {toggling ? (
+              <Loader2 className="w-5 h-5 text-gray-400 animate-spin shrink-0" />
+            ) : isLive ? (
+              <ToggleRight className="w-5 h-5 text-emerald-500 shrink-0" />
+            ) : (
+              <ToggleLeft className="w-5 h-5 text-gray-300 shrink-0" />
+            )}
+            <span className="text-sm text-gray-700 font-medium truncate">
+              {isLive ? 'Set idle' : 'Set live'}
+            </span>
+          </motion.button>
+
+          {/* Configure */}
+          <motion.button
+            variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={onConfigure}
-            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-indigo-300 text-indigo-700 font-medium text-sm hover:bg-indigo-50 duration-[120ms]"
+            className={tileClass}
           >
-            <Settings2 className="w-4 h-4" />
-            Configure Prompt
-          </button>
-          <button
-            disabled
-            title="Coming soon"
-            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-gray-200 text-gray-400 font-medium text-sm cursor-not-allowed"
-          >
-            <Rocket className="w-4 h-4" />
-            Deploy
-            <span className="text-xs bg-gray-100 rounded-full px-2 py-0.5 ml-1">Soon</span>
-          </button>
-        </div>
+            <Settings2 className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-sm text-gray-700 font-medium truncate">Configure</span>
+          </motion.button>
+        </motion.div>
+
+        <button
+          onClick={onClose}
+          className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 duration-[120ms]"
+        >
+          Done
+        </button>
       </motion.div>
     </div>
   )

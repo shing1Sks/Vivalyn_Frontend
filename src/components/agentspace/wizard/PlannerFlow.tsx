@@ -1,18 +1,167 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCircle2, ChevronRight, Loader2, Sparkles } from 'lucide-react'
+import { BarChart2, Brain, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from 'lucide-react'
 import type { PlanQuestion } from '../../../lib/api'
 
-export type PlannerStatus = 'planning' | 'awaiting_answers' | 'compiling'
+// ── BlinkingCursor ─────────────────────────────────────────────────────────────
+
+function BlinkingCursor() {
+  return (
+    <motion.span
+      className="inline-block w-px h-[1em] bg-indigo-400 ml-0.5 align-middle"
+      animate={{ opacity: [1, 0, 1] }}
+      transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+    />
+  )
+}
+
+// ── TypewriterMessage ──────────────────────────────────────────────────────────
+
+type TypewriterPhase = 'typing' | 'holding' | 'erasing'
+
+function TypewriterMessage({ messages }: { messages: string[] }) {
+  const [msgIdx, setMsgIdx] = useState(0)
+  const [displayedText, setDisplayedText] = useState('')
+  const [phase, setPhase] = useState<TypewriterPhase>('typing')
+
+  useEffect(() => {
+    const msg = messages[msgIdx]
+
+    if (phase === 'typing') {
+      if (displayedText.length < msg.length) {
+        const t = setTimeout(
+          () => setDisplayedText(msg.slice(0, displayedText.length + 1)),
+          45,
+        )
+        return () => clearTimeout(t)
+      } else {
+        const t = setTimeout(() => setPhase('holding'), 1400)
+        return () => clearTimeout(t)
+      }
+    }
+
+    if (phase === 'holding') {
+      const t = setTimeout(() => setPhase('erasing'), 0)
+      return () => clearTimeout(t)
+    }
+
+    if (phase === 'erasing') {
+      setDisplayedText('')
+      setMsgIdx(i => (i + 1) % messages.length)
+      setPhase('typing')
+    }
+  }, [displayedText, phase, msgIdx, messages])
+
+  return (
+    <div className="flex items-center min-h-5">
+      <span className="text-sm text-gray-700 font-medium">{displayedText}</span>
+      <BlinkingCursor />
+    </div>
+  )
+}
+
+// ── AgentLabel ─────────────────────────────────────────────────────────────────
+
+export type PlannerStatus =
+  | 'planning'
+  | 'awaiting_answers'
+  | 'compiling'
+  | 'awaiting_evaluation'
+  | 'generating_metrics'
 
 interface Props {
   seedPrompt: string
   status: PlannerStatus
   questions: PlanQuestion[]
   onAnswerAll: (answers: string[]) => void
+  onEvalSubmit: (criteria: string) => void
 }
 
-export default function PlannerFlow({ seedPrompt, status, questions, onAnswerAll }: Props) {
+type BadgeVariant = 'planner' | 'compiler' | 'metrics'
+
+function AgentLabel({ variant }: { variant: BadgeVariant }) {
+  const config = {
+    planner:  { icon: Brain,     label: 'Planning Agent'   },
+    compiler: { icon: Sparkles,  label: 'Prompt Compiler'  },
+    metrics:  { icon: BarChart2, label: 'Evaluation Agent' },
+  }[variant]
+  const Icon = config.icon
+  return (
+    <div className="flex items-center gap-1.5">
+      <Icon className="w-3.5 h-3.5 text-indigo-400" />
+      <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-400">
+        {config.label}
+      </span>
+    </div>
+  )
+}
+
+// ── Thinking panel (shared layout for planning / compiling / generating) ───────
+
+const PLANNING_MESSAGES = [
+  'Analyzing your description...',
+  'Mapping behavior patterns...',
+  'Planning session flow...',
+  'Considering interaction rules...',
+  'Defining guardrails...',
+]
+
+const COMPILING_MESSAGES = [
+  'Writing your agent\'s identity...',
+  'Shaping behavioral patterns...',
+  'Defining interaction style...',
+  'Compiling prompt sections...',
+  'Finalising your agent...',
+]
+
+const METRICS_MESSAGES = [
+  'Designing evaluation criteria...',
+  'Structuring scoring rubric...',
+  'Calibrating performance metrics...',
+  'Finalising evaluation framework...',
+  'Saving your agent...',
+]
+
+interface ThinkingPanelProps {
+  variant: BadgeVariant
+  messages: string[]
+  hint?: string
+}
+
+function ThinkingPanel({ variant, messages, hint }: ThinkingPanelProps) {
+  return (
+    <motion.div
+      key={variant}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="flex flex-col items-center gap-8 py-12"
+    >
+      <AgentLabel variant={variant} />
+      <div className="flex flex-col items-center gap-2">
+        <TypewriterMessage messages={messages} />
+        {hint && <p className="text-xs text-gray-400">{hint}</p>}
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
+export default function PlannerFlow({ seedPrompt, status, questions, onAnswerAll, onEvalSubmit }: Props) {
+  const [revealingQuestions, setRevealingQuestions] = useState(false)
+  const revealFired = useRef(false)
+
+  useEffect(() => {
+    if (status === 'awaiting_answers' && !revealFired.current) {
+      revealFired.current = true
+      setRevealingQuestions(true)
+      const t = setTimeout(() => setRevealingQuestions(false), 1200)
+      return () => clearTimeout(t)
+    }
+  }, [status])
+
   return (
     <div className="flex flex-col h-full overflow-y-auto px-6 py-8">
       <div className="max-w-2xl mx-auto w-full space-y-6">
@@ -29,24 +178,47 @@ export default function PlannerFlow({ seedPrompt, status, questions, onAnswerAll
         </motion.div>
 
         <AnimatePresence mode="wait">
+
+          {/* Planning */}
           {status === 'planning' && (
-            <motion.div
+            <ThinkingPanel
               key="planning"
-              initial={{ opacity: 0, y: 8 }}
+              variant="planner"
+              messages={PLANNING_MESSAGES}
+              hint="Usually takes 10–15 seconds"
+            />
+          )}
+
+          {/* Questions reveal interstitial */}
+          {status === 'awaiting_answers' && revealingQuestions && (
+            <motion.div
+              key="reveal"
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="flex items-center gap-3 py-4"
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="flex flex-col items-center gap-3 py-8"
             >
-              <Loader2 className="w-5 h-5 text-indigo-600 animate-spin flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Analyzing your agent</p>
-                <p className="text-xs text-gray-400 mt-0.5">Planning identity, behavior and guardrails…</p>
+              <div className="w-9 h-9 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                <Brain className="w-4.5 h-4.5 text-indigo-500" />
               </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-gray-800">
+                  I have {questions.length} question{questions.length !== 1 ? 's' : ''} to refine your agent
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Select an option or type your own answer</p>
+              </div>
+              <motion.div
+                animate={{ y: [0, 4, 0] }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <ChevronDown className="w-4 h-4 text-indigo-300" />
+              </motion.div>
             </motion.div>
           )}
 
-          {status === 'awaiting_answers' && questions.length > 0 && (
+          {/* Question flow */}
+          {status === 'awaiting_answers' && !revealingQuestions && questions.length > 0 && (
             <motion.div
               key="questions"
               initial={{ opacity: 0, y: 8 }}
@@ -58,24 +230,76 @@ export default function PlannerFlow({ seedPrompt, status, questions, onAnswerAll
             </motion.div>
           )}
 
+          {/* Compiling */}
           {status === 'compiling' && (
+            <ThinkingPanel key="compiling" variant="compiler" messages={COMPILING_MESSAGES} />
+          )}
+
+          {/* Evaluation input */}
+          {status === 'awaiting_evaluation' && (
             <motion.div
-              key="compiling"
+              key="eval"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="flex items-center gap-3 py-4"
+              transition={{ duration: 0.3, ease: 'easeOut' }}
             >
-              <Loader2 className="w-5 h-5 text-indigo-600 animate-spin flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Launching Prompt Compiler</p>
-                <p className="text-xs text-gray-400 mt-0.5">Synthesising your agent specification…</p>
-              </div>
+              <EvaluationForm onSubmit={onEvalSubmit} />
             </motion.div>
           )}
+
+          {/* Generating metrics */}
+          {status === 'generating_metrics' && (
+            <ThinkingPanel key="metrics" variant="metrics" messages={METRICS_MESSAGES} />
+          )}
+
         </AnimatePresence>
       </div>
+    </div>
+  )
+}
+
+// ── Evaluation form ────────────────────────────────────────────────────────────
+
+function EvaluationForm({ onSubmit }: { onSubmit: (criteria: string) => void }) {
+  const [criteria, setCriteria] = useState('')
+
+  function handleSubmit() {
+    if (!criteria.trim()) return
+    onSubmit(criteria.trim())
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-base font-semibold text-gray-900 mb-1">Agent created. One last step.</h3>
+        <p className="text-sm text-gray-500">How should sessions be evaluated?</p>
+      </div>
+
+      <textarea
+        autoFocus
+        value={criteria}
+        onChange={e => setCriteria(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && criteria.trim()) handleSubmit()
+        }}
+        rows={4}
+        placeholder="e.g. Focus on whether the candidate articulates reasoning clearly, handles objections with confidence, and demonstrates product knowledge throughout…"
+        className="w-full border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+      />
+
+      <button
+        onClick={handleSubmit}
+        disabled={!criteria.trim()}
+        className={`w-full py-3 rounded-xl text-sm font-semibold duration-[120ms] flex items-center justify-center gap-2 ${
+          criteria.trim()
+            ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
+            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+        }`}
+      >
+        <Sparkles className="w-4 h-4" />
+        Generate Evaluation Criteria
+      </button>
     </div>
   )
 }
@@ -90,11 +314,14 @@ interface QuestionFlowProps {
 function QuestionFlow({ questions, onComplete }: QuestionFlowProps) {
   const [currentIdx, setCurrentIdx] = useState(0)
   const [answers, setAnswers] = useState<string[]>([])
+  const [launching, setLaunching] = useState(false)
 
   function handleAnswer(answer: string) {
     const next = [...answers, answer]
     if (next.length >= questions.length) {
-      onComplete(next)
+      setAnswers(next)
+      setLaunching(true)
+      setTimeout(() => onComplete(next), 500)
     } else {
       setAnswers(next)
       setCurrentIdx(prev => prev + 1)
@@ -102,9 +329,38 @@ function QuestionFlow({ questions, onComplete }: QuestionFlowProps) {
   }
 
   const currentQ = questions[currentIdx]
+  const progress = (currentIdx / questions.length) * 100
+
+  if (launching) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="flex items-center gap-3 py-4 px-4 bg-indigo-50 border border-indigo-100 rounded-xl"
+      >
+        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin flex-shrink-0" />
+        <div>
+          <p className="text-sm font-medium text-indigo-800">Launching Prompt Compiler</p>
+          <p className="text-xs text-indigo-500 mt-0.5">Synthesising your agent specification…</p>
+        </div>
+      </motion.div>
+    )
+  }
 
   return (
     <div className="space-y-3">
+      {/* Progress bar */}
+      {questions.length > 1 && (
+        <div className="w-full h-0.5 bg-gray-100 rounded-full mb-1">
+          <motion.div
+            className="h-full bg-indigo-600 rounded-full"
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+          />
+        </div>
+      )}
+
       {/* Answered questions (locked) */}
       {answers.map((ans, i) => (
         <motion.div
@@ -142,7 +398,6 @@ function QuestionFlow({ questions, onComplete }: QuestionFlowProps) {
               </p>
             )}
             <p className="text-sm font-medium text-gray-800 mb-3">{currentQ.query_statement}</p>
-
             <QuestionCard question={currentQ} onAnswer={handleAnswer} />
           </motion.div>
         </AnimatePresence>
@@ -170,11 +425,11 @@ function QuestionCard({ question, onAnswer }: QuestionCardProps) {
   return (
     <div className="space-y-2">
       <SuggestionButton
-        label={`① ${question.suggestion1.statement}`}
+        label={question.suggestion1.statement}
         onClick={() => onAnswer(question.suggestion1.statement)}
       />
       <SuggestionButton
-        label={`② ${question.suggestion2.statement}`}
+        label={question.suggestion2.statement}
         onClick={() => onAnswer(question.suggestion2.statement)}
       />
 
@@ -201,7 +456,7 @@ function QuestionCard({ question, onAnswer }: QuestionCardProps) {
           onClick={() => setShowCustom(true)}
           className="w-full text-left text-sm px-3 py-2.5 rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/50 duration-[120ms]"
         >
-          ③ Enter custom preference…
+          Enter custom preference…
         </button>
       )}
     </div>
