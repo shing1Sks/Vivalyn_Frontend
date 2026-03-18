@@ -627,11 +627,14 @@ export async function fetchLatestRunRecord(
 export async function fetchAgentspaceRuns(
   accessToken: string,
   agentspaceId: string,
-): Promise<RunRecord[]> {
-  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/runs`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) return [];
+  page = 1,
+  pageSize = 10,
+): Promise<{ runs: RunRecord[]; total: number }> {
+  const res = await fetch(
+    `${BASE}/api/v1/agentspaces/${agentspaceId}/runs?page=${page}&page_size=${pageSize}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!res.ok) return { runs: [], total: 0 };
   return res.json();
 }
 

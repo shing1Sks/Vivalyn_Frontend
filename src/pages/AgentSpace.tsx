@@ -6,6 +6,8 @@ import {
   Bot,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Copy,
   Download,
@@ -16,6 +18,7 @@ import {
   Settings2,
   ToggleLeft,
   ToggleRight,
+  User,
   X,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -253,6 +256,8 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 
 function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
   const [runs, setRuns] = useState<RunRecord[]>([])
+  const [runsTotal, setRunsTotal] = useState(0)
+  const [runsPage, setRunsPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState<SortField>('created_at')
@@ -283,16 +288,18 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
     async function load() {
       setLoading(true)
       try {
-        const data = await fetchAgentspaceRuns(token, agentspaceId)
+        const { runs: data, total } = await fetchAgentspaceRuns(token, agentspaceId, runsPage)
         setRuns(data)
+        setRunsTotal(total)
       } catch {
         setRuns([])
+        setRunsTotal(0)
       } finally {
         setLoading(false)
       }
     }
     void load()
-  }, [agentspaceId, token])
+  }, [agentspaceId, token, runsPage])
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -487,6 +494,31 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
         </div>
       )}
 
+      {/* Pagination */}
+      {runsTotal > 10 && (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-gray-500">
+            {((runsPage - 1) * 10) + 1}–{Math.min(runsPage * 10, runsTotal)} of {runsTotal}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setRunsPage(p => p - 1)}
+              disabled={runsPage === 1}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Prev
+            </button>
+            <button
+              onClick={() => setRunsPage(p => p + 1)}
+              disabled={runsPage * 10 >= runsTotal}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
+            >
+              Next <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Detail sidebar */}
       <AnimatePresence>
         {selectedRun && (
@@ -616,6 +648,15 @@ function AgentSpaceContent() {
   const [configuringAgent, setConfiguringAgent] = useState<Agent | null>(null)
   const [agentSearch, setAgentSearch] = useState('')
   const [agentFilter, setAgentFilter] = useState<'all' | 'live' | 'idle'>('all')
+  const [agentsPage, setAgentsPage] = useState(1)
+  const [createdByFilter, setCreatedByFilter] = useState<string | null>(null)
+  const [creatorDropdownOpen, setCreatorDropdownOpen] = useState(false)
+  const creatorDropdownRef = useRef<HTMLDivElement>(null)
+
+  const uniqueCreators = useMemo(
+    () => Array.from(new Set(agents.map(a => a.created_by_name))).sort(),
+    [agents],
+  )
 
   const retryCount = useRef(0)
 
@@ -628,6 +669,20 @@ function AgentSpaceContent() {
       return () => clearTimeout(timer)
     }
   }, [spacesLoading, spaces.length, spacesError, refetchSpaces])
+
+  useEffect(() => {
+    setAgentsPage(1)
+  }, [agentSearch, agentFilter, createdByFilter])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (creatorDropdownRef.current && !creatorDropdownRef.current.contains(e.target as Node)) {
+        setCreatorDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const spaceId = activeSpace?.id
   const spaceToken = session?.access_token
@@ -754,6 +809,48 @@ function AgentSpaceContent() {
                         </button>
                       ))}
                     </div>
+
+                    {/* Created by filter */}
+                    {uniqueCreators.length > 1 && (
+                      <div ref={creatorDropdownRef} className="relative">
+                        <button
+                          onClick={() => setCreatorDropdownOpen(o => !o)}
+                          className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 duration-[120ms] w-44"
+                        >
+                          <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                          <span className="flex-1 text-left truncate">
+                            {createdByFilter ?? 'All creators'}
+                          </span>
+                          <ChevronDown className={`w-3.5 h-3.5 text-gray-400 duration-[120ms] ${creatorDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        <AnimatePresence>
+                          {creatorDropdownOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -4 }}
+                              transition={{ duration: 0.12 }}
+                              className="absolute left-0 top-full mt-1 z-20 min-w-[160px] bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-hidden"
+                            >
+                              {[null, ...uniqueCreators].map(name => (
+                                <button
+                                  key={name ?? '__all__'}
+                                  onClick={() => { setCreatedByFilter(name); setCreatorDropdownOpen(false) }}
+                                  className={`w-full text-left px-3 py-2 text-sm duration-[120ms] truncate ${
+                                    createdByFilter === name
+                                      ? 'bg-indigo-50 text-indigo-700 font-medium'
+                                      : 'text-gray-700 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {name ?? 'All creators'}
+                                </button>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )}
+
                     <button
                       onClick={() => setCreateAgentOpen(true)}
                       className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms] w-full md:w-auto justify-center"
@@ -770,10 +867,18 @@ function AgentSpaceContent() {
                         if (agentFilter === 'idle') return a.agent_status !== 'live'
                         return true
                       })
+                      .filter(a => !createdByFilter || a.created_by_name === createdByFilter)
                       .filter(a => {
                         if (!agentSearch.trim()) return true
                         return a.agent_name.toLowerCase().includes(agentSearch.toLowerCase())
                       })
+
+                    const agentsPageSize = 10
+                    const agentsTotalPages = Math.ceil(filteredAgents.length / agentsPageSize)
+                    const pagedAgents = filteredAgents.slice(
+                      (agentsPage - 1) * agentsPageSize,
+                      agentsPage * agentsPageSize,
+                    )
 
                     if (agentsLoading) {
                       return (
@@ -792,7 +897,7 @@ function AgentSpaceContent() {
                         <div className="flex flex-col items-center justify-center py-16 text-center bg-white border border-dashed border-gray-200 rounded-xl">
                           <p className="text-sm text-gray-400">No agents match your filters.</p>
                           <button
-                            onClick={() => { setAgentSearch(''); setAgentFilter('all') }}
+                            onClick={() => { setAgentSearch(''); setAgentFilter('all'); setCreatedByFilter(null) }}
                             className="text-xs text-indigo-500 mt-2 hover:text-indigo-700 duration-[120ms]"
                           >
                             Clear filters
@@ -802,31 +907,58 @@ function AgentSpaceContent() {
                     }
 
                     return (
-                      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                        {/* Table header — desktop only */}
-                        <div className="hidden md:grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Agent</span>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Language</span>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</span>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</span>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Links</span>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Deploy</span>
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Config</span>
+                      <div className="flex flex-col gap-3">
+                        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                          {/* Table header — desktop only */}
+                          <div className="hidden md:grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Agent</span>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Language</span>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</span>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</span>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Links</span>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Deploy</span>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Config</span>
+                          </div>
+                          {/* Rows */}
+                          <div className="divide-y divide-gray-50">
+                            {pagedAgents.map(agent => (
+                              <AgentRow
+                                key={agent.id}
+                                agent={agent}
+                                token={session?.access_token ?? ''}
+                                onConfigure={() => setConfiguringAgent(agent)}
+                                onStatusChange={updated =>
+                                  setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
+                                }
+                              />
+                            ))}
+                          </div>
                         </div>
-                        {/* Rows */}
-                        <div className="divide-y divide-gray-50">
-                          {filteredAgents.map(agent => (
-                            <AgentRow
-                              key={agent.id}
-                              agent={agent}
-                              token={session?.access_token ?? ''}
-                              onConfigure={() => setConfiguringAgent(agent)}
-                              onStatusChange={updated =>
-                                setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
-                              }
-                            />
-                          ))}
-                        </div>
+
+                        {/* Pagination */}
+                        {agentsTotalPages > 1 && (
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-xs text-gray-500">
+                              {((agentsPage - 1) * agentsPageSize) + 1}–{Math.min(agentsPage * agentsPageSize, filteredAgents.length)} of {filteredAgents.length}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => setAgentsPage(p => p - 1)}
+                                disabled={agentsPage === 1}
+                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                              </button>
+                              <button
+                                onClick={() => setAgentsPage(p => p + 1)}
+                                disabled={agentsPage >= agentsTotalPages}
+                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
+                              >
+                                Next <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   })()}

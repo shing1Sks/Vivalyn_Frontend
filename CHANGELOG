@@ -1,5 +1,17 @@
 # Changelog
 
+## [23] agentspace-pagination-and-creator-filter — 2026-03-18
+
+**Why:** The agents table and run records table both fetched and rendered all records at once with no limiting. As agents and session history grow, this causes unnecessary data transfer and slow renders. There was also no way to filter agents by who created them.
+
+**What:** Added client-side pagination (10/page) to the agents list with Prev/Next controls. Added a "Created by" filter dropdown that appears when 2+ unique creators exist in the agentspace, built as a custom animated dropdown (consistent with the existing agent-selector in RecordsTab). Updated `fetchAgentspaceRuns` to accept `page`/`pageSize` and return `{ runs, total }` matching the new paginated backend response. Added Prev/Next pagination controls to the RecordsTab that trigger a new fetch per page.
+
+**Changes:**
+- `src/lib/api.ts` — `fetchAgentspaceRuns(token, agentspaceId, page?, pageSize?)` now returns `Promise<{ runs: RunRecord[]; total: number }>` and appends `?page=&page_size=` to the URL; returns `{ runs: [], total: 0 }` on error
+- `src/pages/AgentSpace.tsx` — added `agentsPage`, `createdByFilter`, `creatorDropdownOpen` state and `creatorDropdownRef` to `AgentSpaceContent`; added `uniqueCreators` memo (deduplicated, sorted creator names); added `useEffect` to reset `agentsPage` to 1 when `agentSearch`, `agentFilter`, or `createdByFilter` change; added `useEffect` for click-outside handling on creator dropdown; added creator filter dropdown in agents toolbar (renders only when `uniqueCreators.length > 1`, uses `User` icon + `AnimatePresence` panel); agents IIFE now applies `createdByFilter` filter, computes `pagedAgents` slice, renders pagination controls showing `X–Y of N` with disabled-aware Prev/Next buttons; added `runsPage` + `runsTotal` state to `RecordsTab`; `useEffect` now depends on `runsPage` and destructures `{ runs, total }` from `fetchAgentspaceRuns`; same Prev/Next pagination controls rendered below the runs table when `runsTotal > 10`; added `ChevronLeft`, `ChevronRight`, `User` to Lucide imports
+
+---
+
 ## [22] agent-creation-flow-redesign — 2026-03-06
 
 **Why:** The agent creation wizard had several UX and correctness problems: (1) The `'evaluation'` step was not in `STEP_DOTS`, so when active it made all dots go gray — a reset bug. (2) The evaluation step had a "Skip & Save" button and "sessions can still be recorded" dismissal text, framing it as optional when it should be mandatory. (3) After metrics generation, the 4 metric pill preview was shown with no value — cluttered noise before the done screen. (4) The `DoneStep` only had "Configure Prompt" and a disabled "Deploy Soon" button — no useful actions. (5) The planning/compiling thinking states showed a static spinner + oval pill badge — no sense of which agent was working, no progress feel. (6) Questions appeared abruptly with no anticipation moment and had circled-number prefixes (① ②) on suggestion buttons.
