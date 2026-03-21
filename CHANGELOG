@@ -1,5 +1,29 @@
 # Changelog
 
+## [25] language-grid-iso-badges — 2026-03-22
+
+**Why:** Removing flag emojis left the language grid as plain text tiles with no visual identity — all tiles looked identical in weight and style, making it hard to scan at a glance.
+
+**What:** Added a small ISO-639-1 code badge (`AR`, `EN`, `ZH`, etc.) above each language name in the grid. The badge uses `lang.key` which is already in the API response — no extra data needed. It adapts from `bg-gray-100 text-gray-400` to `bg-indigo-100 text-indigo-500` when the tile is selected, matching the existing tile highlight.
+
+**Changes:**
+- `src/components/agentspace/wizard/LanguageVoiceSelector.tsx` — language grid tiles changed from single-line text to a two-row layout: small uppercase `lang.key` badge on top, `display_name` below; tile layout changed from `flex items-center justify-center` back to `flex flex-col items-center gap-1.5`
+
+---
+
+## [24] voice-config-cleanup — 2026-03-22
+
+**Why:** `voiceConfig.ts` exported `FLAG_MAP` (flag emoji lookup) and `PREF_LABELS` (`female1 → "Female 1"` etc.), both Wavenet-era artifacts. `FLAG_MAP` violated the no-emoji rule and was redundant since the language grid is fully data-driven from the `/api/v1/voices` API — no frontend-side language registry is needed. `PREF_LABELS` was designed for Wavenet's opaque voice IDs (e.g. `"en-US-Wavenet-D"`) where a label was the only gender signal; Inworld voices have real persona names ("Abby", "Brian") and the ♀/♂ badge already communicates gender — "Female 1" added nothing.
+
+**What:** Deleted `voiceConfig.ts` entirely. Removed all flag emoji spans and `PREF_LABELS` sub-labels from both components that imported from it (`LanguageVoiceSelector` and `AgentConfigureView`).
+
+**Changes:**
+- `src/components/agentspace/wizard/voiceConfig.ts` — **deleted**
+- `src/components/agentspace/wizard/LanguageVoiceSelector.tsx` — removed `FLAG_MAP, PREF_LABELS` import; removed flag `<span>` from collapsed language row and language grid tiles; removed `PREF_LABELS[voice.preference]` sub-label from voice cards
+- `src/components/agentspace/wizard/AgentConfigureView.tsx` — removed `FLAG_MAP, PREF_LABELS` import; removed flag `<span>` from the agent info row; removed flag prefix from `<option>` labels in the language `<select>`; removed `PREF_LABELS[voice.preference]` sub-label from voice cards
+
+---
+
 ## [23] agentspace-pagination-and-creator-filter — 2026-03-18
 
 **Why:** The agents table and run records table both fetched and rendered all records at once with no limiting. As agents and session history grow, this causes unnecessary data transfer and slow renders. There was also no way to filter agents by who created them.

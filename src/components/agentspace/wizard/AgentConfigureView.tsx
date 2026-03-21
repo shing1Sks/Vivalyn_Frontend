@@ -12,7 +12,6 @@ import {
   type LanguageVoiceOption,
 } from '../../../lib/api'
 import { useAuth } from '../../../context/AuthContext'
-import { FLAG_MAP, PREF_LABELS } from './voiceConfig'
 
 interface Props {
   spec: AgentPromptSpec
@@ -553,7 +552,6 @@ function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }:
     <div className="border-b border-gray-100 bg-white">
       {/* Info row */}
       <div className="flex items-center gap-3 px-6 py-3">
-        <span className="text-xl">{FLAG_MAP[agentLanguage] ?? '🌐'}</span>
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-gray-900">{displayPersona}</span>
           <span className="text-xs text-gray-400">{agentLanguage.toUpperCase()} voice</span>
@@ -597,7 +595,7 @@ function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }:
                     >
                       {languages.map(l => (
                         <option key={l.key} value={l.key}>
-                          {FLAG_MAP[l.key] ?? '🌐'} {l.display_name}
+                          {l.display_name}
                         </option>
                       ))}
                     </select>
@@ -642,9 +640,6 @@ function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }:
                                   {isFemale ? '♀' : '♂'}
                                 </span>
                               </div>
-                              <span className={`text-xs -mt-1 ${isActive ? 'text-indigo-400' : 'text-gray-400'}`}>
-                                {PREF_LABELS[voice.preference]}
-                              </span>
                               <button
                                 onClick={e => { e.stopPropagation(); handlePlay(voice.preference) }}
                                 className={`flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded-lg w-full duration-[120ms] ${

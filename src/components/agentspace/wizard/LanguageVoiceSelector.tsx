@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, ChevronRight, Loader2, Volume2, VolumeX } from 'lucide-react'
 import { fetchVoices, fetchVoicePreviewBlob, type LanguageVoiceOption } from '../../../lib/api'
-import { FLAG_MAP, PREF_LABELS } from './voiceConfig'
 
 interface Props {
   onContinue: (language: string, voicePreference: string, voiceName: string, personaName: string) => void
@@ -167,7 +166,6 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
                       className="w-full flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 hover:bg-indigo-100 duration-[120ms] group"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-xl">{FLAG_MAP[selectedLang!] ?? '🌐'}</span>
                         <span className="text-sm font-semibold text-indigo-800">{activeLang.display_name}</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-indigo-500 group-hover:text-indigo-700 duration-[120ms]">
@@ -203,13 +201,17 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
                           <button
                             key={lang.key}
                             onClick={() => handleLangSelect(lang.key)}
-                            className={`flex flex-col items-center gap-1 p-3 rounded-xl border text-center duration-[120ms] ${
+                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center duration-[120ms] ${
                               isActive
                                 ? 'border-indigo-600 bg-indigo-50'
                                 : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
                             }`}
                           >
-                            <span className="text-2xl">{FLAG_MAP[lang.key] ?? '🌐'}</span>
+                            <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded-md ${
+                              isActive ? 'bg-indigo-100 text-indigo-500' : 'bg-gray-100 text-gray-400'
+                            }`}>
+                              {lang.key.toUpperCase()}
+                            </span>
                             <span className={`text-xs font-medium leading-tight ${isActive ? 'text-indigo-700' : 'text-gray-700'}`}>
                               {lang.display_name}
                             </span>
@@ -267,9 +269,6 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
                                   {isFemale ? '♀' : '♂'}
                                 </span>
                               </div>
-                              <span className={`text-xs -mt-1.5 ${isVoiceActive ? 'text-indigo-400' : 'text-gray-400'}`}>
-                                {PREF_LABELS[voice.preference]}
-                              </span>
                               {/* Preview button */}
                               <button
                                 onClick={e => { e.stopPropagation(); handlePlay(voice.preference) }}
