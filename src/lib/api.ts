@@ -649,3 +649,177 @@ export async function fetchRunRecordById(
   if (!res.ok) throw new Error('Failed to fetch run record');
   return res.json();
 }
+
+// ── Admin ──────────────────────────────────────────────────────────────────
+
+export interface AdminDailyPoint {
+  date: string;
+  sessions: number;
+  session_seconds: number;
+  llm_conv_input: number;
+  llm_conv_cached: number;
+  llm_conv_output: number;
+  llm_report_input: number;
+  llm_report_output: number;
+  stt_seconds: number;
+  tts_chars: number;
+}
+
+export interface AdminOverview {
+  total_sessions: number;
+  live_sessions: number;
+  test_sessions: number;
+  total_session_seconds: number;
+  total_llm_conv_input_tokens: number;
+  total_llm_conv_cached_tokens: number;
+  total_llm_conv_output_tokens: number;
+  total_llm_report_input_tokens: number;
+  total_llm_report_output_tokens: number;
+  total_stt_seconds: number;
+  total_stt_calls: number;
+  total_tts_chars: number;
+  total_tts_calls: number;
+  daily_series: AdminDailyPoint[];
+}
+
+export interface AdminOrgSummary {
+  agentspace_id: string;
+  agentspace_name: string;
+  total_sessions: number;
+  total_session_seconds: number;
+  total_llm_conv_input_tokens: number;
+  total_llm_conv_output_tokens: number;
+  total_stt_seconds: number;
+  total_tts_chars: number;
+}
+
+export interface AdminAgentSummary {
+  agent_id: string;
+  agent_name: string;
+  total_sessions: number;
+  total_session_seconds: number;
+  total_llm_conv_input_tokens: number;
+  total_llm_conv_output_tokens: number;
+  total_stt_seconds: number;
+  total_tts_chars: number;
+}
+
+export interface AdminRunSummary {
+  run_id: string;
+  created_at: string;
+  user_email: string;
+  user_name: string;
+  is_test: boolean;
+  conversation_turns: number;
+  session_duration_seconds: number;
+  llm_conv_input_tokens: number;
+  llm_conv_cached_tokens: number;
+  llm_conv_output_tokens: number;
+  llm_report_input_tokens: number | null;
+  llm_report_output_tokens: number | null;
+  stt_total_seconds: number;
+  tts_total_chars: number;
+}
+
+export interface AdminAgentDetail {
+  runs: AdminRunSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface AdminRunDetail extends AdminRunSummary {
+  llm_conv_model: string;
+  llm_report_model: string | null;
+  stt_model: string;
+  stt_calls: number;
+  tts_model: string;
+  tts_calls: number;
+  transcript: Array<{ role: string; content: string; timestamp: string }>;
+  evaluation_report: Record<string, unknown>;
+}
+
+function adminHeaders(token: string) {
+  return { Authorization: `Bearer ${token}` };
+}
+
+function adminParams(dateFrom: string, dateTo: string, excludeTest: boolean) {
+  return `date_from=${dateFrom}&date_to=${dateTo}&exclude_test=${excludeTest}`;
+}
+
+export async function adminMe(token: string): Promise<{ email: string }> {
+  const res = await fetch(`${BASE}/api/v1/admin/me`, { headers: adminHeaders(token) });
+  if (!res.ok) throw new ApiError("Not authorized", res.status);
+  return res.json();
+}
+
+export async function fetchAdminOverview(
+  token: string,
+  dateFrom: string,
+  dateTo: string,
+  excludeTest: boolean,
+): Promise<AdminOverview> {
+  const res = await fetch(
+    `${BASE}/api/v1/admin/overview?${adminParams(dateFrom, dateTo, excludeTest)}`,
+    { headers: adminHeaders(token) },
+  );
+  if (!res.ok) throw new ApiError("Failed to fetch overview", res.status);
+  return res.json();
+}
+
+export async function fetchAdminOrgs(
+  token: string,
+  dateFrom: string,
+  dateTo: string,
+  excludeTest: boolean,
+): Promise<AdminOrgSummary[]> {
+  const res = await fetch(
+    `${BASE}/api/v1/admin/orgs?${adminParams(dateFrom, dateTo, excludeTest)}`,
+    { headers: adminHeaders(token) },
+  );
+  if (!res.ok) throw new ApiError("Failed to fetch orgs", res.status);
+  return res.json();
+}
+
+export async function fetchAdminOrgDetail(
+  token: string,
+  agentspaceId: string,
+  dateFrom: string,
+  dateTo: string,
+  excludeTest: boolean,
+): Promise<AdminAgentSummary[]> {
+  const res = await fetch(
+    `${BASE}/api/v1/admin/orgs/${agentspaceId}?${adminParams(dateFrom, dateTo, excludeTest)}`,
+    { headers: adminHeaders(token) },
+  );
+  if (!res.ok) throw new ApiError("Failed to fetch org detail", res.status);
+  return res.json();
+}
+
+export async function fetchAdminAgentDetail(
+  token: string,
+  agentId: string,
+  dateFrom: string,
+  dateTo: string,
+  excludeTest: boolean,
+  page = 1,
+  pageSize = 20,
+): Promise<AdminAgentDetail> {
+  const res = await fetch(
+    `${BASE}/api/v1/admin/agents/${agentId}?${adminParams(dateFrom, dateTo, excludeTest)}&page=${page}&page_size=${pageSize}`,
+    { headers: adminHeaders(token) },
+  );
+  if (!res.ok) throw new ApiError("Failed to fetch agent detail", res.status);
+  return res.json();
+}
+
+export async function fetchAdminRunDetail(
+  token: string,
+  runId: string,
+): Promise<AdminRunDetail> {
+  const res = await fetch(`${BASE}/api/v1/admin/runs/${runId}`, {
+    headers: adminHeaders(token),
+  });
+  if (!res.ok) throw new ApiError("Failed to fetch run detail", res.status);
+  return res.json();
+}

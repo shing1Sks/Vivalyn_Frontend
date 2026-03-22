@@ -1,5 +1,25 @@
 # Changelog
 
+## [26] admin-metrics-dashboard — 2026-03-23
+
+**Why:** Per-session usage data was being recorded in `call_usage_record` but there was no interface to view it. Needed a secure admin-only dashboard for monitoring consumption, costs, and session transcripts across all organisations and agents.
+
+**What:** Added a standalone `/admin` route with a hierarchical drill-down dashboard (overview → org → agent → run). Access is gated by a backend email whitelist — non-admins see an explicit "Access Denied" page rather than a silent redirect. Views use a keep-alive pattern (CSS `hidden`, not unmount) so navigating back is instant with no re-fetch. A pricing calculator shows cost ($ and ₹), revenue, profit, and margin — always visible at a glance, inputs collapsible behind "Edit inputs". Two time-series charts use the exact same pricing formula as the calculator so the numbers always agree. Installed `recharts` for all charts.
+
+**Changes:**
+- `package.json` — added `recharts`
+- `src/App.tsx` — added `/admin` route → `AdminDashboard`
+- `src/lib/api.ts` — added `AdminDailyPoint`, `AdminOverview`, `AdminOrgSummary`, `AdminAgentSummary`, `AdminRunSummary`, `AdminAgentDetail`, `AdminRunDetail` interfaces; added `adminMe`, `fetchAdminOverview`, `fetchAdminOrgs`, `fetchAdminOrgDetail`, `fetchAdminAgentDetail`, `fetchAdminRunDetail` functions
+- `src/pages/AdminDashboard.tsx` — **new**: calls `adminMe` on mount; shows `NotAuthorized` page (Lock icon, message, back button) on 403; keep-alive view mounting (overview always mounted, org/agent lazily mounted then kept alive via CSS `hidden`, keyed by ID so switching entities re-fetches); breadcrumb nav; shared filter bar (7d/30d/90d quick range + custom date inputs + exclude-test toggle)
+- `src/components/admin/AdminOverviewView.tsx` — **new**: 5 KPI cards (sessions with live/test split, session hours, LLM tokens with cached count, STT minutes, TTS chars); pricing calculator; usage charts; orgs table with drill-down on row click
+- `src/components/admin/PricingCalculator.tsx` — **new**: summary cards always visible (total cost $/₹ with per-service breakdown, revenue, profit, margin with colour coding); inputs collapsed behind "Edit inputs" toggle; defaults match actual model pricing (gpt-5-mini conv, gpt-5 report, gpt-4o-mini-transcribe STT @ $0.003/min, inworld-tts-1.5-mini @ $5/1M chars); USD/INR exchange rate field; all values persisted to `localStorage`; exports `loadPricing()` for chart consumption
+- `src/components/admin/UsageCharts.tsx` — **new**: sessions-over-time `LineChart`; revenue vs cost `LineChart` (dashed cost line, solid revenue line, exact per-token formula via `loadPricing()`); top-orgs horizontal `BarChart`; usage-breakdown `PieChart`
+- `src/components/admin/AdminOrgView.tsx` — **new**: org-level KPI row aggregated from agent data; agent table with click-to-drill
+- `src/components/admin/AdminAgentView.tsx` — **new**: paginated run list (20/page); Live/Test badge; all usage columns (turns, duration, LLM in/out, STT min, TTS chars); pagination controls
+- `src/components/admin/RunDetailPanel.tsx` — **new**: Framer Motion slide-in from right with backdrop; LLM conv + report metrics; STT/TTS metrics; chat-bubble transcript (user: gray-100 left, agent: indigo-50 right); collapsible evaluation report rendered as formatted JSON; Escape key closes
+
+---
+
 ## [25] language-grid-iso-badges — 2026-03-22
 
 **Why:** Removing flag emojis left the language grid as plain text tiles with no visual identity — all tiles looked identical in weight and style, making it hard to scan at a glance.
