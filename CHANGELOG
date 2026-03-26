@@ -1,5 +1,16 @@
 # Changelog
 
+## [27] remove-profile-is-admin — 2026-03-26
+
+**Why:** `profile.is_admin` was a dead field — always `false`, never set `true`, and not used for any access control. The authoritative admin check is the backend `ADMIN_EMAILS` whitelist. Removing the field from the API interface eliminates a misleading property from `UserProfile`.
+
+**What:** Removed `is_admin` from the `UserProfile` TypeScript interface. No component read or used this field so there are no call-site changes.
+
+**Changes:**
+- `src/lib/api.ts` — removed `is_admin: boolean` from `UserProfile` interface
+
+---
+
 ## [26] admin-metrics-dashboard — 2026-03-23
 
 **Why:** Per-session usage data was being recorded in `call_usage_record` but there was no interface to view it. Needed a secure admin-only dashboard for monitoring consumption, costs, and session transcripts across all organisations and agents.

@@ -2,7 +2,6 @@ const BASE = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
 
 export interface UserProfile {
   id: string;
-  is_admin: boolean;
   profile_pic_gradient: string | null;
   profile_pic_link: string | null;
   name: string;
