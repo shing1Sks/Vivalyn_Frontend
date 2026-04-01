@@ -6,9 +6,12 @@ import { AdminOverviewView } from '../components/admin/AdminOverviewView'
 import { AdminOrgView } from '../components/admin/AdminOrgView'
 import { AdminAgentView } from '../components/admin/AdminAgentView'
 import { RunDetailPanel } from '../components/admin/RunDetailPanel'
-import { ChevronRight, Loader2, LogOut, Lock, ArrowLeft } from 'lucide-react'
+import { AdminInquiriesView } from '../components/admin/AdminInquiriesView'
+import { AdminSubscriptionsView } from '../components/admin/AdminSubscriptionsView'
+import { AdminDiscountsView } from '../components/admin/AdminDiscountsView'
+import { ChevronRight, Loader2, LogOut, Lock, ArrowLeft, BarChart2, Coins, MessageSquare, CreditCard, Tag } from 'lucide-react'
 
-type View = 'overview' | 'org' | 'agent'
+type View = 'overview' | 'org' | 'agent' | 'inquiries' | 'subscriptions' | 'discounts'
 
 function formatDate(d: Date) {
   return d.toISOString().split('T')[0]
@@ -62,7 +65,10 @@ export default function AdminDashboard() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 
   // Track which views have ever been visited (keep-alive)
-  const [mounted, setMounted] = useState({ org: false, agent: false })
+  const [mounted, setMounted] = useState({ org: false, agent: false, inquiries: false, subscriptions: false, discounts: false })
+
+  // View mode toggle
+  const [viewMode, setViewMode] = useState<'usage' | 'tokens'>('usage')
 
   // Filter state
   const initial = defaultDateRange(30)
@@ -168,9 +174,36 @@ export default function AdminDashboard() {
             </>
           )}
         </div>
+        <div className="flex items-center gap-1 ml-6">
+          {([
+            { id: 'overview', label: 'Analytics' },
+            { id: 'inquiries', label: 'Inquiries', icon: <MessageSquare className="w-3.5 h-3.5" /> },
+            { id: 'subscriptions', label: 'Subscriptions', icon: <CreditCard className="w-3.5 h-3.5" /> },
+            { id: 'discounts', label: 'Discounts', icon: <Tag className="w-3.5 h-3.5" /> },
+          ] as { id: View; label: string; icon?: React.ReactNode }[]).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setView(tab.id)
+                if (tab.id === 'inquiries' || tab.id === 'subscriptions' || tab.id === 'discounts') {
+                  setMounted(m => ({ ...m, [tab.id]: true }))
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-[120ms] ${
+                view === tab.id
+                  ? 'bg-indigo-50 text-indigo-700'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <button
           onClick={signOut}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors duration-[120ms]"
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors duration-[120ms] ml-auto"
         >
           <LogOut className="w-3.5 h-3.5" />
           Sign out
@@ -211,6 +244,22 @@ export default function AdminDashboard() {
           />
         </div>
 
+        {/* Usage / Tokens mode toggle */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 ml-auto">
+          {(['usage', 'tokens'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setViewMode(m)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors duration-[120ms] ${
+                viewMode === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              {m === 'usage' ? <BarChart2 className="w-3 h-3" /> : <Coins className="w-3 h-3" />}
+              {m === 'usage' ? 'Usage' : 'Tokens'}
+            </button>
+          ))}
+        </div>
+
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <div
             onClick={() => setExcludeTest((v) => !v)}
@@ -237,6 +286,7 @@ export default function AdminDashboard() {
             dateFrom={dateFrom}
             dateTo={dateTo}
             excludeTest={excludeTest}
+            viewMode={viewMode}
             onSelectOrg={drillToOrg}
           />
         </div>
@@ -252,6 +302,7 @@ export default function AdminDashboard() {
               dateFrom={dateFrom}
               dateTo={dateTo}
               excludeTest={excludeTest}
+              viewMode={viewMode}
               onSelectAgent={drillToAgent}
               onBack={() => setView('overview')}
             />
@@ -269,9 +320,31 @@ export default function AdminDashboard() {
               dateFrom={dateFrom}
               dateTo={dateTo}
               excludeTest={excludeTest}
+              viewMode={viewMode}
               onSelectRun={setSelectedRunId}
               onBack={() => setView('org')}
             />
+          </div>
+        )}
+
+        {/* Inquiries */}
+        {mounted.inquiries && (
+          <div className={view !== 'inquiries' ? 'hidden' : ''}>
+            <AdminInquiriesView token={token} />
+          </div>
+        )}
+
+        {/* Subscriptions */}
+        {mounted.subscriptions && (
+          <div className={view !== 'subscriptions' ? 'hidden' : ''}>
+            <AdminSubscriptionsView token={token} />
+          </div>
+        )}
+
+        {/* Discounts */}
+        {mounted.discounts && (
+          <div className={view !== 'discounts' ? 'hidden' : ''}>
+            <AdminDiscountsView token={token} />
           </div>
         )}
       </div>

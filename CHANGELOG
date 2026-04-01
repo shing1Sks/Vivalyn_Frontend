@@ -1,5 +1,61 @@
 # Changelog
 
+## [30] subscription-fixes — 2026-04-05
+
+**Why:** Existing agentspaces opened normally without any plan — the subscription banner only appeared after data loaded and the `has_subscription: false` case wasn't blocking dashboard access. The "Tokens" settings tab predated the subscription model and surfaced an add-tokens form that no longer made sense. Pro+Scaling overflow was tracked on the backend but not surfaced in the UI. The FAQ still referenced the old pay-per-use model.
+
+**What:** Gated the entire agentspace dashboard behind an active subscription. Replaced the inline subscription banners with a proper `NoActivePlanScreen` that renders when subscription is loading or inactive. Replaced the "Tokens" settings tab with a "Plan" tab showing subscription metadata, current balance, overflow (Pro+Scaling only), and transaction history. Removed the `onAddClick` affordance from `TokenBalanceBar` since there is no longer a self-serve add-tokens flow.
+
+**Changes:**
+- `src/lib/api.ts` — added `overflow_minutes: number` to `AgentspaceSubscription` interface
+- `src/lib/constants.ts` — updated FAQ "What's the pricing model?" answer to mention Trial / Starter / Growth / Pro tiers and the ~10 min per session model
+- `src/components/agentspace/TokenBalanceBar.tsx` — removed `onAddClick` prop and `Props` interface; component is now display-only (ring gauge + balance count + tooltip, no admin click handler or "Click to add tokens" tooltip line)
+- `src/components/agentspace/AgentSpaceHeader.tsx` — removed `onAddClick` prop from `<TokenBalanceBar />`
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx` — replaced `'tokens'` tab with `'plan'` tab: lazy-fetches `fetchAgentspaceSubscription` on tab open; shows subscription info card (tier badge, status badge, period dates, minutes included / balance remaining grid, overflow card for Pro+scaling); admin-only "Contact us to change plan" button opens `InquiryModal`; transaction history section (paginated, moved from old tokens tab); removed add-tokens form, `addAmount/addLoading/addError/addOk` state, `handleAddTokens`, `refetchBalance`, `addTokens` import, `Coins`/`Plus` icons; added `fetchAgentspaceSubscription`, `AgentspaceSubscription`, `CreditCard`, `Calendar` imports
+- `src/components/agentspace/NoActivePlanScreen.tsx` — **new**: three variants keyed on `subscription` prop — (1) no plan: two cards (Trial ₹200 + Starter ₹2,499/mo with crossed ₹2,999) each with request buttons that open `InquiryModal` with the relevant `planInterest`, plus "Need Growth or Pro?" contact link and pending-request note; (2) pending (`has_subscription=true, status=inactive`): Clock icon + "pending activation" message; (3) expired/cancelled: expiry date + "Renew Plan" button → `InquiryModal`
+- `src/pages/AgentSpace.tsx` — added `subscriptionLoading` state (initialised `true`); subscription fetch effect now has a `finally` block setting `subscriptionLoading=false`; main content area gated: `subscriptionLoading` → centered spinner, `!has_subscription || status !== 'active'` → `<NoActivePlanScreen>`, otherwise → normal dashboard; removed old `AnimatePresence` subscription banners, `inquiryModalOpen` state, top-level `<InquiryModal>`, `AlertCircle` import; added `NoActivePlanScreen` import
+
+---
+
+## [29] subscription-system — 2026-04-05
+
+**Why:** No pricing page existed beyond a placeholder, and there was no way to express interest in a plan or manage subscriptions. Agentspace members had no visibility into their plan status. The admin dashboard had no tooling for handling inquiries, activating subscriptions, or generating discount codes.
+
+**What:** New pricing section with two public plan cards (Trial + Starter) and a "Contact Us" block for private Growth/Pro plans. Inquiry modal for all plan requests. Subscription status fetch and banners in the agentspace dashboard. Admin dashboard extended with three new tabs: Inquiries (with status management and follow-up email), Subscriptions (activate/renew with scaling toggle), and Discounts (code generator with live margin projector, usage drawer, send-email modal).
+
+**Changes:**
+- `src/lib/constants.ts` — new `PricingPlan` interface (`name, tier, price, crossedPrice, billingLabel, sessions, minutes, note?`); replaced legacy 5-plan array with Trial + Starter for both INR and INTL currencies; crossed prices permanent (not time-limited)
+- `src/components/ui/InquiryModal.tsx` — **new**: `AnimatePresence` modal; fields: Name, Email, Business/Institute, Team size, Use case, Currency preference (INR/USD segmented control); optional `planInterest` chip pre-fill; success state with confirmation message; calls `submitInquiry` API
+- `src/sections/Pricing.tsx` — redesigned: 2-card centred grid (`max-w-2xl`), crossed price display, "Get Started" → `InquiryModal`, "Contact Us to Explore More Plans" section below cards
+- `src/lib/api.ts` — added `submitInquiry`; added `AgentspaceSubscription` interface (`has_subscription`, `plan_tier`, `status`, `currency`, `period_start/end`, `minutes_included`, `scaling_enabled`, `balance`); added `fetchAgentspaceSubscription`; added admin API functions: `fetchAdminInquiries`, `updateAdminInquiry`, `sendFollowupEmail`, `fetchAdminSubscriptions`, `activateSubscription`, `updateAdminSubscription`, `fetchAdminDiscounts`, `createDiscount`, `updateDiscount`, `sendDiscountEmail`, `getDiscountUsage`, `applyDiscount`, `projectDiscount`
+- `src/pages/AgentSpace.tsx` — imported `fetchAgentspaceSubscription`, `AgentspaceSubscription`, `InquiryModal`; added `subscription` state + fetch effect; added inline subscription banners (indigo for no-plan, amber for expired, each with contact/renew button opening `InquiryModal`)
+- `src/components/admin/AdminInquiriesView.tsx` — **new**: table with status dropdown (new / contacted / in_progress / closed), inline notes edit, follow-up email modal (subject + body HTML fields)
+- `src/components/admin/AdminSubscriptionsView.tsx` — **new**: table with activate/renew modal (plan tier, currency, dates, notes, optional discount fields), scaling toggle (Pro only), cancel action
+- `src/components/admin/AdminDiscountsView.tsx` — **new**: code generator form with live margin projector (effective price, per-session revenue, margin %, floor warning); code table with usage count; usage drawer (per-use records, total savings/revenue); send-email modal; deactivate/reactivate toggle
+- `src/pages/AdminDashboard.tsx` — extended `View` union with `'inquiries' | 'subscriptions' | 'discounts'`; added nav tabs for all three; keep-alive mounted views for each new tab
+
+---
+
+## [28] token-credit-system — 2026-04-01
+
+**Why:** Agentspace members had no visibility into their token balance and admins had no way to top it up. The admin dashboard tracked raw usage (seconds, LLM tokens, STT, TTS) but had no parallel view in credit units, no per-org balance gauges, and no transaction drill-down.
+
+**What:** Added a token balance ring gauge to the agentspace header, a Tokens tab in the settings panel (balance display, add-tokens form, paginated transaction history), and a Usage/Tokens mode toggle across all three admin views. In token mode the admin KPI cards, org/agent tables, and runs table switch from raw usage metrics to credit units (1 credit = 1 min). The orgs overview table gains per-org ring gauges and current balance in token mode. The org detail view gains a collapsible Token Transactions section (fetched on expand, paginated). A `TokenContext` provider fetches and caches the active space's balance; `TokenBalanceBar` reads from it and re-uses an SVG ring gauge component (green/yellow/red thresholds based on `low_balance_threshold`).
+
+**Changes:**
+- `src/lib/api.ts` — added `TokenBalance`, `TokenTransaction`, `TokenTransactionsPage` interfaces; added `fetchTokenBalance`, `fetchTokenTransactions`, `addTokens` (member/admin agentspace endpoints); added `fetchAdminOrgTokenTransactions` (admin endpoint)
+- `src/context/TokenContext.tsx` — **new**: `TokenProvider` fetches balance whenever `activeSpace` changes; exposes `balance`, `lowThreshold`, `balanceLoading`, `refetchBalance` via `useTokenBalance()` hook
+- `src/components/agentspace/TokenBalanceBar.tsx` — **new**: SVG ring gauge (r=11, track gray-200, fill green/amber/red keyed to `balance > threshold*3 / > threshold / ≤ threshold`); credit count text beside ring; tooltip showing remaining credits and approx minutes; admin-clickable to open settings panel
+- `src/components/agentspace/AgentSpaceHeader.tsx` — imported `TokenBalanceBar`; injected between Settings button and user avatar in the right section; passes `onSettingsClick` as `onAddClick`
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx` — added `'tokens'` to `Tab` union; imported `useTokenBalance`, `fetchTokenTransactions`, `addTokens`, `TokenTransaction`; added token tab state (transactions, pagination, add-form); `useEffect` loads transactions when tokens tab is active; `handleAddTokens` calls `addTokens`, refreshes balance via `refetchBalance`, reloads transaction list; tab bar extended to 3 items; Tokens tab content: balance card, add-tokens form with dummy-flow note, paginated transaction list with direction icon (ArrowUpRight/ArrowDownLeft), delta, balance_after
+- `src/pages/AgentSpace.tsx` — imported `TokenProvider`; wrapped the `<AgentSpaceProvider>` children with `<TokenProvider>` so the context is available to all agentspace components
+- `src/pages/AdminDashboard.tsx` — added `viewMode: 'usage' | 'tokens'` state; added Usage/Tokens segmented toggle (BarChart2 / Coins icons) to the filter bar; passes `viewMode` prop to `AdminOverviewView`, `AdminOrgView`, `AdminAgentView`
+- `src/components/admin/AdminOverviewView.tsx` — added `OrgRingGauge` SVG component (r=9); added `viewMode` prop; batch-fetches token balances for all orgs via `Promise.all` after org list loads (failures default to 0 balance); tokens mode KPI row shows Total Credits Used, Avg Credits/Session, Orgs Tracked; orgs table in tokens mode replaces LLM/STT/TTS columns with Credits Used + Balance (ring gauge + number)
+- `src/components/admin/AdminOrgView.tsx` — added `viewMode` prop; added token transaction state (txOpen, transactions, txPage, txTotal); `useEffect` fetches on expand; tokens mode KPI row shows Credits Used, Credits/Session, Agents; agents table in tokens mode shows Credits column instead of LLM/STT/TTS; collapsible Token Transactions section at bottom (ChevronDown toggle, paginated table: Date/Reason/Delta/Balance/Run)
+- `src/components/admin/AdminAgentView.tsx` — added `viewMode` prop and `runCredits()` helper (`max(1, ceil(secs/60))`); tokens mode KPI row shows Credits Used and Credits/Session; runs table in tokens mode replaces STT/TTS columns with a Credits column showing per-run credit cost
+
+---
+
 ## [27] remove-profile-is-admin — 2026-03-26
 
 **Why:** `profile.is_admin` was a dead field — always `false`, never set `true`, and not used for any access control. The authoritative admin check is the backend `ADMIN_EMAILS` whitelist. Removing the field from the API interface eliminates a misleading property from `UserProfile`.

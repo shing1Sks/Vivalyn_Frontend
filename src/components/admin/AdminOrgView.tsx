@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Loader2, AlertCircle, ArrowLeft, Users, Clock, Cpu, Mic, Volume2 } from 'lucide-react'
-import { fetchAdminOrgDetail } from '../../lib/api'
-import type { AdminAgentSummary } from '../../lib/api'
+import { Loader2, AlertCircle, ArrowLeft, Users, Clock, Cpu, Mic, Volume2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
+import { fetchAdminOrgDetail, fetchAdminOrgTokenTransactions } from '../../lib/api'
+import type { AdminAgentSummary, TokenTransaction } from '../../lib/api'
 
 interface Props {
   token: string
@@ -10,9 +10,12 @@ interface Props {
   dateFrom: string
   dateTo: string
   excludeTest: boolean
+  viewMode: 'usage' | 'tokens'
   onSelectAgent: (agentId: string, agentName: string) => void
   onBack: () => void
 }
+
+const TX_PAGE_SIZE = 20
 
 function KpiCard({
   icon: Icon,
@@ -37,10 +40,17 @@ function KpiCard({
   )
 }
 
-export function AdminOrgView({ token, agentspaceId, orgName, dateFrom, dateTo, excludeTest, onSelectAgent, onBack }: Props) {
+export function AdminOrgView({ token, agentspaceId, orgName, dateFrom, dateTo, excludeTest, viewMode, onSelectAgent, onBack }: Props) {
   const [agents, setAgents] = useState<AdminAgentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const [txOpen, setTxOpen] = useState(false)
+  const [transactions, setTransactions] = useState<TokenTransaction[]>([])
+  const [txTotal, setTxTotal] = useState(0)
+  const [txPage, setTxPage] = useState(1)
+  const [txLoading, setTxLoading] = useState(false)
+  const [txError, setTxError] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -51,6 +61,16 @@ export function AdminOrgView({ token, agentspaceId, orgName, dateFrom, dateTo, e
       .finally(() => setLoading(false))
   }, [token, agentspaceId, dateFrom, dateTo, excludeTest])
 
+  useEffect(() => {
+    if (!txOpen) return
+    setTxLoading(true)
+    setTxError(null)
+    fetchAdminOrgTokenTransactions(token, agentspaceId, txPage, TX_PAGE_SIZE)
+      .then((res) => { setTransactions(res.transactions); setTxTotal(res.total) })
+      .catch((e) => setTxError(e.message ?? 'Failed to load'))
+      .finally(() => setTxLoading(false))
+  }, [token, agentspaceId, txOpen, txPage])
+
   const totals = agents.reduce(
     (acc, a) => ({
       sessions: acc.sessions + a.total_sessions,
@@ -59,8 +79,9 @@ export function AdminOrgView({ token, agentspaceId, orgName, dateFrom, dateTo, e
       llmOut: acc.llmOut + a.total_llm_conv_output_tokens,
       stt: acc.stt + a.total_stt_seconds,
       tts: acc.tts + a.total_tts_chars,
+      credits: acc.credits + Math.max(1, Math.ceil(a.total_session_seconds / 60)),
     }),
-    { sessions: 0, seconds: 0, llmIn: 0, llmOut: 0, stt: 0, tts: 0 },
+    { sessions: 0, seconds: 0, llmIn: 0, llmOut: 0, stt: 0, tts: 0, credits: 0 },
   )
 
   if (loading) {
@@ -95,17 +116,23 @@ export function AdminOrgView({ token, agentspaceId, orgName, dateFrom, dateTo, e
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <KpiCard icon={Users} label="Total Sessions" value={totals.sessions.toLocaleString()} />
-        <KpiCard icon={Clock} label="Session Hours" value={(totals.seconds / 3600).toFixed(1)} />
-        <KpiCard
-          icon={Cpu}
-          label="LLM Tokens"
-          value={((totals.llmIn + totals.llmOut) / 1000).toFixed(0) + 'k'}
-        />
-        <KpiCard icon={Mic} label="STT Minutes" value={(totals.stt / 60).toFixed(1)} />
-        <KpiCard icon={Volume2} label="TTS Characters" value={totals.tts.toLocaleString()} />
-      </div>
+      {viewMode === 'usage' ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <KpiCard icon={Users} label="Total Sessions" value={totals.sessions.toLocaleString()} />
+          <KpiCard icon={Clock} label="Session Hours" value={(totals.seconds / 3600).toFixed(1)} />
+          <KpiCard icon={Cpu} label="LLM Tokens" value={((totals.llmIn + totals.llmOut) / 1000).toFixed(0) + 'k'} />
+          <KpiCard icon={Mic} label="STT Minutes" value={(totals.stt / 60).toFixed(1)} />
+          <KpiCard icon={Volume2} label="TTS Characters" value={totals.tts.toLocaleString()} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <KpiCard icon={Users} label="Total Sessions" value={totals.sessions.toLocaleString()} />
+          <KpiCard icon={Clock} label="Session Hours" value={(totals.seconds / 3600).toFixed(1)} />
+          <KpiCard icon={Cpu} label="Credits Used" value={totals.credits.toLocaleString()} />
+          <KpiCard icon={Mic} label="Credits / Session" value={totals.sessions ? (totals.credits / totals.sessions).toFixed(1) : '—'} />
+          <KpiCard icon={Volume2} label="Agents" value={agents.length.toString()} />
+        </div>
+      )}
 
       {/* Agents table */}
       {agents.length === 0 ? (
@@ -124,10 +151,16 @@ export function AdminOrgView({ token, agentspaceId, orgName, dateFrom, dateTo, e
                   <th className="text-left text-xs font-medium text-gray-500 px-5 py-3">Agent</th>
                   <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Sessions</th>
                   <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Hrs</th>
-                  <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">LLM In</th>
-                  <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">LLM Out</th>
-                  <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">STT min</th>
-                  <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">TTS chars</th>
+                  {viewMode === 'usage' ? (
+                    <>
+                      <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">LLM In</th>
+                      <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">LLM Out</th>
+                      <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">STT min</th>
+                      <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">TTS chars</th>
+                    </>
+                  ) : (
+                    <th className="text-right text-xs font-medium text-indigo-600 px-4 py-3">Credits</th>
+                  )}
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -143,18 +176,26 @@ export function AdminOrgView({ token, agentspaceId, orgName, dateFrom, dateTo, e
                     <td className="px-4 py-3 text-right text-gray-700">
                       {(agent.total_session_seconds / 3600).toFixed(1)}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
-                      {(agent.total_llm_conv_input_tokens / 1000).toFixed(0)}k
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
-                      {(agent.total_llm_conv_output_tokens / 1000).toFixed(0)}k
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
-                      {(agent.total_stt_seconds / 60).toFixed(1)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
-                      {agent.total_tts_chars.toLocaleString()}
-                    </td>
+                    {viewMode === 'usage' ? (
+                      <>
+                        <td className="px-4 py-3 text-right text-gray-700">
+                          {(agent.total_llm_conv_input_tokens / 1000).toFixed(0)}k
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-700">
+                          {(agent.total_llm_conv_output_tokens / 1000).toFixed(0)}k
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-700">
+                          {(agent.total_stt_seconds / 60).toFixed(1)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-700">
+                          {agent.total_tts_chars.toLocaleString()}
+                        </td>
+                      </>
+                    ) : (
+                      <td className="px-4 py-3 text-right font-medium text-indigo-700">
+                        {Math.max(1, Math.ceil(agent.total_session_seconds / 60)).toLocaleString()}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right">
                       <span className="text-indigo-600 text-xs font-medium">View</span>
                     </td>
@@ -165,6 +206,101 @@ export function AdminOrgView({ token, agentspaceId, orgName, dateFrom, dateTo, e
           </div>
         </div>
       )}
+
+      {/* Token Transactions section */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <button
+          onClick={() => setTxOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-5 py-4 text-sm font-semibold text-gray-900 hover:bg-gray-50 transition-colors duration-[120ms]"
+        >
+          Token Transactions
+          {txOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        </button>
+
+        {txOpen && (
+          <div className="border-t border-gray-100 px-5 py-4">
+            {txLoading && (
+              <div className="flex justify-center py-6">
+                <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+              </div>
+            )}
+            {txError && <p className="text-sm text-red-500">{txError}</p>}
+            {!txLoading && !txError && (
+              <>
+                {transactions.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-4 text-center">No transactions found.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left text-xs font-medium text-gray-500 py-2">Date</th>
+                        <th className="text-left text-xs font-medium text-gray-500 py-2">Reason</th>
+                        <th className="text-right text-xs font-medium text-gray-500 py-2">Delta</th>
+                        <th className="text-right text-xs font-medium text-gray-500 py-2">Balance</th>
+                        <th className="text-right text-xs font-medium text-gray-500 py-2">Run</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.map((tx) => (
+                        <tr key={tx.id} className="border-b border-gray-50 last:border-0">
+                          <td className="py-2.5 text-xs text-gray-500 whitespace-nowrap pr-4">
+                            {new Date(tx.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                          </td>
+                          <td className="py-2.5 pr-4">
+                            <div className="flex items-center gap-1.5">
+                              <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${tx.delta > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                                {tx.delta > 0
+                                  ? <ArrowUpRight className="w-2.5 h-2.5 text-emerald-600" />
+                                  : <ArrowDownLeft className="w-2.5 h-2.5 text-red-500" />
+                                }
+                              </div>
+                              <span className="text-xs text-gray-700 capitalize">{tx.reason.replace(/_/g, ' ')}</span>
+                            </div>
+                          </td>
+                          <td className={`py-2.5 text-right font-medium tabular-nums text-sm pr-4 ${tx.delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {tx.delta > 0 ? '+' : ''}{tx.delta}
+                          </td>
+                          <td className="py-2.5 text-right text-xs text-gray-500 tabular-nums pr-4">{tx.balance_after}</td>
+                          <td className="py-2.5 text-right">
+                            {tx.run_id ? (
+                              <span className="text-xs text-indigo-600 font-mono">{tx.run_id.slice(0, 8)}…</span>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {Math.ceil(txTotal / TX_PAGE_SIZE) > 1 && (
+                  <div className="flex items-center justify-between pt-3">
+                    <span className="text-xs text-gray-400">
+                      Page {txPage} of {Math.ceil(txTotal / TX_PAGE_SIZE)} · {txTotal} total
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setTxPage((p) => Math.max(1, p - 1))}
+                        disabled={txPage === 1}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-[120ms]"
+                      >
+                        <ChevronLeft className="w-4 h-4 text-gray-600" />
+                      </button>
+                      <button
+                        onClick={() => setTxPage((p) => Math.min(Math.ceil(txTotal / TX_PAGE_SIZE), p + 1))}
+                        disabled={txPage === Math.ceil(txTotal / TX_PAGE_SIZE)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-[120ms]"
+                      >
+                        <ChevronRight className="w-4 h-4 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { AgentSpaceProvider, useAgentSpace } from '../context/AgentSpaceContext'
+import { TokenProvider } from '../context/TokenContext'
 import AgentSpaceHeader from '../components/agentspace/AgentSpaceHeader'
 import CreateAgentSpaceModal from '../components/agentspace/CreateAgentSpaceModal'
 import AgentSpaceSettingsPanel from '../components/agentspace/AgentSpaceSettingsPanel'
@@ -32,11 +33,14 @@ import AgentConfigureView from '../components/agentspace/wizard/AgentConfigureVi
 import {
   fetchAgents,
   fetchAgentspaceRuns,
+  fetchAgentspaceSubscription,
   toggleAgentStatus,
   type Agent,
+  type AgentspaceSubscription,
   type EvaluationReport,
   type RunRecord,
 } from '../lib/api'
+import NoActivePlanScreen from '../components/agentspace/NoActivePlanScreen'
 import RunDetailPanel from '../components/agentspace/RunDetailPanel'
 import { fadeInUp, staggerContainer } from '../lib/motion'
 
@@ -684,6 +688,9 @@ function AgentSpaceContent() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const [subscription, setSubscription] = useState<AgentspaceSubscription | null>(null)
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true)
+
   const spaceId = activeSpace?.id
   const spaceToken = session?.access_token
 
@@ -701,6 +708,15 @@ function AgentSpaceContent() {
       }
     }
     void load()
+  }, [spaceId, spaceToken])
+
+  useEffect(() => {
+    if (!spaceId || !spaceToken) return
+    setSubscriptionLoading(true)
+    fetchAgentspaceSubscription(spaceToken, spaceId)
+      .then(setSubscription)
+      .catch(() => setSubscription(null))
+      .finally(() => setSubscriptionLoading(false))
   }, [spaceId, spaceToken])
 
   async function handleSignOut() {
@@ -758,6 +774,13 @@ function AgentSpaceContent() {
 
       <main className="flex-1 px-4 md:px-6 py-4 md:py-6">
         {activeSpace ? (
+          subscriptionLoading ? (
+            <div className="flex items-center justify-center min-h-[50vh]">
+              <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+            </div>
+          ) : !subscription?.has_subscription || subscription.status !== 'active' ? (
+            <NoActivePlanScreen subscription={subscription} userEmail={session?.user?.email} />
+          ) : (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="flex flex-col gap-5">
 
             {/* Tab bar */}
@@ -972,6 +995,7 @@ function AgentSpaceContent() {
             </motion.div>
 
           </motion.div>
+          )
         ) : (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1092,9 +1116,11 @@ export default function AgentSpace() {
 
   return (
     <AgentSpaceProvider>
-      <div className="min-h-screen flex flex-col bg-gray-50">
-        <AgentSpaceContent />
-      </div>
+      <TokenProvider>
+        <div className="min-h-screen flex flex-col bg-gray-50">
+          <AgentSpaceContent />
+        </div>
+      </TokenProvider>
     </AgentSpaceProvider>
   )
 }

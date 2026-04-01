@@ -6,6 +6,7 @@ import { useProfile } from '../../context/ProfileContext'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
 import UserAvatar from '../ui/UserAvatar'
 import AgentSpaceSwitcher from './AgentSpaceSwitcher'
+import TokenBalanceBar from './TokenBalanceBar'
 import { usePendingInviteCount } from './InboxPanel'
 
 interface AgentSpaceHeaderProps {
@@ -89,6 +90,9 @@ export default function AgentSpaceHeader({
               <span className="absolute top-1 right-1 w-2 h-2 bg-indigo-600 rounded-full" />
             )}
           </button>
+
+          {/* Token balance */}
+          <TokenBalanceBar />
 
           {/* Settings (admin only) */}
           {isAdmin ? (

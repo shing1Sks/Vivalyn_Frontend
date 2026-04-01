@@ -822,3 +822,385 @@ export async function fetchAdminRunDetail(
   if (!res.ok) throw new ApiError("Failed to fetch run detail", res.status);
   return res.json();
 }
+
+// ── Tokens ────────────────────────────────────────────────────────────────────
+
+export interface TokenBalance {
+  balance: number;
+  low_balance_threshold: number;
+  updated_at: string | null;
+}
+
+export interface TokenTransaction {
+  id: string;
+  created_at: string;
+  delta: number;
+  balance_after: number;
+  reason: string;
+  run_id: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface TokenTransactionsPage {
+  transactions: TokenTransaction[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export async function fetchTokenBalance(
+  accessToken: string,
+  agentspaceId: string,
+): Promise<TokenBalance> {
+  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/tokens/balance`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new ApiError("Failed to fetch token balance", res.status);
+  return res.json();
+}
+
+export async function fetchTokenTransactions(
+  accessToken: string,
+  agentspaceId: string,
+  page = 1,
+  pageSize = 20,
+): Promise<TokenTransactionsPage> {
+  const res = await fetch(
+    `${BASE}/api/v1/agentspaces/${agentspaceId}/tokens/transactions?page=${page}&page_size=${pageSize}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!res.ok) throw new ApiError("Failed to fetch token transactions", res.status);
+  return res.json();
+}
+
+export async function addTokens(
+  accessToken: string,
+  agentspaceId: string,
+  amount: number,
+): Promise<{ new_balance: number }> {
+  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/tokens/add`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ amount }),
+  });
+  if (!res.ok) throw new ApiError("Failed to add tokens", res.status);
+  return res.json();
+}
+
+export async function fetchAdminOrgTokenTransactions(
+  token: string,
+  agentspaceId: string,
+  page = 1,
+  pageSize = 20,
+): Promise<TokenTransactionsPage> {
+  const res = await fetch(
+    `${BASE}/api/v1/admin/orgs/${agentspaceId}/tokens/transactions?page=${page}&page_size=${pageSize}`,
+    { headers: adminHeaders(token) },
+  );
+  if (!res.ok) throw new ApiError("Failed to fetch org token transactions", res.status);
+  return res.json();
+}
+
+// ── Contact / Inquiry ─────────────────────────────────────────────────────────
+
+export interface InquiryCreate {
+  name: string;
+  email: string;
+  business_name: string;
+  size: string;
+  use_case: string;
+  plan_interest: string | null;
+  currency_pref: string;
+}
+
+export async function submitInquiry(data: InquiryCreate): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/contact`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to submit inquiry", res.status);
+}
+
+// ── Subscription (member-facing) ──────────────────────────────────────────────
+
+export interface AgentspaceSubscription {
+  has_subscription: boolean;
+  plan_tier: string | null;
+  status: string;
+  currency: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  minutes_included: number;
+  scaling_enabled: boolean;
+  overflow_minutes: number;
+  balance: number;
+}
+
+export async function fetchAgentspaceSubscription(
+  accessToken: string,
+  agentspaceId: string,
+): Promise<AgentspaceSubscription> {
+  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/subscription`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new ApiError("Failed to fetch subscription", res.status);
+  return res.json();
+}
+
+// ── Admin — Inquiries ─────────────────────────────────────────────────────────
+
+export interface Inquiry {
+  id: string;
+  created_at: string;
+  name: string;
+  email: string;
+  business_name: string;
+  size: string;
+  use_case: string;
+  plan_interest: string | null;
+  currency_pref: string;
+  status: string;
+  admin_notes: string | null;
+}
+
+export async function fetchAdminInquiries(token: string, status?: string): Promise<Inquiry[]> {
+  const url = status
+    ? `${BASE}/api/v1/admin/inquiries?status=${status}`
+    : `${BASE}/api/v1/admin/inquiries`;
+  const res = await fetch(url, { headers: adminHeaders(token) });
+  if (!res.ok) throw new ApiError("Failed to fetch inquiries", res.status);
+  return res.json();
+}
+
+export async function updateAdminInquiry(
+  token: string,
+  id: string,
+  data: { status?: string; admin_notes?: string },
+): Promise<Inquiry> {
+  const res = await fetch(`${BASE}/api/v1/admin/inquiries/${id}`, {
+    method: 'PATCH',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to update inquiry", res.status);
+  return res.json();
+}
+
+export async function sendAdminFollowupEmail(
+  token: string,
+  id: string,
+  data: { subject: string; body_html: string },
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/admin/inquiries/${id}/followup-email`, {
+    method: 'POST',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to send follow-up email", res.status);
+}
+
+// ── Admin — Subscriptions ─────────────────────────────────────────────────────
+
+export interface AdminSubscription {
+  id: string;
+  created_at: string;
+  agentspace_id: string;
+  agentspace_name: string;
+  plan_tier: string;
+  status: string;
+  currency: string;
+  period_start: string | null;
+  period_end: string | null;
+  minutes_included: number;
+  scaling_enabled: boolean;
+  activated_by: string | null;
+  requester_email: string | null;
+  notes: string | null;
+  balance: number;
+}
+
+export async function fetchAdminSubscriptions(token: string): Promise<AdminSubscription[]> {
+  const res = await fetch(`${BASE}/api/v1/admin/subscriptions`, { headers: adminHeaders(token) });
+  if (!res.ok) throw new ApiError("Failed to fetch subscriptions", res.status);
+  return res.json();
+}
+
+export async function activateSubscription(
+  token: string,
+  data: {
+    agentspace_id: string;
+    plan_tier: string;
+    currency: string;
+    period_start: string;
+    period_end: string;
+    requester_email?: string;
+    notes?: string;
+    discount_code_id?: string;
+    original_price?: number;
+    discounted_price?: number;
+  },
+): Promise<AdminSubscription> {
+  const res = await fetch(`${BASE}/api/v1/admin/subscriptions/activate`, {
+    method: 'POST',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to activate subscription", res.status);
+  return res.json();
+}
+
+export async function updateAdminSubscription(
+  token: string,
+  id: string,
+  data: { status?: string; scaling_enabled?: boolean; period_end?: string; notes?: string },
+): Promise<AdminSubscription> {
+  const res = await fetch(`${BASE}/api/v1/admin/subscriptions/${id}`, {
+    method: 'PATCH',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to update subscription", res.status);
+  return res.json();
+}
+
+// ── Admin — Discounts ─────────────────────────────────────────────────────────
+
+export interface DiscountCode {
+  id: string;
+  created_at: string;
+  code: string;
+  plan_tier: string;
+  discount_type: string;
+  value: number;
+  currency: string;
+  agentspace_id: string | null;
+  expiry: string | null;
+  one_time: boolean;
+  apply_to: string;
+  created_by: string | null;
+  is_active: boolean;
+  usage_count: number;
+}
+
+export interface DiscountUsage {
+  id: string;
+  created_at: string;
+  discount_code_id: string;
+  agentspace_id: string;
+  plan_tier: string;
+  currency: string;
+  original_price: number;
+  discounted_price: number;
+  savings: number;
+  applied_by: string | null;
+}
+
+export interface DiscountProjection {
+  base_price: number;
+  effective_price: number;
+  sessions: number;
+  per_session_revenue: number;
+  cost_floor_per_session: number;
+  margin_pct: number;
+  below_floor: boolean;
+}
+
+export async function fetchAdminDiscounts(token: string): Promise<DiscountCode[]> {
+  const res = await fetch(`${BASE}/api/v1/admin/discounts`, { headers: adminHeaders(token) });
+  if (!res.ok) throw new ApiError("Failed to fetch discounts", res.status);
+  return res.json();
+}
+
+export async function createDiscountCode(
+  token: string,
+  data: {
+    code: string;
+    plan_tier: string;
+    discount_type: string;
+    value: number;
+    currency: string;
+    agentspace_id?: string;
+    expiry?: string;
+    one_time: boolean;
+    apply_to: string;
+  },
+): Promise<DiscountCode> {
+  const res = await fetch(`${BASE}/api/v1/admin/discounts`, {
+    method: 'POST',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError((err as { detail?: string }).detail ?? "Failed to create discount", res.status);
+  }
+  return res.json();
+}
+
+export async function updateDiscountCode(
+  token: string,
+  id: string,
+  data: { is_active?: boolean; expiry?: string },
+): Promise<DiscountCode> {
+  const res = await fetch(`${BASE}/api/v1/admin/discounts/${id}`, {
+    method: 'PATCH',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to update discount", res.status);
+  return res.json();
+}
+
+export async function sendDiscountEmail(
+  token: string,
+  id: string,
+  data: { to_email: string; to_name: string },
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/admin/discounts/${id}/send-email`, {
+    method: 'POST',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to send discount email", res.status);
+}
+
+export async function fetchDiscountUsage(
+  token: string,
+  id: string,
+): Promise<{ usage: DiscountUsage[]; total_uses: number; total_savings: number; total_revenue: number }> {
+  const res = await fetch(`${BASE}/api/v1/admin/discounts/${id}/usage`, { headers: adminHeaders(token) });
+  if (!res.ok) throw new ApiError("Failed to fetch discount usage", res.status);
+  return res.json();
+}
+
+export async function applyDiscount(
+  token: string,
+  id: string,
+  data: { agentspace_id: string; plan_tier: string; currency: string; original_price: number; discounted_price: number },
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/admin/discounts/${id}/apply`, {
+    method: 'POST',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to apply discount", res.status);
+}
+
+export async function projectDiscount(
+  token: string,
+  params: { plan_tier: string; discount_type: string; value: number; currency: string },
+): Promise<DiscountProjection> {
+  const q = new URLSearchParams({
+    plan_tier: params.plan_tier,
+    discount_type: params.discount_type,
+    value: String(params.value),
+    currency: params.currency,
+  });
+  const res = await fetch(`${BASE}/api/v1/admin/discounts/project?${q}`, { headers: adminHeaders(token) });
+  if (!res.ok) throw new ApiError("Failed to project discount", res.status);
+  return res.json();
+}

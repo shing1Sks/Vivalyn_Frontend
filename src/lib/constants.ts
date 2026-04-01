@@ -150,7 +150,7 @@ export const FAQ_ITEMS = [
   {
     question: 'What\'s the pricing model?',
     answer:
-      'We offer pay-per-use pricing based on your plan. Contact our sales team for enterprise pilot pricing and volume discounts.',
+      'We offer monthly subscriptions based on your usage needs. Trial (150 mins), Starter (1,500 mins/mo), Growth (4,000 mins/mo), and Pro (8,000 mins/mo + optional scaling) — each approximately 10 minutes per session. Contact us to explore Growth and Pro plans.',
   },
 ]
 
@@ -184,110 +184,56 @@ export const TESTIMONIALS = [
 
 export interface PricingPlan {
   name: string
+  tier: 'trial' | 'starter'
   price: string
-  credits: string
-  bonus: string
-  baseSessions: string
-  bonusSessions: string
-  perSession: string
-  popular?: boolean
+  crossedPrice: string | null
+  billingLabel: string
+  sessions: string
+  minutes: number
+  note?: string
 }
 
 export const PRICING_PLANS_IN: PricingPlan[] = [
   {
     name: 'Trial',
-    price: 'Free',
-    credits: '120',
-    bonus: '',
-    baseSessions: '~12',
-    bonusSessions: '',
-    perSession: '',
+    tier: 'trial',
+    price: '₹200',
+    crossedPrice: null,
+    billingLabel: 'one-time',
+    sessions: '~15',
+    minutes: 150,
+    note: 'One-time only per workspace. Reach out for a free trial on your first plan purchase.',
   },
   {
     name: 'Starter',
-    price: '₹1,499',
-    credits: '1,200',
-    bonus: '+20%',
-    baseSessions: '~120',
-    bonusSessions: '+24',
-    perSession: '₹12.5',
-  },
-  {
-    name: 'Growth',
-    price: '₹4,999',
-    credits: '4,200',
-    bonus: '+26%',
-    baseSessions: '~420',
-    bonusSessions: '+110',
-    perSession: '₹11.9',
-  },
-  {
-    name: 'Pro',
-    price: '₹11,999',
-    credits: '10,500',
-    bonus: '+31%',
-    baseSessions: '~1,050',
-    bonusSessions: '+325',
-    perSession: '₹11.4',
-    popular: true,
-  },
-  {
-    name: 'Business',
-    price: '₹29,999',
-    credits: '28,000',
-    bonus: '+40%',
-    baseSessions: '~2,800',
-    bonusSessions: '+1,120',
-    perSession: '₹10.7',
+    tier: 'starter',
+    price: '₹2,499',
+    crossedPrice: '₹2,999',
+    billingLabel: '/mo',
+    sessions: '~150',
+    minutes: 1500,
   },
 ]
 
 export const PRICING_PLANS_INTL: PricingPlan[] = [
   {
     name: 'Trial',
-    price: 'Free',
-    credits: '120',
-    bonus: '',
-    baseSessions: '~12',
-    bonusSessions: '',
-    perSession: '',
+    tier: 'trial',
+    price: '₹200',
+    crossedPrice: null,
+    billingLabel: 'one-time · INR only',
+    sessions: '~15',
+    minutes: 150,
+    note: 'One-time only per workspace. Reach out for a free trial on your first plan purchase.',
   },
   {
     name: 'Starter',
-    price: '$29',
-    credits: '1,750',
-    bonus: '+20%',
-    baseSessions: '~175',
-    bonusSessions: '+35',
-    perSession: '$0.17',
-  },
-  {
-    name: 'Growth',
-    price: '$79',
-    credits: '5,000',
-    bonus: '+25%',
-    baseSessions: '~500',
-    bonusSessions: '+125',
-    perSession: '$0.158',
-  },
-  {
-    name: 'Pro',
-    price: '$199',
-    credits: '13,000',
-    bonus: '+30%',
-    baseSessions: '~1,300',
-    bonusSessions: '+390',
-    perSession: '$0.153',
-    popular: true,
-  },
-  {
-    name: 'Business',
-    price: '$499',
-    credits: '35,000',
-    bonus: '+40%',
-    baseSessions: '~3,500',
-    bonusSessions: '+1,400',
-    perSession: '$0.143',
+    tier: 'starter',
+    price: '$35',
+    crossedPrice: '$49',
+    billingLabel: '/mo',
+    sessions: '~150',
+    minutes: 1500,
   },
 ]
 

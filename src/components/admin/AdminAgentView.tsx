@@ -10,8 +10,13 @@ interface Props {
   dateFrom: string
   dateTo: string
   excludeTest: boolean
+  viewMode: 'usage' | 'tokens'
   onSelectRun: (runId: string) => void
   onBack: () => void
+}
+
+function runCredits(sessionSeconds: number): number {
+  return Math.max(1, Math.ceil(sessionSeconds / 60))
 }
 
 function KpiCard({
@@ -40,7 +45,7 @@ function formatDate(iso: string) {
     ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
-export function AdminAgentView({ token, agentId, agentName, dateFrom, dateTo, excludeTest, onSelectRun, onBack }: Props) {
+export function AdminAgentView({ token, agentId, agentName, dateFrom, dateTo, excludeTest, viewMode, onSelectRun, onBack }: Props) {
   const [data, setData] = useState<AdminAgentDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -69,8 +74,9 @@ export function AdminAgentView({ token, agentId, agentName, dateFrom, dateTo, ex
       llmIn: acc.llmIn + r.llm_conv_input_tokens,
       llmOut: acc.llmOut + r.llm_conv_output_tokens,
       stt: acc.stt + r.stt_total_seconds,
+      credits: acc.credits + runCredits(r.session_duration_seconds),
     }),
-    { sessions: 0, seconds: 0, llmIn: 0, llmOut: 0, stt: 0 },
+    { sessions: 0, seconds: 0, llmIn: 0, llmOut: 0, stt: 0, credits: 0 },
   )
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1
@@ -110,12 +116,21 @@ export function AdminAgentView({ token, agentId, agentName, dateFrom, dateTo, ex
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard icon={Users} label="Sessions (page)" value={totals.sessions.toString()} />
-        <KpiCard icon={Clock} label="Session Hours" value={(totals.seconds / 3600).toFixed(1)} />
-        <KpiCard icon={Cpu} label="LLM Tokens" value={((totals.llmIn + totals.llmOut) / 1000).toFixed(0) + 'k'} />
-        <KpiCard icon={Mic} label="STT Minutes" value={(totals.stt / 60).toFixed(1)} />
-      </div>
+      {viewMode === 'usage' ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KpiCard icon={Users} label="Sessions (page)" value={totals.sessions.toString()} />
+          <KpiCard icon={Clock} label="Session Hours" value={(totals.seconds / 3600).toFixed(1)} />
+          <KpiCard icon={Cpu} label="LLM Tokens" value={((totals.llmIn + totals.llmOut) / 1000).toFixed(0) + 'k'} />
+          <KpiCard icon={Mic} label="STT Minutes" value={(totals.stt / 60).toFixed(1)} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KpiCard icon={Users} label="Sessions (page)" value={totals.sessions.toString()} />
+          <KpiCard icon={Clock} label="Session Hours" value={(totals.seconds / 3600).toFixed(1)} />
+          <KpiCard icon={Cpu} label="Credits Used" value={totals.credits.toLocaleString()} />
+          <KpiCard icon={Mic} label="Credits / Session" value={totals.sessions ? (totals.credits / totals.sessions).toFixed(1) : '—'} />
+        </div>
+      )}
 
       {/* Runs table */}
       {runs.length === 0 ? (
@@ -135,8 +150,14 @@ export function AdminAgentView({ token, agentId, agentName, dateFrom, dateTo, ex
                   <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Duration</th>
                   <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">LLM In</th>
                   <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">LLM Out</th>
-                  <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">STT min</th>
-                  <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">TTS chars</th>
+                  {viewMode === 'usage' ? (
+                    <>
+                      <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">STT min</th>
+                      <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">TTS chars</th>
+                    </>
+                  ) : (
+                    <th className="text-right text-xs font-medium text-indigo-600 px-4 py-3">Credits</th>
+                  )}
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -169,12 +190,20 @@ export function AdminAgentView({ token, agentId, agentName, dateFrom, dateTo, ex
                     <td className="px-4 py-3 text-right text-gray-700">
                       {(run.llm_conv_output_tokens / 1000).toFixed(1)}k
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
-                      {(run.stt_total_seconds / 60).toFixed(1)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-700">
-                      {run.tts_total_chars.toLocaleString()}
-                    </td>
+                    {viewMode === 'usage' ? (
+                      <>
+                        <td className="px-4 py-3 text-right text-gray-700">
+                          {(run.stt_total_seconds / 60).toFixed(1)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-700">
+                          {run.tts_total_chars.toLocaleString()}
+                        </td>
+                      </>
+                    ) : (
+                      <td className="px-4 py-3 text-right font-medium text-indigo-700">
+                        {runCredits(run.session_duration_seconds)}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right">
                       <span className="text-indigo-600 text-xs font-medium">View</span>
                     </td>
