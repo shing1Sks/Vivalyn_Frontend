@@ -779,7 +779,7 @@ function AgentSpaceContent() {
               <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
             </div>
           ) : !subscription?.has_subscription || subscription.status !== 'active' ? (
-            <NoActivePlanScreen subscription={subscription} userEmail={session?.user?.email} />
+            <NoActivePlanScreen subscription={subscription} />
           ) : (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="flex flex-col gap-5">
 

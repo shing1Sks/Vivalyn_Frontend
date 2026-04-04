@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Loader2, ChevronDown, Trash2, Send, Clock, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, CreditCard, AlertCircle } from 'lucide-react'
+import { X, Loader2, ChevronDown, Trash2, Send, Clock, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, CreditCard, AlertCircle, Zap, Mail, Pencil } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
 import { useTokenBalance } from '../../context/TokenContext'
@@ -13,9 +13,22 @@ import {
   removeAgentSpaceMember,
   fetchTokenTransactions,
   fetchAgentspaceSubscription,
+  renameAgentSpace,
 } from '../../lib/api'
 import type { AgentSpaceMember, Invite, TokenTransaction, AgentspaceSubscription } from '../../lib/api'
-import InquiryModal from '../ui/InquiryModal'
+import { ALL_PLANS_IN, ALL_PLANS_INTL } from '../../lib/constants'
+
+const CONTACT_EMAIL = 'hello@vivalyn.in'
+
+function tierBadgeClass(tier: string): string {
+  const map: Record<string, string> = {
+    trial: 'bg-gray-100 text-gray-600',
+    starter: 'bg-indigo-50 text-indigo-700',
+    growth: 'bg-violet-50 text-violet-700',
+    pro: 'bg-amber-50 text-amber-700',
+  }
+  return map[tier] ?? 'bg-gray-100 text-gray-600'
+}
 
 type Tab = 'members' | 'invites' | 'plan'
 
@@ -167,7 +180,7 @@ function statusBadge(status: string) {
 
 export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
   const { session } = useAuth()
-  const { activeSpace } = useAgentSpace()
+  const { activeSpace, refetchSpaces } = useAgentSpace()
 
   const [tab, setTab] = useState<Tab>('members')
   const [members, setMembers] = useState<AgentSpaceMember[]>([])
@@ -186,9 +199,16 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
   const [txPage, setTxPage] = useState(1)
   const [txLoading, setTxLoading] = useState(false)
   const [txError, setTxError] = useState<string | null>(null)
-  const [contactOpen, setContactOpen] = useState(false)
+  const [planCurrency, setPlanCurrency] = useState<'inr' | 'intl'>('inr')
   const { balance, lowThreshold } = useTokenBalance()
   const TX_PAGE_SIZE = 20
+
+  // Rename state
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+  const [nameSaving, setNameSaving] = useState(false)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   // New invite form
   const [inviteEmail, setInviteEmail] = useState('')
@@ -200,6 +220,34 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
   const token = session?.access_token
   const spaceId = activeSpace?.id
   const isAdmin = activeSpace?.role === 'admin'
+
+  useEffect(() => {
+    if (isEditingName) {
+      setNameInput(activeSpace?.name ?? '')
+      nameInputRef.current?.focus()
+      nameInputRef.current?.select()
+    }
+  }, [isEditingName])
+
+  async function handleSaveName() {
+    if (!token || !spaceId) return
+    const trimmed = nameInput.trim()
+    if (!trimmed || trimmed === activeSpace?.name) {
+      setIsEditingName(false)
+      return
+    }
+    setNameSaving(true)
+    setNameError(null)
+    try {
+      await renameAgentSpace(token, spaceId, trimmed)
+      await refetchSpaces()
+      setIsEditingName(false)
+    } catch (e) {
+      setNameError(e instanceof Error ? e.message : 'Failed to rename')
+    } finally {
+      setNameSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (!open || !token || !spaceId) return
@@ -217,7 +265,7 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
     setSubLoading(true)
     setSubError(null)
     fetchAgentspaceSubscription(token, spaceId)
-      .then(setSubscription)
+      .then((sub) => { setSubscription(sub); setPlanCurrency(sub.currency === 'usd' ? 'intl' : 'inr') })
       .catch((e: Error) => setSubError(e.message))
       .finally(() => setSubLoading(false))
   }, [open, tab, token, spaceId])
@@ -319,15 +367,41 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
             >
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <div>
+                <div className="flex-1 min-w-0 mr-3">
                   <h2 className="text-[15px] font-semibold text-gray-900">Settings</h2>
                   {activeSpace && (
-                    <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[280px]">{activeSpace.name}</p>
+                    isAdmin && isEditingName ? (
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <input
+                          ref={nameInputRef}
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveName()
+                            if (e.key === 'Escape') setIsEditingName(false)
+                          }}
+                          onBlur={handleSaveName}
+                          disabled={nameSaving}
+                          maxLength={80}
+                          className="text-xs text-gray-700 bg-transparent border-b border-indigo-400 outline-none w-full max-w-[240px] disabled:opacity-50"
+                        />
+                        {nameSaving && <Loader2 className="w-3 h-3 text-indigo-500 animate-spin shrink-0" />}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => isAdmin && setIsEditingName(true)}
+                        className={`group flex items-center gap-1.5 mt-0.5 max-w-[280px] ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
+                      >
+                        <span className="text-xs text-gray-500 truncate">{activeSpace.name}</span>
+                        {isAdmin && <Pencil className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-600 shrink-0 transition-colors duration-[120ms]" />}
+                      </button>
+                    )
                   )}
+                  {nameError && <p className="text-[10px] text-red-500 mt-0.5">{nameError}</p>}
                 </div>
                 <button
                   onClick={onClose}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors duration-[120ms] cursor-pointer shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -400,15 +474,15 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
                         {subError}
                       </div>
                     )}
-                    {!subLoading && !subError && (
+                    {!subLoading && !subError && subscription && (
                       <>
-                        {/* Subscription info card */}
+                        {/* Current plan card */}
                         <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3">
                           <div className="flex items-center gap-2">
                             <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
                             <span className="text-xs font-medium text-gray-500">Current Plan</span>
                           </div>
-                          {subscription && subscription.has_subscription ? (
+                          {subscription.has_subscription ? (
                             <>
                               <div className="flex items-center justify-between">
                                 <span className="text-sm font-semibold text-gray-900 capitalize">
@@ -451,83 +525,166 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
                           )}
                         </div>
 
-                        {/* Contact us link — admin only */}
+                        <div className="h-px bg-gray-100" />
+
+                        {/* All Plans */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2.5">
+                            <p className="text-xs font-medium text-gray-700">All Plans</p>
+                            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+                              {(['inr', 'intl'] as const).map((c) => (
+                                <button
+                                  key={c}
+                                  onClick={() => setPlanCurrency(c)}
+                                  className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all duration-[120ms] cursor-pointer ${
+                                    planCurrency === c ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                                  }`}
+                                >
+                                  {c === 'inr' ? '₹ INR' : '$ Intl'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            {(planCurrency === 'intl' ? ALL_PLANS_INTL : ALL_PLANS_IN).map((plan) => {
+                              const isCurrent = subscription.plan_tier === plan.tier
+                              return (
+                                <div
+                                  key={plan.tier}
+                                  className={`rounded-xl border p-3 ${isCurrent ? 'border-indigo-200 bg-indigo-50/40' : 'border-gray-100'}`}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide ${tierBadgeClass(plan.tier)}`}>
+                                        {plan.name}
+                                      </span>
+                                      {isCurrent && (
+                                        <span className="text-[10px] font-medium text-indigo-600">Current</span>
+                                      )}
+                                    </div>
+                                    <div className="shrink-0 text-right">
+                                      <span className="text-sm font-semibold text-gray-900">{plan.price}</span>
+                                      {plan.price !== 'Contact us' && (
+                                        <span className="text-xs text-gray-400 ml-1">{plan.billingLabel}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between mt-1.5">
+                                    <span className="text-xs text-gray-400">
+                                      {plan.minutes.toLocaleString()} min · {plan.sessions} sessions
+                                    </span>
+                                    {plan.scalingAvailable && (
+                                      <span className="flex items-center gap-0.5 text-[10px] font-medium text-amber-600">
+                                        <Zap className="w-2.5 h-2.5" />
+                                        Scaling
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-400 mt-0.5">
+                                    Additional: {plan.additionalRate ?? '—'}
+                                  </p>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Custom pricing / queries */}
+                        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex items-start gap-3">
+                          <div className="w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center shrink-0">
+                            <Mail className="w-3 h-3 text-gray-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-gray-900 mb-0.5">Custom pricing or queries?</p>
+                            <p className="text-xs text-gray-500 mb-2">Yearly lock-in, volume pricing, enterprise plans, or anything else.</p>
+                            <a
+                              href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Pricing Query')}`}
+                              className="text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors duration-[120ms]"
+                            >
+                              {CONTACT_EMAIL} →
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Contact us to change plan — admin only */}
                         {isAdmin && (
-                          <button
-                            onClick={() => setContactOpen(true)}
+                          <a
+                            href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Plan Change Request')}`}
                             className="text-xs text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-[120ms]"
                           >
                             Contact us to change plan →
-                          </button>
+                          </a>
                         )}
 
-                        <div className="h-px bg-gray-100" />
-
-                        {/* Transaction history */}
-                        <div>
-                          <p className="text-xs font-medium text-gray-700 mb-3">Transaction history</p>
-                          {txLoading && (
-                            <div className="flex justify-center py-6">
-                              <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-                            </div>
-                          )}
-                          {txError && <p className="text-sm text-red-500">{txError}</p>}
-                          {!txLoading && !txError && (
-                            <>
-                              {transactions.length === 0 ? (
-                                <p className="text-sm text-gray-400 py-4 text-center">No transactions yet.</p>
-                              ) : (
-                                <div>
-                                  {transactions.map((tx) => (
-                                    <div key={tx.id} className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
-                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${tx.delta > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                                        {tx.delta > 0
-                                          ? <ArrowUpRight className="w-3 h-3 text-emerald-600" />
-                                          : <ArrowDownLeft className="w-3 h-3 text-red-500" />
-                                        }
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium text-gray-700 capitalize">
-                                          {tx.reason.replace(/_/g, ' ')}
-                                        </p>
-                                        <p className="text-xs text-gray-400">
-                                          {new Date(tx.created_at).toLocaleDateString()} · bal: {tx.balance_after}
-                                        </p>
-                                      </div>
-                                      <span className={`text-sm font-semibold tabular-nums ${tx.delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                        {tx.delta > 0 ? '+' : ''}{tx.delta}
-                                      </span>
+                        {/* Transaction history — only when on a plan */}
+                        {subscription.has_subscription && (
+                          <>
+                            <div className="h-px bg-gray-100" />
+                            <div>
+                              <p className="text-xs font-medium text-gray-700 mb-3">Transaction history</p>
+                              {txLoading && (
+                                <div className="flex justify-center py-6">
+                                  <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+                                </div>
+                              )}
+                              {txError && <p className="text-sm text-red-500">{txError}</p>}
+                              {!txLoading && !txError && (
+                                <>
+                                  {transactions.length === 0 ? (
+                                    <p className="text-sm text-gray-400 py-4 text-center">No transactions yet.</p>
+                                  ) : (
+                                    <div>
+                                      {transactions.map((tx) => (
+                                        <div key={tx.id} className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
+                                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${tx.delta > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                                            {tx.delta > 0
+                                              ? <ArrowUpRight className="w-3 h-3 text-emerald-600" />
+                                              : <ArrowDownLeft className="w-3 h-3 text-red-500" />
+                                            }
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium text-gray-700 capitalize">
+                                              {tx.reason.replace(/_/g, ' ')}
+                                            </p>
+                                            <p className="text-xs text-gray-400">
+                                              {new Date(tx.created_at).toLocaleDateString()} · bal: {tx.balance_after}
+                                            </p>
+                                          </div>
+                                          <span className={`text-sm font-semibold tabular-nums ${tx.delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                            {tx.delta > 0 ? '+' : ''}{tx.delta}
+                                          </span>
+                                        </div>
+                                      ))}
                                     </div>
-                                  ))}
-                                </div>
+                                  )}
+                                  {Math.ceil(txTotal / TX_PAGE_SIZE) > 1 && (
+                                    <div className="flex items-center justify-between pt-3">
+                                      <span className="text-xs text-gray-400">
+                                        Page {txPage} of {Math.ceil(txTotal / TX_PAGE_SIZE)}
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={() => setTxPage((p) => Math.max(1, p - 1))}
+                                          disabled={txPage === 1}
+                                          className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-[120ms]"
+                                        >
+                                          <ChevronLeft className="w-4 h-4 text-gray-600" />
+                                        </button>
+                                        <button
+                                          onClick={() => setTxPage((p) => Math.min(Math.ceil(txTotal / TX_PAGE_SIZE), p + 1))}
+                                          disabled={txPage === Math.ceil(txTotal / TX_PAGE_SIZE)}
+                                          className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-[120ms]"
+                                        >
+                                          <ChevronRight className="w-4 h-4 text-gray-600" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
                               )}
-                              {/* Pagination */}
-                              {Math.ceil(txTotal / TX_PAGE_SIZE) > 1 && (
-                                <div className="flex items-center justify-between pt-3">
-                                  <span className="text-xs text-gray-400">
-                                    Page {txPage} of {Math.ceil(txTotal / TX_PAGE_SIZE)}
-                                  </span>
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={() => setTxPage((p) => Math.max(1, p - 1))}
-                                      disabled={txPage === 1}
-                                      className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-[120ms]"
-                                    >
-                                      <ChevronLeft className="w-4 h-4 text-gray-600" />
-                                    </button>
-                                    <button
-                                      onClick={() => setTxPage((p) => Math.min(Math.ceil(txTotal / TX_PAGE_SIZE), p + 1))}
-                                      disabled={txPage === Math.ceil(txTotal / TX_PAGE_SIZE)}
-                                      className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-[120ms]"
-                                    >
-                                      <ChevronRight className="w-4 h-4 text-gray-600" />
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
                   </div>
@@ -608,7 +765,6 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
         )}
       </AnimatePresence>
 
-      <InquiryModal open={contactOpen} onClose={() => setContactOpen(false)} />
     </>
   )
 }

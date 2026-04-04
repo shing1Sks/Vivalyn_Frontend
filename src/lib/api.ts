@@ -69,6 +69,29 @@ export async function createAgentSpace(
   return res.json();
 }
 
+export async function renameAgentSpace(
+  accessToken: string,
+  agentspaceId: string,
+  name: string,
+): Promise<{ id: string; name: string }> {
+  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (err as { detail?: string }).detail ?? "Failed to rename agentspace",
+      res.status,
+    );
+  }
+  return res.json();
+}
+
 // ── Members ───────────────────────────────────────────────────────────────────
 
 export interface AgentSpaceMember {

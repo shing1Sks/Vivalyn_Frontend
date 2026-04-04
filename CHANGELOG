@@ -1,5 +1,44 @@
 # Changelog
 
+## [33] agentspace-rename — 2026-04-05
+
+**Why:** Agentspace names were set at creation and permanently fixed — there was no way to correct a typo or rename a workspace as a team's usage evolved.
+
+**What:** Admins can now rename their agentspace inline from the settings panel header. Clicking the workspace name (which gains a pencil icon on hover) enters edit mode; Enter or blur saves, Escape cancels. The new name is reflected immediately across the space switcher via `refetchSpaces`.
+
+**Changes:**
+- `backend/main_web_server/models/agentspace.py` — added `RenameAgentSpaceRequest` model
+- `backend/main_web_server/routes/agentspaces.py` — added `PATCH /{agentspace_id}` endpoint; admin-only; validates non-empty, ≤80 chars; updates `agentspace` table
+- `src/lib/api.ts` — added `renameAgentSpace(accessToken, agentspaceId, name)` function
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx` — added `isEditingName`, `nameInput`, `nameSaving`, `nameError` state and `nameInputRef`; added `handleSaveName` handler; panel header: workspace name is a clickable button with pencil icon (admin only) that enters an inline input on click; input auto-focuses and selects on mount; Enter/blur saves, Escape cancels; spinner shown while saving; error shown below if save fails
+
+---
+
+## [32] in-app-plan-details — 2026-04-05
+
+**Why:** Inside the agentspace, users with no active plan saw a limited 2-card view (Trial + Starter only) gated behind an inquiry form — "email loop" friction that makes sense for anonymous landing-page visitors but not for signed-in workspace members who need to understand and act on plan options immediately. Growth and Pro details were completely hidden. The settings panel Plan tab had no plan comparison view, so even users already on a plan had no way to see what other tiers offered. Additional token rates and scaling details were absent from all agentspace-facing surfaces.
+
+**What:** Replaced the `NoActivePlanScreen` plan cards with a full 4-plan grid (Trial, Starter, Growth, Pro) showing all details — minutes, sessions, additional token rate, scaling availability. Removed the InquiryModal from the agentspace plan request flow; all CTAs are now direct mailto links to `hello@vivalyn.in` pre-addressed with the plan name. Added an "All Plans" section to the settings panel Plan tab that is always visible (current tier highlighted, others shown for comparison), drawing currency from the active subscription or defaulting to INR. Extended `PricingPlan` in `constants.ts` to carry `additionalRate` and `scalingAvailable`, and added `ALL_PLANS_IN` / `ALL_PLANS_INTL` arrays with all four tiers.
+
+**Changes:**
+- `src/lib/constants.ts` — `PricingPlan` interface extended with `additionalRate: string | null` and `scalingAvailable?: boolean`; `tier` union widened to include `'growth' | 'pro'`; existing `PRICING_PLANS_IN/INTL` updated with `additionalRate: null`; Trial INTL price set to `$4.99 one-time` (previously INR-only); new `ALL_PLANS_IN` and `ALL_PLANS_INTL` arrays added with all four tiers and full pricing — Growth (₹4,499/₹4,999 INR · $69/$79 INTL), Pro (₹8,499/₹8,999 INR · $137/$159 INTL); Pro scaling overage rate set to `₹0.96/min` (INR) and `$0.018/min` (INTL) per pricing spec
+- `src/components/agentspace/NoActivePlanScreen.tsx` — default (no-plan) state: replaced 2-card grid with 4-plan `ALL_PLANS_IN` grid, each card showing full details (price, billing, minutes, sessions, additional rate, scaling badge, note); CTAs are `<a href="mailto:...">` direct links, no InquiryModal; expired state: `InquiryModal` replaced with a mailto link; `InquiryModal` import and all related state removed
+- `src/components/agentspace/NoActivePlanScreen.tsx` — added INR/Intl segmented toggle (defaults to INR); plans grid switches between `ALL_PLANS_IN` and `ALL_PLANS_INTL` based on selection; added "Custom pricing or queries" contact card at the bottom linking to `hello@vivalyn.in`
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx` — Plan tab: added `tierBadgeClass` helper; added `planCurrency` state (defaults to INR, auto-set to Intl when subscription loads with `currency: 'usd'`); "All Plans" section header includes INR/Intl segmented toggle; plan rows drawn from `ALL_PLANS_IN` or `ALL_PLANS_INTL` based on toggle; current tier highlighted; added "Custom pricing or queries" contact card above admin change-plan link; `InquiryModal` and `contactOpen` state removed; transaction history gated on `has_subscription`
+
+---
+
+## [31] subscription-none-500 — 2026-04-05
+
+**Why:** `supabase.maybe_single()` returns `None` (not an `APIResponse` object) when no matching row exists. Both the subscription query and the balance query accessed `.data` on the result directly — crashing with `AttributeError: 'NoneType' object has no attribute 'data'` and returning a 500 on every agentspace that had never had a subscription record.
+
+**What:** Added `None` guards before both `.data` accesses so the endpoint returns the correct `has_subscription: false` response instead of a 500.
+
+**Changes:**
+- `backend/main_web_server/routes/subscriptions.py` — `sub_result.data` check changed to `not sub_result or not sub_result.data`; `bal_result.data` access changed to `bal_result.data["balance"] if (bal_result and bal_result.data) else 0`
+
+---
+
 ## [30] subscription-fixes — 2026-04-05
 
 **Why:** Existing agentspaces opened normally without any plan — the subscription banner only appeared after data loaded and the `has_subscription: false` case wasn't blocking dashboard access. The "Tokens" settings tab predated the subscription model and surfaced an add-tokens form that no longer made sense. Pro+Scaling overflow was tracked on the backend but not surfaced in the UI. The FAQ still referenced the old pay-per-use model.
