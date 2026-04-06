@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Clock, Zap, Mail } from 'lucide-react'
 import type { AgentspaceSubscription } from '../../lib/api'
-import { ALL_PLANS_IN, ALL_PLANS_INTL } from '../../lib/constants'
+import { getAllPlansIn, getAllPlansIntl } from '../../lib/constants'
+import type { PricingPlan } from '../../lib/constants'
 
 const CONTACT_EMAIL = 'hello@vivalyn.in'
 
@@ -21,6 +22,13 @@ interface Props {
 
 export default function NoActivePlanScreen({ subscription }: Props) {
   const [currency, setCurrency] = useState<'inr' | 'intl'>('inr')
+  const [plansIn, setPlansIn] = useState<PricingPlan[]>([])
+  const [plansIntl, setPlansIntl] = useState<PricingPlan[]>([])
+
+  useEffect(() => {
+    getAllPlansIn().then(setPlansIn).catch(() => {})
+    getAllPlansIntl().then(setPlansIntl).catch(() => {})
+  }, [])
 
   const isPending = subscription?.has_subscription && subscription.status === 'inactive'
   const isExpired = subscription?.has_subscription &&
@@ -64,7 +72,7 @@ export default function NoActivePlanScreen({ subscription }: Props) {
     )
   }
 
-  const plans = currency === 'inr' ? ALL_PLANS_IN : ALL_PLANS_INTL
+  const plans = currency === 'inr' ? plansIn : plansIntl
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4 py-10">

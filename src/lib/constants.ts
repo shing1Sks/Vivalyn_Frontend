@@ -190,150 +190,87 @@ export interface PricingPlan {
   billingLabel: string
   sessions: string
   minutes: number
-  additionalRate: string | null   // overage cost per extra minute, null = contact us
+  additionalRate: string | null   // overage cost per extra minute, null = not available
   scalingAvailable?: boolean      // Pro only
   note?: string
 }
 
-// Landing-page plans — Trial + Starter only (public-facing, drives InquiryModal)
-export const PRICING_PLANS_IN: PricingPlan[] = [
-  {
-    name: 'Trial',
-    tier: 'trial',
-    price: '₹200',
-    crossedPrice: null,
-    billingLabel: 'one-time',
-    sessions: '~15',
-    minutes: 150,
-    additionalRate: null,
-    note: 'One-time only per workspace. Reach out for a free trial on your first plan purchase.',
-  },
-  {
-    name: 'Starter',
-    tier: 'starter',
-    price: '₹2,499',
-    crossedPrice: '₹2,999',
-    billingLabel: '/mo',
-    sessions: '~150',
-    minutes: 1500,
-    additionalRate: null,
-  },
-]
+/** Notes attached to specific tiers regardless of currency. */
+const PLAN_NOTES: Partial<Record<string, string>> = {
+  trial: 'One-time only per workspace. Reach out for a free trial on your first plan purchase.',
+}
 
-export const PRICING_PLANS_INTL: PricingPlan[] = [
-  {
-    name: 'Trial',
-    tier: 'trial',
-    price: '$4.99',
-    crossedPrice: null,
-    billingLabel: 'one-time',
-    sessions: '~15',
-    minutes: 150,
-    additionalRate: null,
-    note: 'One-time only per workspace. Reach out for a free trial on your first plan purchase.',
-  },
-  {
-    name: 'Starter',
-    tier: 'starter',
-    price: '$35',
-    crossedPrice: '$49',
-    billingLabel: '/mo',
-    sessions: '~150',
-    minutes: 1500,
-    additionalRate: null,
-  },
-]
+const PLAN_NOTES_SHORT: Partial<Record<string, string>> = {
+  trial: 'One-time only per workspace.',
+}
 
-// All four plans — used inside the agentspace for plan comparison
-export const ALL_PLANS_IN: PricingPlan[] = [
-  {
-    name: 'Trial',
-    tier: 'trial',
-    price: '₹200',
-    crossedPrice: null,
-    billingLabel: 'one-time',
-    sessions: '~15',
-    minutes: 150,
-    additionalRate: null,
-    note: 'One-time only per workspace.',
-  },
-  {
-    name: 'Starter',
-    tier: 'starter',
-    price: '₹2,499',
-    crossedPrice: '₹2,999',
-    billingLabel: '/mo',
-    sessions: '~150',
-    minutes: 1500,
-    additionalRate: null,
-  },
-  {
-    name: 'Growth',
-    tier: 'growth',
-    price: '₹4,499',
-    crossedPrice: '₹4,999',
-    billingLabel: '/mo',
-    sessions: '~400',
-    minutes: 4000,
-    additionalRate: null,
-  },
-  {
-    name: 'Pro',
-    tier: 'pro',
-    price: '₹8,499',
-    crossedPrice: '₹8,999',
-    billingLabel: '/mo',
-    sessions: '~800',
-    minutes: 8000,
-    additionalRate: '₹0.96/min',
-    scalingAvailable: true,
-  },
-]
+import { fetchPlanConfig, type PlanConfigEntry } from './api'
 
-export const ALL_PLANS_INTL: PricingPlan[] = [
-  {
-    name: 'Trial',
-    tier: 'trial',
-    price: '$4.99',
-    crossedPrice: null,
-    billingLabel: 'one-time',
-    sessions: '~15',
-    minutes: 150,
-    additionalRate: null,
-    note: 'One-time only per workspace.',
-  },
-  {
-    name: 'Starter',
-    tier: 'starter',
-    price: '$35',
-    crossedPrice: '$49',
-    billingLabel: '/mo',
-    sessions: '~150',
-    minutes: 1500,
-    additionalRate: null,
-  },
-  {
-    name: 'Growth',
-    tier: 'growth',
-    price: '$69',
-    crossedPrice: '$79',
-    billingLabel: '/mo',
-    sessions: '~400',
-    minutes: 4000,
-    additionalRate: null,
-  },
-  {
-    name: 'Pro',
-    tier: 'pro',
-    price: '$137',
-    crossedPrice: '$159',
-    billingLabel: '/mo',
-    sessions: '~800',
-    minutes: 8000,
-    additionalRate: '$0.018/min',
-    scalingAvailable: true,
-  },
-]
+function entryToPricingPlan(entry: PlanConfigEntry, currency: 'inr' | 'intl', short = false): PricingPlan {
+  const isInr = currency === 'inr'
+  const price = isInr
+    ? `₹${entry.price_inr.toLocaleString('en-IN')}`
+    : `$${entry.price_usd}`
+  const crossedRaw = isInr ? entry.crossed_inr : entry.crossed_usd
+  const crossedPrice = crossedRaw != null
+    ? (isInr ? `₹${crossedRaw.toLocaleString('en-IN')}` : `$${crossedRaw}`)
+    : null
+  const billingLabel = entry.tier === 'trial' ? 'one-time' : '/mo'
+  const additionalRate = entry.scaling_available
+    ? (isInr
+        ? `₹${entry.overage_rate_inr}/min`
+        : `$${entry.overage_rate_usd}/min`)
+    : null
+  return {
+    name: entry.tier.charAt(0).toUpperCase() + entry.tier.slice(1),
+    tier: entry.tier as PricingPlan['tier'],
+    price,
+    crossedPrice,
+    billingLabel,
+    sessions: `~${entry.sessions}`,
+    minutes: entry.minutes,
+    additionalRate,
+    scalingAvailable: entry.scaling_available || undefined,
+    note: short ? PLAN_NOTES_SHORT[entry.tier] : PLAN_NOTES[entry.tier],
+  }
+}
+
+let _planConfigCache: Awaited<ReturnType<typeof fetchPlanConfig>> | null = null
+
+async function getPlanConfig() {
+  if (!_planConfigCache) {
+    _planConfigCache = await fetchPlanConfig()
+  }
+  return _planConfigCache
+}
+
+/** All four plans in INR — used inside the agentspace for plan comparison. */
+export async function getAllPlansIn(): Promise<PricingPlan[]> {
+  const config = await getPlanConfig()
+  return config.plans.map(e => entryToPricingPlan(e, 'inr', true))
+}
+
+/** All four plans in USD — used inside the agentspace for plan comparison. */
+export async function getAllPlansIntl(): Promise<PricingPlan[]> {
+  const config = await getPlanConfig()
+  return config.plans.map(e => entryToPricingPlan(e, 'intl', true))
+}
+
+/** Trial + Starter only in INR — landing page / public pricing. */
+export async function getPricingPlansIn(): Promise<PricingPlan[]> {
+  const config = await getPlanConfig()
+  return config.plans
+    .filter(e => e.tier === 'trial' || e.tier === 'starter')
+    .map(e => entryToPricingPlan(e, 'inr'))
+}
+
+/** Trial + Starter only in USD — landing page / public pricing. */
+export async function getPricingPlansIntl(): Promise<PricingPlan[]> {
+  const config = await getPlanConfig()
+  return config.plans
+    .filter(e => e.tier === 'trial' || e.tier === 'starter')
+    .map(e => entryToPricingPlan(e, 'intl'))
+}
 
 export const FOOTER_LINKS = {
   product: [

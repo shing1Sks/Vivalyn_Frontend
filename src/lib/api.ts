@@ -1227,3 +1227,30 @@ export async function projectDiscount(
   if (!res.ok) throw new ApiError("Failed to project discount", res.status);
   return res.json();
 }
+
+// ── Plan config ───────────────────────────────────────────────────────────────
+
+export interface PlanConfigEntry {
+  tier: 'trial' | 'starter' | 'growth' | 'pro'
+  minutes: number
+  sessions: number
+  price_inr: number
+  price_usd: number
+  crossed_inr: number | null
+  crossed_usd: number | null
+  scaling_available: boolean
+  overage_rate_inr: number | null
+  overage_rate_usd: number | null
+}
+
+export interface PlanConfigResponse {
+  plans: PlanConfigEntry[]
+  cost_floor_inr: number
+  cost_floor_usd: number
+}
+
+export async function fetchPlanConfig(): Promise<PlanConfigResponse> {
+  const res = await fetch(`${BASE}/api/v1/plans`);
+  if (!res.ok) throw new ApiError("Failed to fetch plan config", res.status);
+  return res.json();
+}

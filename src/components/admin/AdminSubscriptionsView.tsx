@@ -3,13 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Loader2, Plus, X, ToggleLeft, ToggleRight } from 'lucide-react'
 import {
   fetchAdminSubscriptions,
+  fetchPlanConfig,
   activateSubscription,
   updateAdminSubscription,
   type AdminSubscription,
 } from '../../lib/api'
 
 const PLAN_TIERS = ['trial', 'starter', 'growth', 'pro'] as const
-const PLAN_MINUTES: Record<string, number> = { trial: 150, starter: 1500, growth: 4000, pro: 8000 }
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -68,6 +68,17 @@ function ActivateModal({
   const [currency, setCurrency] = useState<'INR' | 'USD'>(existing?.currency as 'INR' | 'USD' ?? 'INR')
   const [periodStart, setPeriodStart] = useState(isoToDateInput(existing?.period_start) || new Date().toISOString().slice(0, 10))
   const [periodEnd, setPeriodEnd] = useState(isoToDateInput(existing?.period_end) || '')
+  const [planMinutes, setPlanMinutes] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    fetchPlanConfig()
+      .then(config => {
+        const map: Record<string, number> = {}
+        for (const p of config.plans) map[p.tier] = p.minutes
+        setPlanMinutes(map)
+      })
+      .catch(() => {})
+  }, [])
   const [requesterEmail, setRequesterEmail] = useState(existing?.requester_email ?? '')
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [loading, setLoading] = useState(false)
@@ -163,7 +174,7 @@ function ActivateModal({
                           : 'border-gray-200 text-gray-600 hover:border-gray-300'
                       }`}
                     >
-                      {t} — {PLAN_MINUTES[t].toLocaleString()} mins
+                      {t}{planMinutes[t] != null ? ` — ${planMinutes[t].toLocaleString()} mins` : ''}
                     </button>
                   ))}
                 </div>

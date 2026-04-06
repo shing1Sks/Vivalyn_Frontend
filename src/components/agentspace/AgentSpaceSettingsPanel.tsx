@@ -16,7 +16,8 @@ import {
   renameAgentSpace,
 } from '../../lib/api'
 import type { AgentSpaceMember, Invite, TokenTransaction, AgentspaceSubscription } from '../../lib/api'
-import { ALL_PLANS_IN, ALL_PLANS_INTL } from '../../lib/constants'
+import { getAllPlansIn, getAllPlansIntl } from '../../lib/constants'
+import type { PricingPlan } from '../../lib/constants'
 
 const CONTACT_EMAIL = 'hello@vivalyn.in'
 
@@ -200,6 +201,8 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
   const [txLoading, setTxLoading] = useState(false)
   const [txError, setTxError] = useState<string | null>(null)
   const [planCurrency, setPlanCurrency] = useState<'inr' | 'intl'>('inr')
+  const [allPlansIn, setAllPlansIn] = useState<PricingPlan[]>([])
+  const [allPlansIntl, setAllPlansIntl] = useState<PricingPlan[]>([])
   const { balance, lowThreshold } = useTokenBalance()
   const TX_PAGE_SIZE = 20
 
@@ -220,6 +223,11 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
   const token = session?.access_token
   const spaceId = activeSpace?.id
   const isAdmin = activeSpace?.role === 'admin'
+
+  useEffect(() => {
+    getAllPlansIn().then(setAllPlansIn).catch(() => {})
+    getAllPlansIntl().then(setAllPlansIntl).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (isEditingName) {
@@ -546,7 +554,7 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
                             </div>
                           </div>
                           <div className="space-y-2">
-                            {(planCurrency === 'intl' ? ALL_PLANS_INTL : ALL_PLANS_IN).map((plan) => {
+                            {(planCurrency === 'intl' ? allPlansIntl : allPlansIn).map((plan) => {
                               const isCurrent = subscription.plan_tier === plan.tier
                               return (
                                 <div

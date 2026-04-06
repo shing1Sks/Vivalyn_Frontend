@@ -1,5 +1,21 @@
 # Changelog
 
+## [34] plan-config-unified — 2026-04-07
+
+**Why:** Plan pricing, minutes, and cost floors were duplicated across multiple frontend and backend files with no single source of truth. `constants.ts` held four hardcoded plan arrays, `AdminSubscriptionsView.tsx` had its own `PLAN_MINUTES` dict, and the backend had the same data scattered across `admin.py` and `contact.py` — meaning any price change required edits in 5+ places with no guarantee of consistency.
+
+**What:** All plan configuration now lives exclusively in `backend/main_web_server/plan_config.py`. The backend exposes it via a new public `GET /api/v1/plans` endpoint. The frontend fetches plan data from that endpoint on demand (module-level cache) and derives display arrays dynamically, replacing all hardcoded constants.
+
+**Changes:**
+- `src/lib/api.ts` — added `PlanConfigEntry` and `PlanConfigResponse` interfaces; added `fetchPlanConfig()` function (`GET /api/v1/plans`, no auth)
+- `src/lib/constants.ts` — removed `PRICING_PLANS_IN`, `PRICING_PLANS_INTL`, `ALL_PLANS_IN`, `ALL_PLANS_INTL` hardcoded arrays; replaced with four async loader functions (`getPricingPlansIn`, `getPricingPlansIntl`, `getAllPlansIn`, `getAllPlansIntl`) that fetch from the API and transform to `PricingPlan[]`; module-level cache ensures single network request per session; `PLAN_NOTES` and `PLAN_NOTES_SHORT` handle tier-specific copy that is not pricing data
+- `src/sections/Pricing.tsx` — replaced synchronous constant access with `useEffect` loading `getPricingPlansIn` and `getPricingPlansIntl` into component state
+- `src/components/agentspace/NoActivePlanScreen.tsx` — replaced `ALL_PLANS_IN/INTL` imports with `useEffect` loading `getAllPlansIn` and `getAllPlansIntl`
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx` — replaced `ALL_PLANS_IN/INTL` imports with `useEffect` loading `getAllPlansIn` and `getAllPlansIntl`; added `allPlansIn` and `allPlansIntl` state
+- `src/components/admin/AdminSubscriptionsView.tsx` — removed local `PLAN_MINUTES` dict; `ActivateModal` now fetches plan config on mount via `fetchPlanConfig()` and derives `planMinutes` map from the response
+
+---
+
 ## [33] agentspace-rename — 2026-04-05
 
 **Why:** Agentspace names were set at creation and permanently fixed — there was no way to correct a typo or rename a workspace as a team's usage evolved.

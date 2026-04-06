@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, ArrowRight } from 'lucide-react'
 import { fadeInUp, staggerContainer } from '../lib/motion'
-import { PRICING_PLANS_IN, PRICING_PLANS_INTL } from '../lib/constants'
+import { getPricingPlansIn, getPricingPlansIntl } from '../lib/constants'
 import type { PricingPlan } from '../lib/constants'
 import SectionWrapper from '../components/ui/SectionWrapper'
 import Button from '../components/ui/Button'
@@ -85,8 +85,15 @@ export default function Pricing() {
   const [region, setRegion] = useState<Region>('india')
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedTier, setSelectedTier] = useState<string | undefined>()
+  const [plansIn, setPlansIn] = useState<PricingPlan[]>([])
+  const [plansIntl, setPlansIntl] = useState<PricingPlan[]>([])
 
-  const plans = region === 'india' ? PRICING_PLANS_IN : PRICING_PLANS_INTL
+  useEffect(() => {
+    getPricingPlansIn().then(setPlansIn).catch(() => {})
+    getPricingPlansIntl().then(setPlansIntl).catch(() => {})
+  }, [])
+
+  const plans = region === 'india' ? plansIn : plansIntl
 
   const handleGetStarted = (tier: string) => {
     setSelectedTier(tier)
