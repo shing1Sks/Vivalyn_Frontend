@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings, LogOut, Bell, Shield } from 'lucide-react'
+import { Bell, LayoutDashboard, LogOut, Settings, Shield } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useProfile } from '../../context/ProfileContext'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
@@ -8,6 +8,7 @@ import UserAvatar from '../ui/UserAvatar'
 import AgentSpaceSwitcher from './AgentSpaceSwitcher'
 import TokenBalanceBar from './TokenBalanceBar'
 import { usePendingInviteCount } from './InboxPanel'
+import { adminMe } from '../../lib/api'
 
 interface AgentSpaceHeaderProps {
   onSignOut: () => void
@@ -22,7 +23,7 @@ export default function AgentSpaceHeader({
   onSettingsClick,
   onInboxClick,
 }: AgentSpaceHeaderProps) {
-  const { user } = useAuth()
+  const { user, session } = useAuth()
   const { profile } = useProfile()
   const { activeSpace } = useAgentSpace()
   const navigate = useNavigate()
@@ -30,7 +31,21 @@ export default function AgentSpaceHeader({
   const dropdownRef = useRef<HTMLDivElement>(null)
   const pendingCount = usePendingInviteCount()
 
-  const isAdmin = activeSpace?.role === 'admin'
+  const isSpaceAdmin = activeSpace?.role === 'admin'
+
+  const [isVivalynAdmin, setIsVivalynAdmin] = useState(false)
+
+  useEffect(() => {
+    if (!session) return
+    const cached = sessionStorage.getItem('vivalyn_is_admin')
+    if (cached !== null) {
+      setIsVivalynAdmin(cached === 'true')
+      return
+    }
+    adminMe(session.access_token)
+      .then(() => { setIsVivalynAdmin(true); sessionStorage.setItem('vivalyn_is_admin', 'true') })
+      .catch(() => sessionStorage.setItem('vivalyn_is_admin', 'false'))
+  }, [session])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -63,7 +78,7 @@ export default function AgentSpaceHeader({
 
           <AgentSpaceSwitcher onCreateClick={onCreateSpaceClick} />
 
-          {isAdmin && (
+          {isSpaceAdmin && (
             <div className="relative group">
               <Shield className="w-3.5 h-3.5 text-indigo-400 cursor-default" />
               <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 bg-gray-900 text-white text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none duration-[120ms]">
@@ -94,8 +109,8 @@ export default function AgentSpaceHeader({
           {/* Token balance */}
           <TokenBalanceBar />
 
-          {/* Settings (admin only) */}
-          {isAdmin ? (
+          {/* Settings (space admin only) */}
+          {isSpaceAdmin ? (
             <button
               onClick={onSettingsClick}
               title="Settings"
@@ -127,12 +142,21 @@ export default function AgentSpaceHeader({
                 <p className="text-xs text-gray-400 truncate px-2 pb-1 pt-0.5">
                   {user?.email}
                 </p>
+                {isVivalynAdmin && (
+                  <button
+                    onClick={() => { setUserDropdownOpen(false); navigate('/admin') }}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    Admin Panel
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setUserDropdownOpen(false)
                     onSignOut()
                   }}
-                  className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-120 cursor-pointer"
+                  className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
                   Sign out

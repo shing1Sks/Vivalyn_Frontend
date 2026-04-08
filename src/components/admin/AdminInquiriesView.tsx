@@ -171,13 +171,11 @@ export function AdminInquiriesView({ token }: { token: string }) {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Inquiries</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Contact form submissions from the landing page.</p>
-        </div>
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+    <div className="px-6 py-8 max-w-6xl mx-auto w-full">
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900">Inquiries</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Contact form submissions from the landing page.</p>
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mt-4 w-fit">
           {['all', ...STATUS_OPTIONS].map(s => (
             <button
               key={s}

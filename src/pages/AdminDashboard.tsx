@@ -1,28 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { adminMe } from '../lib/api'
-import { AdminOverviewView } from '../components/admin/AdminOverviewView'
-import { AdminOrgView } from '../components/admin/AdminOrgView'
-import { AdminAgentView } from '../components/admin/AdminAgentView'
+import { AdminAnalyticsView } from '../components/admin/AdminAnalyticsView'
+import { AdminHomeView } from '../components/admin/AdminHomeView'
 import { RunDetailPanel } from '../components/admin/RunDetailPanel'
 import { AdminInquiriesView } from '../components/admin/AdminInquiriesView'
 import { AdminSubscriptionsView } from '../components/admin/AdminSubscriptionsView'
 import { AdminDiscountsView } from '../components/admin/AdminDiscountsView'
-import { ChevronRight, Loader2, LogOut, Lock, ArrowLeft, BarChart2, Coins, MessageSquare, CreditCard, Tag } from 'lucide-react'
-
-type View = 'overview' | 'org' | 'agent' | 'inquiries' | 'subscriptions' | 'discounts'
-
-function formatDate(d: Date) {
-  return d.toISOString().split('T')[0]
-}
-
-function defaultDateRange(days: number): { from: string; to: string } {
-  const to = new Date()
-  const from = new Date()
-  from.setDate(from.getDate() - days)
-  return { from: formatDate(from), to: formatDate(to) }
-}
+import AdminSidebar, { type AdminSection } from '../components/admin/AdminSidebar'
+import { ArrowLeft, Loader2, Lock } from 'lucide-react'
 
 function NotAuthorized({ onBack }: { onBack: () => void }) {
   return (
@@ -56,26 +43,23 @@ export default function AdminDashboard() {
   const [notAuthorized, setNotAuthorized] = useState(false)
   const [authChecking, setAuthChecking] = useState(true)
 
-  // View state
-  const [view, setView] = useState<View>('overview')
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
-  const [selectedOrgName, setSelectedOrgName] = useState<string>('')
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
-  const [selectedAgentName, setSelectedAgentName] = useState<string>('')
+  // Section nav
+  const [activeSection, setActiveSection] = useState<AdminSection>('home')
+  const [mounted, setMounted] = useState<Record<AdminSection, boolean>>({
+    home: true,
+    analytics: false,
+    inquiries: false,
+    subscriptions: false,
+    discounts: false,
+  })
+
+  // Run detail overlay
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 
-  // Track which views have ever been visited (keep-alive)
-  const [mounted, setMounted] = useState({ org: false, agent: false, inquiries: false, subscriptions: false, discounts: false })
-
-  // View mode toggle
-  const [viewMode, setViewMode] = useState<'usage' | 'tokens'>('usage')
-
-  // Filter state
-  const initial = defaultDateRange(30)
-  const [dateFrom, setDateFrom] = useState(initial.from)
-  const [dateTo, setDateTo] = useState(initial.to)
-  const [excludeTest, setExcludeTest] = useState(true)
-  const [activeDays, setActiveDays] = useState<7 | 30 | 90>(30)
+  // Pending action: open activate modal in subscriptions
+  const [pendingActivateModal, setPendingActivateModal] = useState(false)
+  // Ref to reset flag after consumption
+  const activateModalConsumedRef = useRef(false)
 
   // Verify admin on mount
   useEffect(() => {
@@ -95,27 +79,19 @@ export default function AdminDashboard() {
       })
   }, [authLoading, session, navigate])
 
-  function setQuickRange(days: 7 | 30 | 90) {
-    setActiveDays(days)
-    const r = defaultDateRange(days)
-    setDateFrom(r.from)
-    setDateTo(r.to)
+  function navigateTo(section: AdminSection) {
+    setActiveSection(section)
+    setMounted((m) => ({ ...m, [section]: true }))
   }
 
-  function drillToOrg(orgId: string, orgName: string) {
-    setSelectedOrgId(orgId)
-    setSelectedOrgName(orgName)
-    setSelectedAgentId(null)
-    setSelectedAgentName('')
-    setMounted((m) => ({ ...m, org: true }))
-    setView('org')
+  function handleActivateSubscription() {
+    activateModalConsumedRef.current = false
+    setPendingActivateModal(true)
+    navigateTo('subscriptions')
   }
 
-  function drillToAgent(agentId: string, agentName: string) {
-    setSelectedAgentId(agentId)
-    setSelectedAgentName(agentName)
-    setMounted((m) => ({ ...m, agent: true }))
-    setView('agent')
+  function handleActivateModalConsumed() {
+    setPendingActivateModal(false)
   }
 
   if (authLoading || authChecking) {
@@ -135,220 +111,60 @@ export default function AdminDashboard() {
   const token = session!.access_token
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Top bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setView('overview')}
-            className="text-sm font-semibold text-gray-900 hover:text-indigo-600 transition-colors duration-[120ms]"
-          >
-            Admin
-          </button>
-          {view !== 'overview' && (
-            <>
-              <ChevronRight className="w-4 h-4 text-gray-300" />
-              <button
-                onClick={() => setView('overview')}
-                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-[120ms]"
-              >
-                Overview
-              </button>
-            </>
-          )}
-          {(view === 'org' || view === 'agent') && selectedOrgName && (
-            <>
-              <ChevronRight className="w-4 h-4 text-gray-300" />
-              <button
-                onClick={() => setView('org')}
-                className="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-[120ms]"
-              >
-                {selectedOrgName}
-              </button>
-            </>
-          )}
-          {view === 'agent' && selectedAgentName && (
-            <>
-              <ChevronRight className="w-4 h-4 text-gray-300" />
-              <span className="text-sm text-gray-700 font-medium">{selectedAgentName}</span>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-1 ml-6">
-          {([
-            { id: 'overview', label: 'Analytics' },
-            { id: 'inquiries', label: 'Inquiries', icon: <MessageSquare className="w-3.5 h-3.5" /> },
-            { id: 'subscriptions', label: 'Subscriptions', icon: <CreditCard className="w-3.5 h-3.5" /> },
-            { id: 'discounts', label: 'Discounts', icon: <Tag className="w-3.5 h-3.5" /> },
-          ] as { id: View; label: string; icon?: React.ReactNode }[]).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setView(tab.id)
-                if (tab.id === 'inquiries' || tab.id === 'subscriptions' || tab.id === 'discounts') {
-                  setMounted(m => ({ ...m, [tab.id]: true }))
-                }
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-[120ms] ${
-                view === tab.id
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </div>
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+      {/* Sidebar */}
+      <AdminSidebar
+        activeSection={activeSection}
+        onNavigate={navigateTo}
+        onSignOut={signOut}
+      />
 
-        <button
-          onClick={signOut}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors duration-[120ms] ml-auto"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          Sign out
-        </button>
-      </div>
-
-      {/* Filter bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-          {([7, 30, 90] as const).map((d) => (
-            <button
-              key={d}
-              onClick={() => setQuickRange(d)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors duration-[120ms] ${
-                activeDays === d
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => { setDateFrom(e.target.value); setActiveDays(30) }}
-            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-          <span className="text-xs text-gray-400">to</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => { setDateTo(e.target.value); setActiveDays(30) }}
-            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Usage / Tokens mode toggle */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 ml-auto">
-          {(['usage', 'tokens'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setViewMode(m)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors duration-[120ms] ${
-                viewMode === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              {m === 'usage' ? <BarChart2 className="w-3 h-3" /> : <Coins className="w-3 h-3" />}
-              {m === 'usage' ? 'Usage' : 'Tokens'}
-            </button>
-          ))}
-        </div>
-
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <div
-            onClick={() => setExcludeTest((v) => !v)}
-            className={`w-8 h-4.5 rounded-full relative transition-colors duration-[120ms] cursor-pointer ${
-              excludeTest ? 'bg-indigo-600' : 'bg-gray-300'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform duration-[120ms] ${
-                excludeTest ? 'translate-x-4' : 'translate-x-0.5'
-              }`}
-            />
-          </div>
-          <span className="text-xs text-gray-600">Exclude test sessions</span>
-        </label>
-      </div>
-
-      {/* Content — keep-alive: all mounted views stay in DOM, only active one is visible */}
-      <div className="px-6 py-6 max-w-7xl mx-auto">
-        {/* Overview — always mounted */}
-        <div className={view !== 'overview' ? 'hidden' : ''}>
-          <AdminOverviewView
-            token={token}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            excludeTest={excludeTest}
-            viewMode={viewMode}
-            onSelectOrg={drillToOrg}
-          />
-        </div>
-
-        {/* Org view — mounted on first visit, kept alive */}
-        {mounted.org && selectedOrgId && (
-          <div className={view !== 'org' ? 'hidden' : ''}>
-            <AdminOrgView
-              key={selectedOrgId}
+      {/* Main content — offset by sidebar width */}
+      <div className="ml-55 flex-1 overflow-y-auto">
+        {/* Home */}
+        <div className={activeSection !== 'home' ? 'hidden' : ''}>
+          {mounted.home && (
+            <AdminHomeView
               token={token}
-              agentspaceId={selectedOrgId}
-              orgName={selectedOrgName}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              excludeTest={excludeTest}
-              viewMode={viewMode}
-              onSelectAgent={drillToAgent}
-              onBack={() => setView('overview')}
+              onNavigate={navigateTo}
+              onActivateSubscription={handleActivateSubscription}
             />
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Agent view — mounted on first visit, kept alive */}
-        {mounted.agent && selectedAgentId && (
-          <div className={view !== 'agent' ? 'hidden' : ''}>
-            <AdminAgentView
-              key={selectedAgentId}
+        {/* Analytics */}
+        <div className={activeSection !== 'analytics' ? 'hidden' : ''}>
+          {mounted.analytics && (
+            <AdminAnalyticsView
               token={token}
-              agentId={selectedAgentId}
-              agentName={selectedAgentName}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              excludeTest={excludeTest}
-              viewMode={viewMode}
               onSelectRun={setSelectedRunId}
-              onBack={() => setView('org')}
             />
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Inquiries */}
-        {mounted.inquiries && (
-          <div className={view !== 'inquiries' ? 'hidden' : ''}>
-            <AdminInquiriesView token={token} />
-          </div>
-        )}
+        <div className={activeSection !== 'inquiries' ? 'hidden' : ''}>
+          {mounted.inquiries && <AdminInquiriesView token={token} />}
+        </div>
 
         {/* Subscriptions */}
-        {mounted.subscriptions && (
-          <div className={view !== 'subscriptions' ? 'hidden' : ''}>
-            <AdminSubscriptionsView token={token} />
-          </div>
-        )}
+        <div className={activeSection !== 'subscriptions' ? 'hidden' : ''}>
+          {mounted.subscriptions && (
+            <AdminSubscriptionsView
+              token={token}
+              openActivateModal={pendingActivateModal}
+              onActivateModalConsumed={handleActivateModalConsumed}
+            />
+          )}
+        </div>
 
         {/* Discounts */}
-        {mounted.discounts && (
-          <div className={view !== 'discounts' ? 'hidden' : ''}>
-            <AdminDiscountsView token={token} />
-          </div>
-        )}
+        <div className={activeSection !== 'discounts' ? 'hidden' : ''}>
+          {mounted.discounts && <AdminDiscountsView token={token} />}
+        </div>
       </div>
 
+      {/* Run detail overlay — global, rendered at dashboard level */}
       <RunDetailPanel
         token={token}
         runId={selectedRunId}

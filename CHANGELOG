@@ -1,5 +1,23 @@
 # Changelog
 
+## [35] admin-panel-redesign — 2026-04-09
+
+**Why:** The admin panel had grown organically from a usage/cost estimator into a multi-feature tool with no coherent layout. The date range filter bar (`7d/30d/90d + date inputs`) appeared on every tab including Inquiries, Subscriptions, and Discounts where it had no effect. Navigation mixed a flat top-tab bar with a breadcrumb simultaneously. There was no home/entry screen — the panel opened straight to analytics detail. Activating a subscription required knowing the exact agentspace UUID with no search. The flat tab structure was not scalable.
+
+**What:** Full admin panel redesign to a left-sidebar SaaS layout. Date filter scoped exclusively to the Analytics section. New Home entry screen with live KPI cards, quick actions, and recent activity. Subscription activation replaced the UID input field with a searchable agentspace picker (by name) with a UUID fallback, admin profile display in results, and an agentspace detail card showing current plan/balance/trial eligibility. Billing cycle selector removed — subscriptions are monthly recurring until cancelled, so period is server-set. Admin Panel link added to the AgentSpace header avatar dropdown for super-admins (one-time `adminMe` check cached in `sessionStorage`).
+
+**Changes:**
+- `src/components/admin/AdminSidebar.tsx` — **new**: fixed left sidebar (220px) with Home / Analytics / Inquiries / Subscriptions / Discounts nav items and Sign out; active state uses `bg-indigo-50 text-indigo-700`
+- `src/components/admin/AdminAnalyticsView.tsx` — **new**: wrapper that owns all analytics state (date filter, drill-down); renders date filter bar + breadcrumb at the top of analytics content only — not visible in any other section
+- `src/components/admin/AdminHomeView.tsx` — **new**: entry screen; fetches 4 KPI stats in parallel (`Promise.all`); shows Active Subscriptions, Open Inquiries, Active Discount Codes, Sessions (30d); 3 quick-action buttons; recent Inquiries + Subscriptions lists with "View all" links
+- `src/pages/AdminDashboard.tsx` — major rewrite: replaced flat top-tab bar + global filter bar with sidebar layout (`flex h-screen`); `activeSection` replaces `view`; date filter state removed (moved to `AdminAnalyticsView`); drill-down state removed; keep-alive pattern preserved for all 5 sections; `pendingActivateModal` flag wires Home quick-action to Subscriptions modal
+- `src/components/admin/AdminSubscriptionsView.tsx` — `ActivateModal` redesigned: agentspace UID input replaced with `AgentspacePickerWidget` (search-by-name dropdown + UUID paste mode toggle); `AgentspaceDetailCard` fetches and displays current plan, status, balance, period, and trial eligibility after selection; admin name/email shown in search results; billing cycle picker removed — `period_start`/`period_end` no longer sent from frontend; `onSuccess` now calls `load()` to refresh the full list (prevents crash from missing computed fields like `balance`/`agentspace_name` on the raw activate response)
+- `src/components/admin/AdminInquiriesView.tsx` — status filter tabs moved from top-right header to below the section title (left-aligned, `w-fit`); consistent section padding added
+- `src/components/agentspace/AgentSpaceHeader.tsx` — added `isVivalynAdmin` state; calls `adminMe()` once on session load, caches result in `sessionStorage` key `vivalyn_is_admin`; "Admin Panel" link with `LayoutDashboard` icon added to user dropdown (super-admins only); renamed `isAdmin` → `isSpaceAdmin` to distinguish agentspace-role admin from Vivalyn super-admin
+- `src/lib/api.ts` — added `AgentspaceSearchResult` (with `admin_name`, `admin_email`), `AgentspaceDetails` interfaces; added `searchAdminAgentspaces()` and `fetchAdminAgentspaceDetails()`; `activateSubscription` payload: `period_start`/`period_end` made optional
+
+---
+
 ## [34] plan-config-unified — 2026-04-07
 
 **Why:** Plan pricing, minutes, and cost floors were duplicated across multiple frontend and backend files with no single source of truth. `constants.ts` held four hardcoded plan arrays, `AdminSubscriptionsView.tsx` had its own `PLAN_MINUTES` dict, and the backend had the same data scattered across `admin.py` and `contact.py` — meaning any price change required edits in 5+ places with no guarantee of consistency.

@@ -1058,8 +1058,8 @@ export async function activateSubscription(
     agentspace_id: string;
     plan_tier: string;
     currency: string;
-    period_start: string;
-    period_end: string;
+    period_start?: string;
+    period_end?: string;
     requester_email?: string;
     notes?: string;
     discount_code_id?: string;
@@ -1226,6 +1226,44 @@ export async function projectDiscount(
   const res = await fetch(`${BASE}/api/v1/admin/discounts/project?${q}`, { headers: adminHeaders(token) });
   if (!res.ok) throw new ApiError("Failed to project discount", res.status);
   return res.json();
+}
+
+// ── Admin agentspace search ───────────────────────────────────────────────────
+
+export interface AgentspaceSearchResult {
+  id: string
+  name: string
+  admin_name: string
+  admin_email: string
+}
+
+export interface AgentspaceDetails {
+  id: string
+  name: string
+  admin_name: string
+  admin_email: string
+  subscription: {
+    plan_tier: string
+    status: string
+    period_start: string | null
+    period_end: string | null
+    minutes_included: number
+    currency: string
+  } | null
+  balance: number
+  had_trial: boolean
+}
+
+export async function searchAdminAgentspaces(token: string, q: string): Promise<AgentspaceSearchResult[]> {
+  const res = await fetch(`${BASE}/api/v1/admin/agentspaces/search?q=${encodeURIComponent(q)}`, { headers: adminHeaders(token) })
+  if (!res.ok) throw new ApiError('Search failed', res.status)
+  return res.json()
+}
+
+export async function fetchAdminAgentspaceDetails(token: string, agentspaceId: string): Promise<AgentspaceDetails> {
+  const res = await fetch(`${BASE}/api/v1/admin/agentspaces/${agentspaceId}/details`, { headers: adminHeaders(token) })
+  if (!res.ok) throw new ApiError('Failed to fetch agentspace details', res.status)
+  return res.json()
 }
 
 // ── Plan config ───────────────────────────────────────────────────────────────
