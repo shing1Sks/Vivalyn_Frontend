@@ -21,10 +21,15 @@ Refer to `UI.md` for the full design token and visual style spec.
 src/
   pages/              # Route-level pages — thin orchestrators, minimal logic
   components/
-    ui/               # Global reusable primitives: Button, Card, Badge, Logo, UserAvatar, etc.
+    ui/               # Global reusable primitives: Button, Card, Badge, Logo, UserAvatar,
+                      #   Accordion, SectionWrapper, InquiryModal, etc.
     layout/           # Header, Footer
     agentspace/       # AgentSpace feature components
+      wizard/         # Agent builder wizard — PlannerFlow, AgentConfigureView, LanguageVoiceSelector
     agentlive/        # Live session components
+    admin/            # Admin dashboard views — AdminSidebar, AdminOverviewView, AdminOrgView,
+                      #   AdminAgentView, AdminSubscriptionsView, AdminDiscountsView,
+                      #   AdminInquiriesView, RunDetailPanel, UsageCharts, PricingCalculator
   sections/           # Landing page sections only (Hero, Pricing, FAQ, etc.)
   context/            # Global state providers
   hooks/              # Shared custom hooks
@@ -44,9 +49,14 @@ src/
 | `/auth` | Auth | public — supports `?next=` redirect |
 | `/agent-space` | AgentSpace | authenticated |
 | `/invite/:inviteId` | InviteAccept | public |
-| `/agent/:agentId` | AgentLive | public |
+| `/agent/:agentId` | AgentLive | public — supports `?mode=test` (test mode requires JWT) |
+| `/admin` | AdminDashboard | admin-only — verified via `adminMe()` API call |
 
-Provider nesting in `main.tsx`: `AuthProvider > ProfileProvider > App`
+**Provider nesting:**
+- Global (`main.tsx`): `AuthProvider > ProfileProvider > App`
+- Page-level (`AgentSpace.tsx` only): `AgentSpaceProvider > TokenProvider > <content>`
+
+`AgentSpaceProvider` and `TokenProvider` are NOT globally available — only mounted on the `/agent-space` route.
 
 ---
 
@@ -56,7 +66,8 @@ Provider nesting in `main.tsx`: `AuthProvider > ProfileProvider > App`
 |---|---|---|
 | `useAuth()` | `user`, `session`, `loading`, `signInWithEmail`, `signUpWithEmail`, `signInWithGoogle`, `signInWithMicrosoft`, `signOut` | Supabase session, OAuth redirects to `/agent-space` |
 | `useProfile()` | `profile: UserProfile \| null`, `profileLoading` | Auto sign-out on 401 (deleted user) |
-| `useAgentSpace()` | `spaces`, `activeSpace`, `spacesLoading`, `spacesError`, `switchSpace`, `createSpace`, `refetchSpaces` | Persists last space in `localStorage` key `vivalyn_last_agentspace_id` |
+| `useAgentSpace()` | `spaces`, `activeSpace`, `spacesLoading`, `spacesError`, `switchSpace`, `createSpace`, `refetchSpaces` | Page-level (AgentSpace.tsx only). Persists last space in `localStorage` key `vivalyn_last_agentspace_id` |
+| `useTokenBalance()` | `balance: number \| null`, `lowThreshold: number` (default 10), `balanceLoading`, `refetchBalance` | Page-level (AgentSpace.tsx only). Depends on `useAgentSpace()` for active space |
 
 ---
 
@@ -68,7 +79,15 @@ Provider nesting in `main.tsx`: `AuthProvider > ProfileProvider > App`
 - Error class: `ApiError extends Error` with `.status: number`
 - Pattern: `fetch → check res.ok → parse json → return typed result`
 
-Key function groups: `profile`, `agentspaces`, `members`, `invites` (agentspace-scoped + inbox), `voices`, `agents`, `runs`
+Key function groups: `profile`, `agentspaces`, `members`, `invites` (agentspace-scoped + inbox), `voices`, `agents`, `evaluation/planning` (`generateEvaluationCriteria`, `planAgent`, `compileAgentPlan`, `rewriteAgentSection`), `runs`, `tokens`, `subscriptions`, `plans`, `inquiries`, `admin`, `discounts`
+
+---
+
+## Custom Hooks (`hooks/`)
+
+| Hook | File | Description |
+|---|---|---|
+| `useAgentSession(opts)` | `hooks/useAgentSession.ts` | Manages the WebSocket live session lifecycle. Phases: `idle → connecting → ready → active → ended`. Returns `{ phase, agentState, transcript, micEnabled, toggleMic, endSession, error, sessionReport }`. Types: `AgentState`, `SessionPhase`, `TranscriptEntry`, `SessionReport`. |
 
 ---
 
