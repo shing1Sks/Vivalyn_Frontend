@@ -482,13 +482,41 @@ export interface Agent {
   created_at: string;
   agentspace_id: string;
   agent_name: string;
-  agent_prompt: AgentPromptSpec;
+  agent_prompt: AgentPromptSpec | QnAPromptSpec;
   agent_language: string;
   agent_voice: string;
   created_by_id: string;
   created_by_name: string;
   agent_status: "live" | "idle";
   transcript_evaluation_metrics?: EvaluationMetrics | null;
+  agent_type: "general" | "qna";
+}
+
+// ── QnA Types ─────────────────────────────────────────────────────────────────
+
+export interface QnAQuestion {
+  id: string;
+  text: string;
+  cross_question_enabled: boolean;
+}
+
+export interface QnAQuestionBank {
+  fixed: QnAQuestion[];
+  randomized_pool: QnAQuestion[];
+  randomized_count: number;
+}
+
+export interface QnAPromptSpec {
+  identity_and_persona: string;
+  session_brief: string;
+  behavior_rules: Record<string, string>; // opening, transition, closing
+  guardrails: string[];
+  question_bank: QnAQuestionBank;
+}
+
+export interface QnACompileResult extends Omit<QnAPromptSpec, "question_bank"> {
+  agent_name: string;
+  question_bank: QnAQuestionBank;
 }
 
 export async function saveAgent(
@@ -591,6 +619,109 @@ export async function toggleAgentStatus(
     const err = await res.json().catch(() => ({}));
     throw new ApiError(
       (err as { detail?: string }).detail ?? "Failed to update status",
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+// ── QnA Agent API ─────────────────────────────────────────────────────────────
+
+export async function generateQnAQuestions(
+  accessToken: string,
+  payload: { context: string; resource_text?: string },
+): Promise<{ questions: Array<{ text: string; type: "fixed" | "randomized"; cross_question_enabled: boolean }> }> {
+  const res = await fetch(`${BASE}/api/v1/agents/qna/generate-questions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (err as { detail?: string }).detail ?? "Failed to generate questions",
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export async function compileQnAAgent(
+  accessToken: string,
+  payload: {
+    question_bank: QnAQuestionBank;
+    tone: string;
+    feedback_mode: "silent" | "feedback";
+    session_context: string;
+  },
+): Promise<QnACompileResult> {
+  const res = await fetch(`${BASE}/api/v1/agents/qna/compile`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (err as { detail?: string }).detail ?? "Failed to compile QnA agent",
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export async function saveQnAAgent(
+  accessToken: string,
+  agentspaceId: string,
+  payload: {
+    agent_name: string;
+    agent_prompt: QnAPromptSpec;
+    agent_language: string;
+    agent_voice: string;
+    transcript_evaluation_metrics?: EvaluationMetrics;
+  },
+): Promise<Agent> {
+  const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/qna-agents`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (err as { detail?: string }).detail ?? "Failed to save QnA agent",
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export async function updateAgentQuestionBank(
+  accessToken: string,
+  agentId: string,
+  question_bank: QnAQuestionBank,
+): Promise<Agent> {
+  const res = await fetch(`${BASE}/api/v1/agents/${agentId}/question-bank`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ question_bank }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (err as { detail?: string }).detail ?? "Failed to update question bank",
       res.status,
     );
   }

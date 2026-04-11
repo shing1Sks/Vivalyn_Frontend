@@ -1,0 +1,276 @@
+import { useState } from 'react'
+import { ArrowLeftRight, ChevronDown, ChevronUp, Plus, Trash2, Zap } from 'lucide-react'
+import type { QnAQuestion, QnAQuestionBank } from '../../../lib/api'
+
+// ── Question row ───────────────────────────────────────────────────────────────
+
+interface QuestionRowProps {
+  question: QnAQuestion
+  showCrossToggle: boolean
+  onEdit: (text: string) => void
+  onDelete: () => void
+  onMove: () => void
+  onToggleCross?: () => void
+}
+
+function QuestionRow({ question, showCrossToggle, onEdit, onDelete, onMove, onToggleCross }: QuestionRowProps) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(question.text)
+
+  function commitEdit() {
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== question.text) onEdit(trimmed)
+    setEditing(false)
+  }
+
+  return (
+    <div className="flex items-start gap-2 group bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:border-gray-300 duration-[120ms]">
+      {editing ? (
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit() } if (e.key === 'Escape') { setDraft(question.text); setEditing(false) } }}
+          rows={2}
+          className="flex-1 text-sm text-gray-900 resize-none border-none outline-none bg-transparent"
+        />
+      ) : (
+        <p
+          onClick={() => setEditing(true)}
+          className="flex-1 text-sm text-gray-800 cursor-text leading-relaxed"
+        >
+          {question.text}
+        </p>
+      )}
+
+      <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 duration-[120ms]">
+        {showCrossToggle && onToggleCross && (
+          <button
+            onClick={onToggleCross}
+            title={question.cross_question_enabled ? 'Disable cross-question' : 'Enable cross-question follow-up'}
+            className={`p-1 rounded duration-[120ms] ${question.cross_question_enabled ? 'text-indigo-600 bg-indigo-50' : 'text-gray-400 hover:text-indigo-500'}`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <button
+          onClick={onMove}
+          title="Move to other pool"
+          className="p-1 rounded text-gray-400 hover:text-gray-700 duration-[120ms]"
+        >
+          <ArrowLeftRight className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onDelete}
+          title="Delete question"
+          className="p-1 rounded text-gray-400 hover:text-red-500 duration-[120ms]"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Props ──────────────────────────────────────────────────────────────────────
+
+interface Props {
+  initialQuestions: Array<{ text: string; type: 'fixed' | 'randomized'; cross_question_enabled: boolean }>
+  onContinue: (bank: QnAQuestionBank) => void
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
+export default function QnAQuestionReview({ initialQuestions, onContinue }: Props) {
+  const [fixed, setFixed] = useState<QnAQuestion[]>(() =>
+    initialQuestions
+      .filter(q => q.type === 'fixed')
+      .map(q => ({ id: crypto.randomUUID(), text: q.text, cross_question_enabled: q.cross_question_enabled }))
+  )
+  const [randomized, setRandomized] = useState<QnAQuestion[]>(() =>
+    initialQuestions
+      .filter(q => q.type === 'randomized')
+      .map(q => ({ id: crypto.randomUUID(), text: q.text, cross_question_enabled: q.cross_question_enabled }))
+  )
+  const [randomizedCount, setRandomizedCount] = useState(Math.min(5, initialQuestions.filter(q => q.type === 'randomized').length))
+
+  // ── Fixed mutations ──────────────────────────────────────────────────────────
+
+  function editFixed(id: string, text: string) {
+    setFixed(prev => prev.map(q => q.id === id ? { ...q, text } : q))
+  }
+  function deleteFixed(id: string) {
+    setFixed(prev => prev.filter(q => q.id !== id))
+  }
+  function moveToRandomized(id: string) {
+    const q = fixed.find(q => q.id === id)
+    if (!q) return
+    setFixed(prev => prev.filter(q => q.id !== id))
+    setRandomized(prev => [...prev, q])
+  }
+  function addFixed() {
+    setFixed(prev => [...prev, { id: crypto.randomUUID(), text: 'New question', cross_question_enabled: false }])
+  }
+
+  // ── Randomized mutations ─────────────────────────────────────────────────────
+
+  function editRandomized(id: string, text: string) {
+    setRandomized(prev => prev.map(q => q.id === id ? { ...q, text } : q))
+  }
+  function deleteRandomized(id: string) {
+    setRandomized(prev => prev.filter(q => q.id !== id))
+  }
+  function toggleCross(id: string) {
+    setRandomized(prev => prev.map(q => q.id === id ? { ...q, cross_question_enabled: !q.cross_question_enabled } : q))
+  }
+  function moveToFixed(id: string) {
+    const q = randomized.find(q => q.id === id)
+    if (!q) return
+    setRandomized(prev => prev.filter(q => q.id !== id))
+    setFixed(prev => [...prev, { ...q, cross_question_enabled: false }])
+  }
+  function addRandomized() {
+    setRandomized(prev => [...prev, { id: crypto.randomUUID(), text: 'New question', cross_question_enabled: false }])
+  }
+
+  // ── Validation ───────────────────────────────────────────────────────────────
+
+  const validCount = Math.min(randomizedCount, randomized.length)
+  const canContinue = fixed.length >= 1 && randomized.length >= 1 && validCount >= 1
+
+  function handleContinue() {
+    if (!canContinue) return
+    onContinue({ fixed, randomized_pool: randomized, randomized_count: validCount })
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto px-6 py-8">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-1">Review your question bank</h2>
+          <p className="text-sm text-gray-500 mb-6">
+            Click any question to edit it. Use the move button to switch between pools. The lightning bolt enables a follow-up probe after that question.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Fixed bank */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Fixed Questions</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Asked every session, in this order</p>
+                </div>
+                <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">
+                  {fixed.length}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {fixed.map(q => (
+                  <QuestionRow
+                    key={q.id}
+                    question={q}
+                    showCrossToggle={false}
+                    onEdit={text => editFixed(q.id, text)}
+                    onDelete={() => deleteFixed(q.id)}
+                    onMove={() => moveToRandomized(q.id)}
+                  />
+                ))}
+                <button
+                  onClick={addFixed}
+                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-indigo-600 duration-[120ms] py-1.5 px-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add question
+                </button>
+              </div>
+            </div>
+
+            {/* Randomized pool */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Randomized Pool</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Sampled randomly each session</p>
+                </div>
+                <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">
+                  {randomized.length}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {randomized.map(q => (
+                  <QuestionRow
+                    key={q.id}
+                    question={q}
+                    showCrossToggle={true}
+                    onEdit={text => editRandomized(q.id, text)}
+                    onDelete={() => deleteRandomized(q.id)}
+                    onMove={() => moveToFixed(q.id)}
+                    onToggleCross={() => toggleCross(q.id)}
+                  />
+                ))}
+                <button
+                  onClick={addRandomized}
+                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-indigo-600 duration-[120ms] py-1.5 px-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add question
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Randomized count */}
+          <div className="mt-6 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5">
+            <span className="text-sm text-gray-700 flex-1">Questions picked per session from the randomized pool</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setRandomizedCount(c => Math.max(1, c - 1))}
+                disabled={randomizedCount <= 1}
+                className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              <span className="w-8 text-center text-sm font-semibold text-gray-900">{validCount}</span>
+              <button
+                onClick={() => setRandomizedCount(c => Math.min(randomized.length, c + 1))}
+                disabled={randomizedCount >= randomized.length}
+                className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
+              >
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
+            <div className="flex items-center gap-1.5">
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+              Move between pools
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5" />
+              Enable follow-up probe
+            </div>
+          </div>
+
+          <button
+            onClick={handleContinue}
+            disabled={!canContinue}
+            className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold duration-[120ms] ${
+              canContinue
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -12,6 +12,7 @@ import {
   Copy,
   Download,
   Link2,
+  ListChecks,
   Loader2,
   Plus,
   Search,
@@ -30,6 +31,8 @@ import AgentSpaceSettingsPanel from '../components/agentspace/AgentSpaceSettings
 import InboxPanel from '../components/agentspace/InboxPanel'
 import CreateAgentWizard from '../components/agentspace/CreateAgentWizard'
 import AgentConfigureView from '../components/agentspace/wizard/AgentConfigureView'
+import CreateQnAAgentWizard from '../components/agentspace/wizard/CreateQnAAgentWizard'
+import QnAConfigureView from '../components/agentspace/wizard/QnAConfigureView'
 import {
   fetchAgents,
   fetchAgentspaceRuns,
@@ -149,6 +152,9 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${agent.agent_type === 'qna' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-100 text-gray-500'}`}>
+              {agent.agent_type === 'qna' ? 'QnA' : 'General'}
+            </span>
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full flex items-center gap-1 ${isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
               {isLive ? 'Live' : 'Idle'}
@@ -179,7 +185,7 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
       </div>
 
       {/* ── Desktop row (≥ md) ───────────────────────────────────────────── */}
-      <div className="hidden md:grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-3 items-center hover:bg-gray-50/60 duration-[120ms]">
+      <div className="hidden md:grid grid-cols-[1fr_68px_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-3 items-center hover:bg-gray-50/60 duration-[120ms]">
         {/* Agent name + persona */}
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
@@ -192,6 +198,11 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
             )}
           </div>
         </div>
+
+        {/* Type */}
+        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full w-fit ${agent.agent_type === 'qna' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-100 text-gray-500'}`}>
+          {agent.agent_type === 'qna' ? 'QnA' : 'General'}
+        </span>
 
         {/* Language */}
         <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 w-fit">
@@ -644,7 +655,9 @@ function AgentSpaceContent() {
   const [createOpen, setCreateOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inboxOpen, setInboxOpen] = useState(false)
+  const [typeSelectOpen, setTypeSelectOpen] = useState(false)
   const [createAgentOpen, setCreateAgentOpen] = useState(false)
+  const [createQnAAgentOpen, setCreateQnAAgentOpen] = useState(false)
   const [dashTab, setDashTab] = useState<DashTab>('agents')
 
   const [agents, setAgents] = useState<Agent[]>([])
@@ -726,6 +739,13 @@ function AgentSpaceContent() {
 
   function handleWizardClose() {
     setCreateAgentOpen(false)
+    if (activeSpace && session) {
+      fetchAgents(session.access_token, activeSpace.id).then(setAgents).catch(() => {})
+    }
+  }
+
+  function handleQnAWizardClose() {
+    setCreateQnAAgentOpen(false)
     if (activeSpace && session) {
       fetchAgents(session.access_token, activeSpace.id).then(setAgents).catch(() => {})
     }
@@ -875,7 +895,7 @@ function AgentSpaceContent() {
                     )}
 
                     <button
-                      onClick={() => setCreateAgentOpen(true)}
+                      onClick={() => setTypeSelectOpen(true)}
                       className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms] w-full md:w-auto justify-center"
                     >
                       <Plus className="w-4 h-4" />
@@ -912,7 +932,7 @@ function AgentSpaceContent() {
                     }
 
                     if (agents.length === 0) {
-                      return <EmptyAgentsState onCreate={() => setCreateAgentOpen(true)} />
+                      return <EmptyAgentsState onCreate={() => setTypeSelectOpen(true)} />
                     }
 
                     if (filteredAgents.length === 0) {
@@ -933,8 +953,9 @@ function AgentSpaceContent() {
                       <div className="flex flex-col gap-3">
                         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                           {/* Table header — desktop only */}
-                          <div className="hidden md:grid grid-cols-[1fr_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+                          <div className="hidden md:grid grid-cols-[1fr_68px_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Agent</span>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</span>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Language</span>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</span>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</span>
@@ -1027,11 +1048,82 @@ function AgentSpaceContent() {
         onClose={() => setInboxOpen(false)}
       />
 
+      {/* Agent type selection modal */}
+      <AnimatePresence>
+        {typeSelectOpen && (
+          <>
+            <motion.div
+              key="type-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-black/30 z-50"
+              onClick={() => setTypeSelectOpen(false)}
+            />
+            <motion.div
+              key="type-modal"
+              initial={{ opacity: 0, scale: 0.97, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            >
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-base font-semibold text-gray-900">What kind of agent do you want to create?</h2>
+                  <button
+                    onClick={() => setTypeSelectOpen(false)}
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 duration-[120ms]"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => { setTypeSelectOpen(false); setCreateAgentOpen(true) }}
+                    className="flex flex-col items-start gap-3 p-4 rounded-xl border border-gray-200 text-left hover:border-gray-300 hover:bg-gray-50 duration-[120ms]"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
+                      <Bot className="w-5 h-5 text-gray-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">General Agent</p>
+                      <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">Flexible AI conversation agent with open-ended prompting</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { setTypeSelectOpen(false); setCreateQnAAgentOpen(true) }}
+                    className="flex flex-col items-start gap-3 p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 text-left hover:border-indigo-300 hover:bg-indigo-50 duration-[120ms]"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center">
+                      <ListChecks className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">QnA Assessment Agent</p>
+                      <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">Structured question bank with fixed and randomized pools</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {activeSpace && (
         <CreateAgentWizard
           open={createAgentOpen}
           agentspaceId={activeSpace.id}
           onClose={handleWizardClose}
+        />
+      )}
+
+      {activeSpace && (
+        <CreateQnAAgentWizard
+          open={createQnAAgentOpen}
+          agentspaceId={activeSpace.id}
+          onClose={handleQnAWizardClose}
         />
       )}
 
@@ -1067,25 +1159,29 @@ function AgentSpaceContent() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <AgentConfigureView
-                spec={configuringAgent.agent_prompt}
-                agentId={configuringAgent.id}
-                agentLanguage={configuringAgent.agent_language}
-                agentVoice={configuringAgent.agent_voice}
-                evaluationMetrics={configuringAgent.transcript_evaluation_metrics}
-                onSaved={spec => {
-                  setConfiguringAgent(prev => prev ? { ...prev, agent_prompt: spec } : null)
-                  setAgents(prev =>
-                    prev.map(a => a.id === configuringAgent.id ? { ...a, agent_prompt: spec } : a),
-                  )
-                }}
-                onAgentUpdated={updates => {
-                  setConfiguringAgent(prev => prev ? { ...prev, ...updates } : null)
-                  setAgents(prev =>
-                    prev.map(a => a.id === configuringAgent!.id ? { ...a, ...updates } : a),
-                  )
-                }}
-              />
+              {configuringAgent.agent_type === 'qna' ? (
+                <QnAConfigureView agent={configuringAgent} />
+              ) : (
+                <AgentConfigureView
+                  spec={configuringAgent.agent_prompt}
+                  agentId={configuringAgent.id}
+                  agentLanguage={configuringAgent.agent_language}
+                  agentVoice={configuringAgent.agent_voice}
+                  evaluationMetrics={configuringAgent.transcript_evaluation_metrics}
+                  onSaved={spec => {
+                    setConfiguringAgent(prev => prev ? { ...prev, agent_prompt: spec } : null)
+                    setAgents(prev =>
+                      prev.map(a => a.id === configuringAgent.id ? { ...a, agent_prompt: spec } : a),
+                    )
+                  }}
+                  onAgentUpdated={updates => {
+                    setConfiguringAgent(prev => prev ? { ...prev, ...updates } : null)
+                    setAgents(prev =>
+                      prev.map(a => a.id === configuringAgent!.id ? { ...a, ...updates } : a),
+                    )
+                  }}
+                />
+              )}
             </div>
           </motion.div>
         )}

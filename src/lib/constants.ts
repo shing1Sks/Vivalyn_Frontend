@@ -8,6 +8,10 @@ import {
   MessageSquare,
   Layers,
   Shuffle,
+  ListChecks,
+  FileText,
+  Repeat2,
+  GitBranch,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -58,6 +62,32 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
         title: 'Low cost',
         description:
           'Fraction of human effort price; unlimited scalability.',
+      },
+    ],
+  },
+  {
+    title: 'QnA Assessment Agents',
+    comingSoon: false,
+    features: [
+      {
+        icon: ListChecks,
+        title: 'Structured question banks',
+        description: 'Fixed core questions every session, plus a randomized pool for variety.',
+      },
+      {
+        icon: FileText,
+        title: 'AI question generation',
+        description: 'Upload your resources — syllabi, docs, PDFs — and let the AI draft the question bank.',
+      },
+      {
+        icon: Repeat2,
+        title: 'Reproducible assessments',
+        description: 'Same rubric, same structure every time — results you can actually compare.',
+      },
+      {
+        icon: GitBranch,
+        title: 'Cross-questioning',
+        description: 'One targeted follow-up per answer to probe depth before moving on.',
       },
     ],
   },
@@ -274,10 +304,10 @@ export async function getPricingPlansIntl(): Promise<PricingPlan[]> {
 
 export const FOOTER_LINKS = {
   product: [
-    { label: 'Assessor Agents', href: '#product' },
-    { label: 'Simulation Agents', href: '#product' },
+    { label: 'General Agents', href: '#products' },
+    { label: 'QnA Assessment Agents', href: '#products' },
+    { label: 'Simulation Agents', href: '#products' },
     { label: 'Pricing', href: '#pricing' },
-    { label: 'Roadmap', href: '#' },
   ],
   company: [
     { label: 'About', href: '#' },

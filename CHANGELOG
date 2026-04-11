@@ -1,5 +1,35 @@
 # Changelog
 
+## [37] products-section-layout — 2026-04-11
+
+**Why:** The Products section used a 3-column grid that became unbalanced with 4 agent types. The QnA badge in the agent list was embedded inline in the agent name cell, making it inconsistent with the rest of the table columns.
+
+**What:** Switched the Products section to a single-row 4-column grid (`grid-cols-2 lg:grid-cols-4`) so all agent types appear side by side. Replaced the inline QnA badge in agent rows with a dedicated "Type" column in the agent list table, consistent with Language/Status/Created columns. Mobile card updated to show type as a pill alongside status and language badges.
+
+**Changes:**
+- `src/sections/FeatureGrid.tsx` — grid changed from `md:grid-cols-3` to `grid-cols-2 lg:grid-cols-4`; "Coming Soon" badge kept in card header, no overlay effects
+- `src/pages/AgentSpace.tsx` — desktop agent grid updated to `grid-cols-[1fr_68px_90px_72px_100px_80px_72px_60px]`; "Type" column header added; inline QnA badge removed from agent name cell; type pill rendered as a standalone column cell (`QnA` indigo / `General` gray); mobile card shows type pill in the badges row
+
+---
+
+## [36] qna-agent-type — 2026-04-11
+
+**Why:** The platform only supported open-ended General Agents. Edtech and institutional customers need reproducible, structured oral assessments — fixed question sets with a randomized pool, not free-form conversation — to ensure consistency and comparability across candidates.
+
+**What:** Added a full QnA Agent type end-to-end: creation wizard (resource upload → AI question generation → question bank review → behavior config → evaluation → save), a new runtime session class that embeds the question bank into the system prompt with algorithmic randomization, post-creation question bank editing, and type-selection modal when creating an agent.
+
+**Changes:**
+- `src/components/agentspace/wizard/QnAResourceStep.tsx` — **new**: context textarea + drag-and-drop file upload (PDF/txt, max 3 files, 5MB); PDFs encoded as base64 strings; ThinkingPanel with rotating messages during generation
+- `src/components/agentspace/wizard/QnAQuestionReview.tsx` — **new**: two-column layout (Fixed / Randomized Pool); inline question editing; move between pools; cross-question toggle (Zap icon); randomized count control; validation (≥1 fixed, ≥1 randomized, count ≤ pool size)
+- `src/components/agentspace/wizard/QnABehaviorStep.tsx` — **new**: tone freetext input; feedback mode radio (silent vs brief feedback); ThinkingPanel during compilation
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx` — **new**: 5-step wizard (language-voice → resource-upload → question-review → behavior-config → evaluation → done → configure); orchestrates `generateQnAQuestions → compileQnAAgent → saveQnAAgent`; inline EvaluationStep and DoneStep; QnA badge in header
+- `src/components/agentspace/wizard/QnAConfigureView.tsx` — **new**: post-creation configure view; three tabs — Questions (two-column editor, saves via `updateAgentQuestionBank`), Profile (identity/session brief/behavior rules/guardrails with AI rewrite popups), Evaluation (metrics list, regenerate, curator prompt); `AiRewritePopup`, `QuestionBankEditor`, `QuestionItem` components inline
+- `src/pages/AgentSpace.tsx` — type-selection modal added (two cards: General Agent / QnA Assessment Agent); `typeSelectOpen` + `createQnAAgentOpen` state; `CreateQnAAgentWizard` wired alongside existing `CreateAgentWizard`; configure overlay dispatches to `QnAConfigureView` or `AgentConfigureView` based on `agent.agent_type`; `ListChecks` icon added to imports
+- `src/lib/api.ts` — `Agent` interface: added `agent_type: "general" | "qna"`; `agent_prompt` type widened to `AgentPromptSpec | QnAPromptSpec`; added interfaces `QnAQuestion`, `QnAQuestionBank`, `QnAPromptSpec`, `QnACompileResult`; added functions `generateQnAQuestions`, `compileQnAAgent`, `saveQnAAgent`, `updateAgentQuestionBank`
+- `src/lib/constants.ts` — added `QnA Assessment Agents` to `FEATURE_CATEGORIES` (live, 4 features: structured question banks, AI question generation, reproducible assessments, cross-questioning); added `ListChecks`, `FileText`, `Repeat2`, `GitBranch` icon imports; footer product links updated to include QnA Assessment Agents
+
+---
+
 ## [35] admin-panel-redesign — 2026-04-09
 
 **Why:** The admin panel had grown organically from a usage/cost estimator into a multi-feature tool with no coherent layout. The date range filter bar (`7d/30d/90d + date inputs`) appeared on every tab including Inquiries, Subscriptions, and Discounts where it had no effect. Navigation mixed a flat top-tab bar with a breadcrumb simultaneously. There was no home/entry screen — the panel opened straight to analytics detail. Activating a subscription required knowing the exact agentspace UUID with no search. The flat tab structure was not scalable.
