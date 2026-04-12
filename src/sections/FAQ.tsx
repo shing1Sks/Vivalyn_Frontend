@@ -6,13 +6,13 @@ import SectionWrapper from '../components/ui/SectionWrapper'
 
 export default function FAQ() {
   return (
-    <SectionWrapper bgSoft id="faq">
+    <SectionWrapper id="faq">
       <motion.div
         variants={staggerContainer}
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, margin: '-50px' }}
-        className="max-w-[720px] mx-auto"
+        className="max-w-[720px] bg-white  mx-auto"
       >
         <motion.div variants={fadeInUp} className="text-center mb-10">
           <h2 className="text-3xl md:text-[32px] font-semibold text-gray-900">

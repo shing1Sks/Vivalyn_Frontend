@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, ArrowRight } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { fadeInUp, staggerContainer } from '../lib/motion'
-import { getPricingPlansIn, getPricingPlansIntl } from '../lib/constants'
+import { getAllPlansIn, getAllPlansIntl } from '../lib/constants'
 import type { PricingPlan } from '../lib/constants'
 import SectionWrapper from '../components/ui/SectionWrapper'
 import Button from '../components/ui/Button'
@@ -10,18 +10,50 @@ import InquiryModal from '../components/ui/InquiryModal'
 
 type Region = 'india' | 'international'
 
+const TRIAL_LABELS = ['Request a Demo', 'Start Free Trial']
+
+function TrialCta({ onClick }: { onClick: () => void }) {
+  const [idx, setIdx] = useState(0)
+
+  useEffect(() => {
+    const timer = setInterval(() => setIdx((i) => (i + 1) % TRIAL_LABELS.length), 3000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center justify-center px-4 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all duration-[120ms] cursor-pointer overflow-hidden h-[42px]"
+    >
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={idx}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.18 }}
+        >
+          {TRIAL_LABELS[idx]}
+        </motion.span>
+      </AnimatePresence>
+    </button>
+  )
+}
+
 function PricingCard({
   plan,
-  onGetStarted,
+  onAction,
 }: {
   plan: PricingPlan
-  onGetStarted: (tier: string) => void
+  onAction: (tier: string) => void
 }) {
+  const isTrial = plan.tier === 'trial'
   const isStarter = plan.tier === 'starter'
+  const isContact = plan.tier === 'growth' || plan.tier === 'pro'
 
   return (
     <div
-      className={`relative flex flex-col rounded-xl border p-6 transition-all duration-[120ms] ${
+      className={`relative flex flex-col rounded-xl border p-6 transition-all duration-[120ms] h-full ${
         isStarter
           ? 'border-indigo-600 shadow-md ring-1 ring-indigo-600'
           : 'border-gray-200 shadow-sm'
@@ -33,6 +65,7 @@ function PricingCard({
         </span>
       )}
 
+      {/* Plan name + price */}
       <div className="mb-5">
         <h3 className="text-base font-semibold text-gray-900">{plan.name}</h3>
         <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
@@ -44,7 +77,8 @@ function PricingCard({
         </div>
       </div>
 
-      <div className="border-t border-gray-100 pt-4 mb-6 flex-1 space-y-2.5">
+      {/* Features */}
+      <div className="border-t border-gray-100 pt-4 mb-5 flex-1 space-y-2.5">
         <div className="flex items-start gap-2.5">
           <Check size={15} strokeWidth={2} className="text-indigo-600 shrink-0 mt-0.5" />
           <span className="text-sm text-gray-700">
@@ -59,10 +93,21 @@ function PricingCard({
             <span className="text-gray-500"> included</span>
           </span>
         </div>
-        {plan.tier === 'starter' && (
+        {isStarter && (
           <div className="flex items-start gap-2.5">
             <Check size={15} strokeWidth={2} className="text-indigo-600 shrink-0 mt-0.5" />
             <span className="text-sm text-gray-700">Monthly reset, no rollover</span>
+          </div>
+        )}
+        {plan.scalingAvailable && (
+          <div className="flex items-start gap-2.5">
+            <Check size={15} strokeWidth={2} className="text-indigo-600 shrink-0 mt-0.5" />
+            <span className="text-sm text-gray-700">
+              Scaling beyond limit
+              {plan.additionalRate && (
+                <span className="text-gray-500"> ({plan.additionalRate})</span>
+              )}
+            </span>
           </div>
         )}
         {plan.note && (
@@ -70,14 +115,40 @@ function PricingCard({
         )}
       </div>
 
-      <Button
-        variant={isStarter ? 'primary' : 'secondary'}
-        className="w-full justify-center"
-        onClick={() => onGetStarted(plan.tier)}
-      >
-        Get Started
-      </Button>
+      {/* Discount badge for Growth/Pro */}
+      {isContact && (
+        <p className="text-xs text-indigo-600 text-center mb-3">
+          Reach out for better pricing →
+        </p>
+      )}
+
+      {/* CTA */}
+      {isTrial ? (
+        <TrialCta onClick={() => onAction(plan.tier)} />
+      ) : isContact ? (
+        <Button
+          variant="secondary"
+          className="w-full justify-center"
+          onClick={() => onAction(plan.tier)}
+        >
+          Contact Us
+        </Button>
+      ) : (
+        <Button
+          variant="primary"
+          className="w-full justify-center"
+          onClick={() => onAction(plan.tier)}
+        >
+          Get Started
+        </Button>
+      )}
     </div>
+  )
+}
+
+function PricingCardSkeleton() {
+  return (
+    <div className="h-[320px] rounded-xl border border-gray-100 bg-gray-50 animate-pulse" />
   )
 }
 
@@ -87,21 +158,28 @@ export default function Pricing() {
   const [selectedTier, setSelectedTier] = useState<string | undefined>()
   const [plansIn, setPlansIn] = useState<PricingPlan[]>([])
   const [plansIntl, setPlansIntl] = useState<PricingPlan[]>([])
+  const [plansLoading, setPlansLoading] = useState(true)
 
   useEffect(() => {
-    getPricingPlansIn().then(setPlansIn).catch(() => {})
-    getPricingPlansIntl().then(setPlansIntl).catch(() => {})
+    setPlansLoading(true)
+    Promise.all([getAllPlansIn(), getAllPlansIntl()])
+      .then(([inPlans, intlPlans]) => {
+        setPlansIn(inPlans)
+        setPlansIntl(intlPlans)
+      })
+      .catch(() => {})
+      .finally(() => setPlansLoading(false))
   }, [])
 
   const plans = region === 'india' ? plansIn : plansIntl
 
-  const handleGetStarted = (tier: string) => {
+  const handleAction = (tier: string) => {
     setSelectedTier(tier)
     setModalOpen(true)
   }
 
   return (
-    <SectionWrapper id="pricing">
+    <SectionWrapper bgSoft id="pricing">
       <div className="text-center mb-12">
         <p className="text-xs font-medium uppercase tracking-wide text-indigo-600 mb-4">
           Pricing
@@ -138,54 +216,28 @@ export default function Pricing() {
       </div>
 
       <AnimatePresence mode="wait">
-        <motion.div
-          key={region}
-          variants={staggerContainer}
-          initial="hidden"
-          animate="visible"
-          exit="hidden"
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl mx-auto">
-            {plans.map((plan) => (
-              <motion.div key={plan.name} variants={fadeInUp}>
-                <PricingCard plan={plan} onGetStarted={handleGetStarted} />
-              </motion.div>
-            ))}
+        {plansLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 max-w-6xl mx-auto">
+            {[0, 1, 2, 3].map((i) => <PricingCardSkeleton key={i} />)}
           </div>
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Contact Us to Explore More Plans */}
-      <div className="mt-14 max-w-2xl mx-auto rounded-xl border border-gray-200 bg-gray-50 p-8 text-center">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          Need more? Explore Growth and Pro plans
-        </h3>
-        <p className="text-sm text-gray-500 mb-1">
-          Growth (4,000 mins) and Pro (8,000 mins + scaling) are available via our sales team.
-        </p>
-        <p className="text-sm text-gray-500 mb-6">
-          Fill out a short form and we'll send you pricing for your preferred currency within 24 hours.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Button
-            variant="primary"
-            className="justify-center gap-2"
-            onClick={() => { setSelectedTier(undefined); setModalOpen(true) }}
+        ) : (
+          <motion.div
+            key={region}
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
           >
-            Contact Us
-            <ArrowRight size={15} />
-          </Button>
-          <span className="text-sm text-gray-400">
-            or email us at{' '}
-            <a
-              href="mailto:hello@vivalyn.in"
-              className="text-indigo-600 hover:text-indigo-700 transition-colors duration-[120ms]"
-            >
-              hello@vivalyn.in
-            </a>
-          </span>
-        </div>
-      </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 max-w-6xl mx-auto">
+              {plans.map((plan) => (
+                <motion.div key={plan.tier} variants={fadeInUp} className="flex flex-col">
+                  <PricingCard plan={plan} onAction={handleAction} />
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <InquiryModal
         open={modalOpen}

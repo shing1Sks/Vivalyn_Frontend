@@ -31,7 +31,7 @@ function tierBadgeClass(tier: string): string {
   return map[tier] ?? 'bg-gray-100 text-gray-600'
 }
 
-type Tab = 'members' | 'invites' | 'plan'
+type Tab = 'people' | 'plan'
 
 interface Props {
   open: boolean
@@ -183,11 +183,10 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
   const { session } = useAuth()
   const { activeSpace, refetchSpaces } = useAgentSpace()
 
-  const [tab, setTab] = useState<Tab>('members')
+  const [tab, setTab] = useState<Tab>('people')
   const [members, setMembers] = useState<AgentSpaceMember[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
-  const [membersLoading, setMembersLoading] = useState(false)
-  const [invitesLoading, setInvitesLoading] = useState(false)
+  const [peopleLoading, setPeopleLoading] = useState(false)
   const [membersError, setMembersError] = useState<string | null>(null)
   const [invitesError, setInvitesError] = useState<string | null>(null)
 
@@ -257,15 +256,27 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
     }
   }
 
+  // Load members + invites together when panel opens
   useEffect(() => {
     if (!open || !token || !spaceId) return
 
-    setMembersLoading(true)
+    setPeopleLoading(true)
     setMembersError(null)
-    fetchAgentSpaceMembers(token, spaceId)
-      .then(setMembers)
-      .catch((e: Error) => setMembersError(e.message))
-      .finally(() => setMembersLoading(false))
+    setInvitesError(null)
+
+    Promise.all([
+      fetchAgentSpaceMembers(token, spaceId),
+      fetchAgentSpaceInvites(token, spaceId),
+    ])
+      .then(([memberList, inviteList]) => {
+        setMembers(memberList)
+        setInvites(inviteList)
+      })
+      .catch((e: Error) => {
+        setMembersError(e.message)
+        setInvitesError(e.message)
+      })
+      .finally(() => setPeopleLoading(false))
   }, [open, token, spaceId])
 
   useEffect(() => {
@@ -287,17 +298,6 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
       .catch((e: Error) => setTxError(e.message))
       .finally(() => setTxLoading(false))
   }, [open, tab, token, spaceId, txPage])
-
-  useEffect(() => {
-    if (!open || tab !== 'invites' || !token || !spaceId) return
-
-    setInvitesLoading(true)
-    setInvitesError(null)
-    fetchAgentSpaceInvites(token, spaceId)
-      .then(setInvites)
-      .catch((e: Error) => setInvitesError(e.message))
-      .finally(() => setInvitesLoading(false))
-  }, [open, tab, token, spaceId])
 
   async function handleSendInvite(e: React.FormEvent) {
     e.preventDefault()
@@ -376,7 +376,7 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                 <div className="flex-1 min-w-0 mr-3">
-                  <h2 className="text-[15px] font-semibold text-gray-900">Settings</h2>
+                  <h2 className="text-[15px] font-semibold text-gray-900">Workspace Settings</h2>
                   {activeSpace && (
                     isAdmin && isEditingName ? (
                       <div className="mt-0.5 flex items-center gap-1.5">
@@ -417,7 +417,7 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
 
               {/* Tabs */}
               <div className="flex gap-1 mx-6 mt-4 mb-2 bg-gray-100 rounded-lg p-1">
-                {(['members', 'invites', 'plan'] as Tab[]).map((t) => (
+                {(['people', 'plan'] as Tab[]).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
@@ -431,39 +431,93 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
               {/* Content */}
               <div className="flex-1 overflow-y-auto px-6 py-2">
 
-                {/* Members tab */}
-                {tab === 'members' && (
+                {/* People tab — members + invite form combined */}
+                {tab === 'people' && (
                   <>
-                    {membersLoading && (
+                    {peopleLoading && (
                       <div className="flex justify-center py-10">
                         <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
                       </div>
                     )}
-                    {membersError && (
-                      <p className="text-sm text-red-500 py-4">{membersError}</p>
+                    {(membersError || invitesError) && !peopleLoading && (
+                      <p className="text-sm text-red-500 py-4">{membersError || invitesError}</p>
                     )}
-                    {!membersLoading && !membersError && (
-                      <div>
-                        {members.map((m) => (
-                          <MemberRow
-                            key={m.user_id}
-                            member={m}
-                            isSelf={m.user_id === currentUserId}
-                            onChangeRole={handleChangeRole}
-                            onRemove={handleRemove}
-                          />
-                        ))}
-                        {members.length === 0 && (
-                          <p className="text-sm text-gray-400 py-6 text-center">No members found.</p>
-                        )}
-                        <button
-                          onClick={() => setTab('invites')}
-                          className="mt-4 flex items-center gap-2 w-full py-2.5 px-3 border border-dashed border-gray-200 rounded-lg text-sm text-gray-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors duration-[120ms]"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          Invite a member
-                        </button>
-                      </div>
+                    {!peopleLoading && !membersError && (
+                      <>
+                        {/* Members section */}
+                        <div className="pt-2">
+                          <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Members</p>
+                          {members.map((m) => (
+                            <MemberRow
+                              key={m.user_id}
+                              member={m}
+                              isSelf={m.user_id === currentUserId}
+                              onChangeRole={handleChangeRole}
+                              onRemove={handleRemove}
+                            />
+                          ))}
+                          {members.length === 0 && (
+                            <p className="text-sm text-gray-400 py-4 text-center">No members found.</p>
+                          )}
+                        </div>
+
+                        <div className="h-px bg-gray-100 my-5" />
+
+                        {/* Invite section */}
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">Invite people</p>
+                          <form onSubmit={handleSendInvite} className="mb-5">
+                            <input
+                              type="email"
+                              value={inviteEmail}
+                              onChange={(e) => setInviteEmail(e.target.value)}
+                              placeholder="colleague@company.com"
+                              required
+                              disabled={inviteSending}
+                              className="w-full py-2.5 px-3 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all duration-[120ms] disabled:opacity-50 mb-2"
+                            />
+                            <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-2">
+                              {(['member', 'admin'] as const).map(r => (
+                                <button
+                                  key={r}
+                                  type="button"
+                                  disabled={inviteSending}
+                                  onClick={() => setInviteRole(r)}
+                                  className={`flex-1 py-1.5 text-xs font-medium rounded-md capitalize transition-all duration-[120ms] disabled:opacity-50 ${
+                                    inviteRole === r ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                                  }`}
+                                >
+                                  {r === 'admin' ? 'Admin' : 'Member'}
+                                </button>
+                              ))}
+                            </div>
+                            {inviteSendError && (
+                              <p className="text-xs text-red-500 mb-2">{inviteSendError}</p>
+                            )}
+                            {inviteSentOk && (
+                              <p className="text-xs text-emerald-600 mb-2">Invite sent successfully!</p>
+                            )}
+                            <button
+                              type="submit"
+                              disabled={inviteSending || !inviteEmail.trim()}
+                              className="flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors duration-[120ms] cursor-pointer"
+                            >
+                              {inviteSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                              Send invite
+                            </button>
+                          </form>
+
+                          {/* Invite history */}
+                          {!invitesError && invites.length > 0 && (
+                            <>
+                              <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Sent invites</p>
+                              {invites.map((inv) => (
+                                <InviteRow key={inv.id} invite={inv} onRevoke={handleRevoke} />
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      </>
                     )}
                   </>
                 )}
@@ -696,76 +750,6 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
                       </>
                     )}
                   </div>
-                )}
-
-                {/* Invites tab */}
-                {tab === 'invites' && (
-                  <>
-                    {/* Send invite form */}
-                    <form onSubmit={handleSendInvite} className="mb-5 pt-2">
-                      <p className="text-xs font-medium text-gray-700 mb-3">Send an invite</p>
-                      <input
-                        type="email"
-                        value={inviteEmail}
-                        onChange={(e) => setInviteEmail(e.target.value)}
-                        placeholder="colleague@company.com"
-                        required
-                        disabled={inviteSending}
-                        className="w-full py-2.5 px-3 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all duration-[120ms] disabled:opacity-50 mb-2"
-                      />
-                      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-2">
-                        {(['member', 'admin'] as const).map(r => (
-                          <button
-                            key={r}
-                            type="button"
-                            disabled={inviteSending}
-                            onClick={() => setInviteRole(r)}
-                            className={`flex-1 py-1.5 text-xs font-medium rounded-md capitalize transition-all duration-[120ms] disabled:opacity-50 ${
-                              inviteRole === r ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                            }`}
-                          >
-                            {r === 'admin' ? 'Admin' : 'Member'}
-                          </button>
-                        ))}
-                      </div>
-                      {inviteSendError && (
-                        <p className="text-xs text-red-500 mb-2">{inviteSendError}</p>
-                      )}
-                      {inviteSentOk && (
-                        <p className="text-xs text-emerald-600 mb-2">Invite sent successfully!</p>
-                      )}
-                      <button
-                        type="submit"
-                        disabled={inviteSending || !inviteEmail.trim()}
-                        className="flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors duration-[120ms] cursor-pointer"
-                      >
-                        {inviteSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                        Send invite
-                      </button>
-                    </form>
-
-                    <div className="h-px bg-gray-100 mb-4" />
-
-                    {/* Invite list */}
-                    {invitesLoading && (
-                      <div className="flex justify-center py-6">
-                        <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-                      </div>
-                    )}
-                    {invitesError && (
-                      <p className="text-sm text-red-500">{invitesError}</p>
-                    )}
-                    {!invitesLoading && !invitesError && (
-                      <div>
-                        {invites.map((inv) => (
-                          <InviteRow key={inv.id} invite={inv} onRevoke={handleRevoke} />
-                        ))}
-                        {invites.length === 0 && (
-                          <p className="text-sm text-gray-400 py-4 text-center">No invites sent yet.</p>
-                        )}
-                      </div>
-                    )}
-                  </>
                 )}
               </div>
             </motion.div>

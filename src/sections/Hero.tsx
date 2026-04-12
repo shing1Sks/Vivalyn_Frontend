@@ -322,7 +322,7 @@ export default function Hero() {
   const scenario = SCENARIOS[activeIndex];
 
   return (
-    <section className="bg-white pt-10 md:pt-[24px] pb-60 md:pb-50">
+    <section className="bg-gray-50 py-8">
       <div className="max-w-[1200px] mx-auto px-6">
         <div className="grid md:grid-cols-2 gap-12 md:gap-16 items-center">
           <motion.div

@@ -3,7 +3,7 @@ import { FOOTER_LINKS } from '../../lib/constants'
 
 export default function Footer() {
   return (
-    <footer className="bg-white border-t border-gray-200 py-16">
+    <footer className=" border-t border-gray-200 py-16">
       <div className="max-w-[1200px] mx-auto px-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
           <div>

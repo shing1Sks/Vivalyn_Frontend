@@ -1,14 +1,18 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { useAuth } from './AuthContext'
 import { useAgentSpace } from './AgentSpaceContext'
-import { fetchTokenBalance } from '../lib/api'
-import type { TokenBalance } from '../lib/api'
+import { fetchTokenBalance, fetchAgentspaceSubscription } from '../lib/api'
+import type { TokenBalance, AgentspaceSubscription } from '../lib/api'
 
 interface TokenContextValue {
   balance: number | null
   lowThreshold: number
   balanceLoading: boolean
   refetchBalance: () => void
+  minutesIncluded: number | null
+  scalingEnabled: boolean
+  overflowMinutes: number
+  hasSubscription: boolean
 }
 
 const TokenContext = createContext<TokenContextValue>({
@@ -16,12 +20,17 @@ const TokenContext = createContext<TokenContextValue>({
   lowThreshold: 10,
   balanceLoading: false,
   refetchBalance: () => {},
+  minutesIncluded: null,
+  scalingEnabled: false,
+  overflowMinutes: 0,
+  hasSubscription: false,
 })
 
 export function TokenProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuth()
   const { activeSpace } = useAgentSpace()
   const [data, setData] = useState<TokenBalance | null>(null)
+  const [subscription, setSubscription] = useState<AgentspaceSubscription | null>(null)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(() => {
@@ -29,12 +38,22 @@ export function TokenProvider({ children }: { children: React.ReactNode }) {
     const spaceId = activeSpace?.id
     if (!token || !spaceId) {
       setData(null)
+      setSubscription(null)
       return
     }
     setLoading(true)
-    fetchTokenBalance(token, spaceId)
-      .then(setData)
-      .catch(() => setData(null))
+    Promise.all([
+      fetchTokenBalance(token, spaceId),
+      fetchAgentspaceSubscription(token, spaceId),
+    ])
+      .then(([balanceData, subData]) => {
+        setData(balanceData)
+        setSubscription(subData)
+      })
+      .catch(() => {
+        setData(null)
+        setSubscription(null)
+      })
       .finally(() => setLoading(false))
   }, [session?.access_token, activeSpace?.id])
 
@@ -49,6 +68,10 @@ export function TokenProvider({ children }: { children: React.ReactNode }) {
         lowThreshold: data?.low_balance_threshold ?? 10,
         balanceLoading: loading,
         refetchBalance: load,
+        minutesIncluded: subscription?.has_subscription ? subscription.minutes_included : null,
+        scalingEnabled: subscription?.scaling_enabled ?? false,
+        overflowMinutes: subscription?.overflow_minutes ?? 0,
+        hasSubscription: subscription?.has_subscription ?? false,
       }}
     >
       {children}

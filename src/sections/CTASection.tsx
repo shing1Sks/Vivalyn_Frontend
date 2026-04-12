@@ -6,7 +6,7 @@ import Button from '../components/ui/Button'
 export default function CTASection() {
   const navigate = useNavigate()
   return (
-    <section className="py-16 md:py-24 px-6">
+    <section className="py-16 md:py-24 px-6 bg-gray-50">
       <motion.div
         variants={staggerContainer}
         initial="hidden"

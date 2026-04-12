@@ -1,5 +1,52 @@
 # Changelog
 
+## [40] howitworks-redesign — 2026-04-13
+
+**Why:** The previous HowItWorks sticky-scroll layout felt disconnected — the RHS mockup floated separately from the steps, content was small and underutilized, and the auto-advance timer wasn't intuitive. The Why section also used high-contrast dark/colored tiles that stood out from the rest of the page's neutral palette.
+
+**What:** Completely rewrote HowItWorks as a contained wizard-style stepper card. Six steps (Create → Voice & Language → Design Agent → Evaluation → Deploy → Report) each with a windowed macOS-style mockup panel (three-dot chrome + title bar) on the full RHS. Navigation is now scroll-driven — scrolling through the section advances the steps with direction-aware slide animation; clicking step circles smooth-scrolls to that step. Removed auto-advance timer and bottom prev/next bar. Compacted card height from 520px to 420px. WindowChrome content areas are scrollable with a minimal 4px scrollbar. Language tags in the Voice step show 7 languages + "+17 more" dashed pill. Updated ProblemSolution section to use neutral gray-50/white tiles (was gray-900/indigo-600) matching the page's standard palette.
+
+**Changes:**
+- `src/sections/HowItWorks.tsx` — full rewrite: 6-step wizard stepper card, WindowChrome mockups, scroll-driven step activation, direction-aware AnimatePresence transitions, scrollable panel content, compact 420px height
+- `src/sections/ProblemSolution.tsx` — tiles changed from gray-900/indigo-600 to gray-50/white with border, matching page neutral palette
+
+---
+
+## [39] landing-page-redesign — 2026-04-13
+
+**Why:** Landing page structure and sections needed a refresh for clarity and visual cohesion: merged the separate Problem/Solution sections into one unified side-by-side tile section, redesigned How It Works as a sticky-scroll layout with live mockups, removed the standalone Report Preview section, and cleaned up nav links to reflect the new structure.
+
+**What:** Merged ProblemStatement + SolutionSummary into a single ProblemSolution section with two color tiles (gray-900 Problem + indigo-600 Solution) side-by-side. Rewrote HowItWorks as a sticky scroll layout — LHS steps highlight as user scrolls (useInView), RHS shows the active step's mockup (desktop); mobile stacks mockups below each step. Removed ReportPreview from Landing. Updated NAV_LINKS to replace Problem/Solution with "Why" (#why), added "Reviews" (#reviews). Removed Pricing frosted overlay — all 4 plans fully visible; Growth/Pro show "Reach out for better pricing" badge and Contact Us button. Trial card CTA cycles between "Request a Demo" and "Start Free Trial" via AnimatePresence.
+
+**Changes:**
+- `src/sections/ProblemSolution.tsx` — new section merging Problem + Solution into two color tiles
+- `src/sections/HowItWorks.tsx` — full rewrite: sticky scroll with useInView step activation, animated RHS mockup panel (desktop), stacked mobile mockups
+- `src/pages/Landing.tsx` — replaced ProblemStatement + SolutionSummary with ProblemSolution; removed ReportPreview
+- `src/lib/constants.ts` — NAV_LINKS: replaced Problem/Solution with "Why" (#why); added "Reviews" (#reviews)
+- `src/sections/Pricing.tsx` — removed frosted overlay on Growth/Pro; Trial card has AnimatePresence fade-cycling CTA labels; Growth/Pro show "Reach out for better pricing" text
+- `src/sections/SocialProof.tsx` — added id="reviews" for nav anchor
+
+---
+
+## [38] batch-ui-fixes — 2026-04-13
+
+**Why:** Nine accumulated UI/UX issues: settings panel clarity, pricing section discoverability, token gauge accuracy, landing page consistency, email completeness, and a pricing render bug.
+
+**What:** Merged Members + Invites tabs into a single People tab. Redesigned user dropdown to include workspace settings access and user name. Softened token gauge colors to match indigo UI palette; fixed gauge to use plan minutes as reference instead of an arbitrary formula; added overflow counter for Pro scaling plans. Redesigned pricing section to show all 4 plans in a row with frosted overlay + inline CTAs on Growth/Pro. Fixed pricing section blank render on first load with loading skeleton. Normalized Hero section padding to match SectionWrapper rhythm; added scroll-margin-top to SectionWrapper to fix sticky-header anchor overlap. Fixed FeatureGrid mobile layout and compressed all feature descriptions.
+
+**Changes:**
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx` — merged Members+Invites into People tab; panel title changed to "Workspace Settings"
+- `src/components/agentspace/AgentSpaceHeader.tsx` — user dropdown shows name + email; Workspace Settings item added (admin only); standalone settings gear icon removed
+- `src/components/agentspace/TokenBalanceBar.tsx` — softer gauge colors (indigo/amber/red-400); plan-aware gauge pct using minutesIncluded; overflow indicator for Pro scaling; light white tooltip
+- `src/context/TokenContext.tsx` — extended with subscription data (minutesIncluded, scalingEnabled, overflowMinutes, hasSubscription) fetched in parallel with balance
+- `src/sections/Pricing.tsx` — all 4 plans shown in single row; Growth/Pro use frosted backdrop-blur overlay with inline Contact Us CTA; loading skeleton fixes blank first-render; switched to getAllPlansIn/Intl
+- `src/sections/Hero.tsx` — padding normalized from pb-60/pb-50 to py-16 md:py-24
+- `src/components/ui/SectionWrapper.tsx` — added scroll-mt-[72px] for sticky header anchor fix
+- `src/sections/FeatureGrid.tsx` — grid changed to grid-cols-1 sm:grid-cols-2 lg:grid-cols-4
+- `src/lib/constants.ts` — compressed all FEATURE_CATEGORIES feature descriptions to max ~8 words
+
+---
+
 ## [37] products-section-layout — 2026-04-11
 
 **Why:** The Products section used a 3-column grid that became unbalanced with 4 agent types. The QnA badge in the agent list was embedded inline in the agent name cell, making it inconsistent with the rest of the table columns.

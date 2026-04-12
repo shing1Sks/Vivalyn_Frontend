@@ -22,7 +22,7 @@ export default function FeatureGrid() {
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, margin: '-50px' }}
-        className="grid grid-cols-2 lg:grid-cols-4 gap-5"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
       >
         {FEATURE_CATEGORIES.map((category) => (
           <motion.div key={category.title} variants={fadeInUp}>

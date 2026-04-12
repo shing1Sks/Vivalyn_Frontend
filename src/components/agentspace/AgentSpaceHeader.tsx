@@ -88,7 +88,7 @@ export default function AgentSpaceHeader({
           )}
         </div>
 
-        {/* Right: Inbox + Settings + Avatar */}
+        {/* Right: Inbox + Token + Avatar */}
         <div className="flex items-center gap-1.5">
           {/* Inbox bell */}
           <button
@@ -109,25 +109,6 @@ export default function AgentSpaceHeader({
           {/* Token balance */}
           <TokenBalanceBar />
 
-          {/* Settings (space admin only) */}
-          {isSpaceAdmin ? (
-            <button
-              onClick={onSettingsClick}
-              title="Settings"
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-[120ms] cursor-pointer"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              disabled
-              title="Settings (admin only)"
-              className="p-2 text-gray-400 rounded-lg opacity-40 cursor-not-allowed"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          )}
-
           {/* User dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
@@ -139,9 +120,27 @@ export default function AgentSpaceHeader({
 
             {userDropdownOpen && (
               <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl border border-gray-200 shadow-md p-2 space-y-1">
-                <p className="text-xs text-gray-400 truncate px-2 pb-1 pt-0.5">
-                  {user?.email}
-                </p>
+                {/* User identity */}
+                <div className="px-2 pt-0.5 pb-2">
+                  {profile?.name && (
+                    <p className="text-sm font-medium text-gray-900 truncate">{profile.name}</p>
+                  )}
+                  <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                </div>
+
+                <div className="h-px bg-gray-100" />
+
+                {/* Workspace Settings — space admins only */}
+                {isSpaceAdmin && (
+                  <button
+                    onClick={() => { setUserDropdownOpen(false); onSettingsClick() }}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Workspace Settings
+                  </button>
+                )}
+
                 {isVivalynAdmin && (
                   <button
                     onClick={() => { setUserDropdownOpen(false); navigate('/admin') }}
@@ -151,6 +150,9 @@ export default function AgentSpaceHeader({
                     Admin Panel
                   </button>
                 )}
+
+                <div className="h-px bg-gray-100" />
+
                 <button
                   onClick={() => {
                     setUserDropdownOpen(false)

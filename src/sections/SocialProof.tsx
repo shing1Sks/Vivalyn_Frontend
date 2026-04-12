@@ -15,14 +15,14 @@ const PARTNER_NAMES = [
 
 export default function SocialProof() {
   return (
-    <SectionWrapper>
+    <SectionWrapper id="reviews" bgSoft={true}>
       {/* Metrics banner */}
       <motion.div
         variants={staggerContainer}
         initial="hidden"
         whileInView="visible"
         viewport={{ once: true, margin: '-50px' }}
-        className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16"
+        className="grid grid-cols-2 md:grid-cols-4 gap-8 my-10 mb-16"
       >
         {METRICS.map((metric) => (
           <motion.div

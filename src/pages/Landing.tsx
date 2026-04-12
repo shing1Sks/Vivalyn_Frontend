@@ -1,10 +1,8 @@
 import Header from '../components/layout/Header'
 import Hero from '../sections/Hero'
-import ProblemStatement from '../sections/ProblemStatement'
-import SolutionSummary from '../sections/SolutionSummary'
+import ProblemSolution from '../sections/ProblemSolution'
 import FeatureGrid from '../sections/FeatureGrid'
 import HowItWorks from '../sections/HowItWorks'
-import ReportPreview from '../sections/ReportPreview'
 import Pricing from '../sections/Pricing'
 import SocialProof from '../sections/SocialProof'
 import FAQ from '../sections/FAQ'
@@ -17,11 +15,9 @@ export default function Landing() {
       <Header />
       <main>
         <Hero />
-        <ProblemStatement />
-        <SolutionSummary />
+        <ProblemSolution />
         <FeatureGrid />
         <HowItWorks />
-        <ReportPreview />
         <Pricing />
         <SocialProof />
         <FAQ />

@@ -16,11 +16,11 @@ import {
 } from 'lucide-react'
 
 export const NAV_LINKS = [
-  { label: 'Problem', href: '#problem' },
-  { label: 'Solution', href: '#solution' },
+  { label: 'Why', href: '#why' },
   { label: 'Products', href: '#products' },
   { label: 'How It Works', href: '#how-it-works' },
   { label: 'Pricing', href: '#pricing' },
+  { label: 'Reviews', href: '#reviews' },
   { label: 'FAQ', href: '#faq' },
 ]
 
@@ -49,19 +49,17 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       {
         icon: ClipboardCheck,
         title: 'Rubric-driven',
-        description: 'Design your own evaluation criteria to follow.',
+        description: 'Define your own evaluation criteria.',
       },
       {
         icon: BarChart3,
         title: 'Actionable reports',
-        description:
-          'Conversation transcripts + scores + summarizations and recommendations.',
+        description: 'Transcripts, scores, and actionable recommendations.',
       },
       {
         icon: Coins,
         title: 'Low cost',
-        description:
-          'Fraction of human effort price; unlimited scalability.',
+        description: 'Fraction of human cost, unlimited scale.',
       },
     ],
   },
@@ -72,22 +70,22 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       {
         icon: ListChecks,
         title: 'Structured question banks',
-        description: 'Fixed core questions every session, plus a randomized pool for variety.',
+        description: 'Fixed core questions plus a randomized pool.',
       },
       {
         icon: FileText,
         title: 'AI question generation',
-        description: 'Upload your resources — syllabi, docs, PDFs — and let the AI draft the question bank.',
+        description: 'Upload docs or PDFs — AI drafts the question bank.',
       },
       {
         icon: Repeat2,
         title: 'Reproducible assessments',
-        description: 'Same rubric, same structure every time — results you can actually compare.',
+        description: 'Same rubric every time — comparable results.',
       },
       {
         icon: GitBranch,
         title: 'Cross-questioning',
-        description: 'One targeted follow-up per answer to probe depth before moving on.',
+        description: 'One follow-up per answer to probe depth.',
       },
     ],
   },
@@ -98,20 +96,17 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       {
         icon: Users,
         title: 'Realistic role-play',
-        description:
-          'Agents mimic real customers with emotions, confusion, and escalation.',
+        description: 'Agents mimic real customers with realistic friction.',
       },
       {
         icon: Brain,
         title: 'Context-aware',
-        description:
-          'Inject real-time signals — delays, interruptions, time pressure.',
+        description: 'Real-time signals: delays, interruptions, pressure.',
       },
       {
         icon: MessageSquare,
         title: 'Multi-stage scenarios',
-        description:
-          'Walk through multi-step sales or support journeys.',
+        description: 'Multi-step sales or support journeys.',
       },
     ],
   },
@@ -122,14 +117,12 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       {
         icon: Layers,
         title: 'Complex environments',
-        description:
-          'Multiple agents represent stakeholders, customers, and managers.',
+        description: 'Agents as stakeholders, customers, and managers.',
       },
       {
         icon: Shuffle,
         title: 'Emergent behavior',
-        description:
-          'Agents act independently with cross-inputs like time and stress.',
+        description: 'Agents act independently with cross-inputs.',
       },
     ],
   },
