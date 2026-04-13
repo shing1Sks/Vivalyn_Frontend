@@ -91,6 +91,17 @@ npm run lint      # ESLint
 
 ---
 
+## Agent Types
+
+Two agent types are supported:
+
+| Type | Use case | Wizard |
+|---|---|---|
+| **General** | Multi-phase conversation (opening → probing → adaptation → feedback → closing) — sales training, interview simulations | `CreateAgentWizard.tsx` |
+| **QnA** | Question-bank-driven assessment with fixed + randomized pools — exams, structured evaluations | `CreateQnAAgentWizard.tsx` |
+
+---
+
 ## Project Structure
 
 ```
@@ -99,7 +110,11 @@ src/
   components/
     ui/            # Reusable primitives (Button, Card, Badge, etc.)
     layout/        # Header, Footer
-    agentspace/    # AgentSpace dashboard + agent wizard
+    agentspace/    # AgentSpace dashboard + agent wizards
+      wizard/      # General agent: CreateAgentWizard, PlannerFlow, AgentConfigureView,
+                   #   LanguageVoiceSelector
+                   # QnA agent: CreateQnAAgentWizard, QnAResourceStep,
+                   #   QnAQuestionReview, QnABehaviorStep, QnAConfigureView
     agentlive/     # Live voice session screens
     admin/         # Admin analytics and management views
   sections/        # Landing page sections

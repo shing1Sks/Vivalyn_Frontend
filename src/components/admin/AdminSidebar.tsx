@@ -1,6 +1,6 @@
-import { BarChart2, CreditCard, LayoutDashboard, LogOut, MessageSquare, Tag } from 'lucide-react'
+import { BarChart2, CreditCard, LayoutDashboard, LogOut, MessageSquare, Tag, TrendingDown } from 'lucide-react'
 
-export type AdminSection = 'home' | 'analytics' | 'inquiries' | 'subscriptions' | 'discounts'
+export type AdminSection = 'home' | 'analytics' | 'inquiries' | 'subscriptions' | 'discounts' | 'retention'
 
 interface AdminSidebarProps {
   activeSection: AdminSection
@@ -13,6 +13,7 @@ const NAV_ITEMS: { label: string; icon: React.ComponentType<{ className?: string
   { label: 'Analytics', icon: BarChart2, key: 'analytics' },
   { label: 'Inquiries', icon: MessageSquare, key: 'inquiries' },
   { label: 'Subscriptions', icon: CreditCard, key: 'subscriptions' },
+  { label: 'Retention', icon: TrendingDown, key: 'retention' },
   { label: 'Discounts', icon: Tag, key: 'discounts' },
 ]
 

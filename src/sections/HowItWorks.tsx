@@ -53,7 +53,7 @@ const STEPS = [
   },
 ]
 
-const SCROLL_STEP = 500 // px of scroll to advance one step
+const SCROLL_STEP = 600 // px of scroll to advance one step
 
 // ─── Window Chrome wrapper ────────────────────────────────────────────────────
 
@@ -488,7 +488,7 @@ export default function HowItWorks() {
       {/* Scroll zone — sticky card lives here */}
       <div
         ref={stickyZoneRef}
-        style={{ height: `calc(${(STEPS.length - 1) * SCROLL_STEP}px + 100vh)` }}
+        style={{ height: `calc(${STEPS.length * SCROLL_STEP}px + 100vh)` }}
       >
         <div className="sticky top-0 h-screen flex items-center">
           <div className="max-w-[1100px] w-full mx-auto px-6">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, AlertCircle, ArrowLeft, Users, Clock, Cpu, Mic, Volume2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
+import { Loader2, AlertCircle, ArrowLeft, Users, Clock, Cpu, Mic, Volume2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, FlaskConical } from 'lucide-react'
 import { fetchAdminOrgDetail, fetchAdminOrgTokenTransactions } from '../../lib/api'
 import type { AdminAgentSummary, TokenTransaction } from '../../lib/api'
 
@@ -241,35 +241,45 @@ export function AdminOrgView({ token, agentspaceId, orgName, dateFrom, dateTo, e
                       </tr>
                     </thead>
                     <tbody>
-                      {transactions.map((tx) => (
-                        <tr key={tx.id} className="border-b border-gray-50 last:border-0">
-                          <td className="py-2.5 text-xs text-gray-500 whitespace-nowrap pr-4">
-                            {new Date(tx.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
-                          </td>
-                          <td className="py-2.5 pr-4">
-                            <div className="flex items-center gap-1.5">
-                              <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${tx.delta > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                                {tx.delta > 0
-                                  ? <ArrowUpRight className="w-2.5 h-2.5 text-emerald-600" />
-                                  : <ArrowDownLeft className="w-2.5 h-2.5 text-red-500" />
-                                }
+                      {transactions.map((tx) => {
+                        const isTest = tx.reason === 'test_session'
+                        return (
+                          <tr key={tx.id} className="border-b border-gray-50 last:border-0">
+                            <td className="py-2.5 text-xs text-gray-500 whitespace-nowrap pr-4">
+                              {new Date(tx.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                            </td>
+                            <td className="py-2.5 pr-4">
+                              <div className="flex items-center gap-1.5">
+                                <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isTest ? 'bg-gray-100' : tx.delta > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                                  {isTest
+                                    ? <FlaskConical className="w-2.5 h-2.5 text-gray-400" />
+                                    : tx.delta > 0
+                                      ? <ArrowUpRight className="w-2.5 h-2.5 text-emerald-600" />
+                                      : <ArrowDownLeft className="w-2.5 h-2.5 text-red-500" />
+                                  }
+                                </div>
+                                <span className="text-xs text-gray-700 capitalize">{tx.reason.replace(/_/g, ' ')}</span>
+                                {isTest && (
+                                  <span className="inline-flex items-center px-1.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                    Test
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-xs text-gray-700 capitalize">{tx.reason.replace(/_/g, ' ')}</span>
-                            </div>
-                          </td>
-                          <td className={`py-2.5 text-right font-medium tabular-nums text-sm pr-4 ${tx.delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {tx.delta > 0 ? '+' : ''}{tx.delta}
-                          </td>
-                          <td className="py-2.5 text-right text-xs text-gray-500 tabular-nums pr-4">{tx.balance_after}</td>
-                          <td className="py-2.5 text-right">
-                            {tx.run_id ? (
-                              <span className="text-xs text-indigo-600 font-mono">{tx.run_id.slice(0, 8)}…</span>
-                            ) : (
-                              <span className="text-xs text-gray-300">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className={`py-2.5 text-right font-medium tabular-nums text-sm pr-4 ${isTest ? 'text-gray-400' : tx.delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              {isTest ? '0' : tx.delta > 0 ? `+${tx.delta}` : `${tx.delta}`}
+                            </td>
+                            <td className="py-2.5 text-right text-xs text-gray-500 tabular-nums pr-4">{tx.balance_after}</td>
+                            <td className="py-2.5 text-right">
+                              {tx.run_id ? (
+                                <span className="text-xs text-indigo-600 font-mono">{tx.run_id.slice(0, 8)}…</span>
+                              ) : (
+                                <span className="text-xs text-gray-300">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 )}

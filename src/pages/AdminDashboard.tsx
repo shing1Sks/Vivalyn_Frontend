@@ -8,6 +8,7 @@ import { RunDetailPanel } from '../components/admin/RunDetailPanel'
 import { AdminInquiriesView } from '../components/admin/AdminInquiriesView'
 import { AdminSubscriptionsView } from '../components/admin/AdminSubscriptionsView'
 import { AdminDiscountsView } from '../components/admin/AdminDiscountsView'
+import { AdminRetentionView } from '../components/admin/AdminRetentionView'
 import AdminSidebar, { type AdminSection } from '../components/admin/AdminSidebar'
 import { ArrowLeft, Loader2, Lock } from 'lucide-react'
 
@@ -51,6 +52,7 @@ export default function AdminDashboard() {
     inquiries: false,
     subscriptions: false,
     discounts: false,
+    retention: false,
   })
 
   // Run detail overlay
@@ -156,6 +158,11 @@ export default function AdminDashboard() {
               onActivateModalConsumed={handleActivateModalConsumed}
             />
           )}
+        </div>
+
+        {/* Retention */}
+        <div className={activeSection !== 'retention' ? 'hidden' : ''}>
+          {mounted.retention && <AdminRetentionView token={token} />}
         </div>
 
         {/* Discounts */}

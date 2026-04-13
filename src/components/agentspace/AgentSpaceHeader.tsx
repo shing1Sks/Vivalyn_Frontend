@@ -137,7 +137,7 @@ export default function AgentSpaceHeader({
                     className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
                   >
                     <Settings className="w-4 h-4" />
-                    Workspace Settings
+                    Settings
                   </button>
                 )}
 

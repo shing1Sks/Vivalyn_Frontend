@@ -1,5 +1,55 @@
 # Changelog
 
+## [43] test-token-fix-and-agent-guard — 2026-04-14
+
+**Why:** Test sessions were charging the agentspace token balance the same as live sessions. Token history in the Settings panel and admin Org view didn't distinguish test from live transactions, making it impossible to audit real charges. Agent creation had no backend subscription guard — an expired plan couldn't stop a wizard submit. The settings panel header still read "Workspace Settings".
+
+**What:** Token history now visually separates test and live transactions in both the member Settings panel and the admin Org view: test session rows render with a gray flask icon, a "Test" badge, and `0` delta. The two creation wizards (General and QnA) now detect a 403 subscription error from the backend and surface an amber "Renew to continue" banner with a mailto link instead of a generic red error. Settings panel header renamed to "Settings".
+
+**Changes:**
+- `src/components/agentspace/CreateAgentWizard.tsx`:
+  - imported `ApiError` and `AlertTriangle`; added `isSubscriptionError` state
+  - `handleEvalSubmit` catch: detects `ApiError.status === 403` → amber banner with `AlertTriangle` icon and "Contact us to renew." mailto link; red styling preserved for all other errors
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`:
+  - same `ApiError` + `AlertTriangle` import, `isSubscriptionError` state, 403 detection, and amber banner
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx`:
+  - header renamed "Workspace Settings" → "Settings"
+  - added `FlaskConical` to Lucide imports
+  - transaction rows: `test_session` reason → gray `FlaskConical` icon, inline "Test" badge, delta shown as `0` in gray; all other rows unchanged
+- `src/components/admin/AdminOrgView.tsx`:
+  - added `FlaskConical` to Lucide imports
+  - token transaction table: `test_session` rows get gray flask icon, "Test" badge in reason cell, delta column shows `0` in gray
+
+---
+
+## [42] subscription-closed-loop — 2026-04-14
+
+**Why:** The subscription system was missing its enforcement layer: expiring plans showed no warning, the admin panel had no visibility into which orgs were churning vs active, and the member dashboard gave no heads-up before a plan lapsed.
+
+**What:** Member dashboard now shows an amber dismissible banner when `period_end` is within 7 days. A new Retention section in the admin panel provides per-org subscription health (plan, status, 30/60/90d session counts, last active date), a churn indicator for orgs that were using the product and then stopped, and a monthly sessions bar chart.
+
+**Changes:**
+- `src/pages/AgentSpace.tsx`: added `expiryBannerDismissed` state (reset on space switch); amber expiry banner rendered inside active-subscription dashboard when `period_end` ≤ 7 days away; dismissible via X button; added `AlertTriangle` to Lucide imports
+- `src/lib/api.ts`: added `AdminRetentionOrg`, `AdminRetentionData` interfaces and `fetchAdminRetention()` function
+- `src/components/admin/AdminSidebar.tsx`: added `'retention'` to `AdminSection` type; added "Retention" nav item with `TrendingDown` icon
+- `src/pages/AdminDashboard.tsx`: added `retention: false` to mounted state; added `AdminRetentionView` section rendering
+- `src/components/admin/AdminRetentionView.tsx` — **new**: 4 stat chips, monthly sessions BarChart (Recharts), org table with plan/status/period/session counts; churned orgs shown with `TrendingDown` icon and red row tint
+
+---
+
+## [41] minor-fixes — 2026-04-14
+
+**Why:** Three small issues: (1) HowItWorks Step 6 (Report) had no dwell time — the sticky scroll zone height only covered 5 transitions, so reaching the last step immediately scrolled the user past it with no time to read. (2) QnA agent file uploads silently failed for PDFs larger than ~500 KB — `btoa(String.fromCharCode(...new Uint8Array(buf)))` spread the entire buffer as function arguments, exceeding the JS call stack limit; the unhandled rejection meant `setFiles` was never called and uploaded files never appeared, with no error shown. (3) READMEs predated the QnA agent type and were missing the new wizard components and endpoints.
+
+**What:** HowItWorks scroll zone now uses `STEPS.length` (not `STEPS.length - 1`) so Step 6 gets a full 600px of dwell. QnA upload now uses a chunked base64 helper (8 192-byte slices) that avoids the stack limit for any file size; the loop is wrapped in try/catch to show a user-visible error on failure, and the input resets after each selection so the same file can be retried. `frontend/README.md` updated with QnA agent type table and wizard component tree.
+
+**Changes:**
+- `src/sections/HowItWorks.tsx`: scroll zone height changed from `(STEPS.length - 1) * SCROLL_STEP` to `STEPS.length * SCROLL_STEP`
+- `src/components/agentspace/wizard/QnAResourceStep.tsx`: added `arrayBufferToBase64()` helper using 8 192-byte chunked loop; replaced inline `btoa(String.fromCharCode(...))` spread with helper call; wrapped file-processing loop in try/catch with `setFileError('Could not read file. Please try again.')`; added `e.target.value = ''` reset in `onChange` handler
+- `README.md`: added Agent Types table (General vs QnA); expanded project structure to list QnA wizard components (`CreateQnAAgentWizard`, `QnAResourceStep`, `QnAQuestionReview`, `QnABehaviorStep`, `QnAConfigureView`)
+
+---
+
 ## [40] howitworks-redesign — 2026-04-13
 
 **Why:** The previous HowItWorks sticky-scroll layout felt disconnected — the RHS mockup floated separately from the steps, content was small and underutilized, and the auto-advance timer wasn't intuitive. The Why section also used high-contrast dark/colored tiles that stood out from the rest of the page's neutral palette.

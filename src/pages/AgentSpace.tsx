@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  AlertTriangle,
   ArrowLeft,
   Bot,
   Check,
@@ -703,6 +704,7 @@ function AgentSpaceContent() {
 
   const [subscription, setSubscription] = useState<AgentspaceSubscription | null>(null)
   const [subscriptionLoading, setSubscriptionLoading] = useState(true)
+  const [expiryBannerDismissed, setExpiryBannerDismissed] = useState(false)
 
   const spaceId = activeSpace?.id
   const spaceToken = session?.access_token
@@ -726,6 +728,7 @@ function AgentSpaceContent() {
   useEffect(() => {
     if (!spaceId || !spaceToken) return
     setSubscriptionLoading(true)
+    setExpiryBannerDismissed(false)
     fetchAgentspaceSubscription(spaceToken, spaceId)
       .then(setSubscription)
       .catch(() => setSubscription(null))
@@ -802,6 +805,37 @@ function AgentSpaceContent() {
             <NoActivePlanScreen subscription={subscription} />
           ) : (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="flex flex-col gap-5">
+
+            {/* Expiring-soon warning */}
+            {(() => {
+              if (!subscription?.period_end || expiryBannerDismissed) return null
+              const msLeft = new Date(subscription.period_end).getTime() - Date.now()
+              const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24))
+              if (daysLeft > 7 || daysLeft < 0) return null
+              const dateLabel = new Date(subscription.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+              return (
+                <motion.div variants={fadeInUp} className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <p className="text-sm text-amber-800 truncate">
+                      Your plan expires on <span className="font-semibold">{dateLabel}</span>.{' '}
+                      <a
+                        href={`mailto:hello@vivalyn.in?subject=${encodeURIComponent('Plan Renewal — ' + (subscription.plan_tier ?? 'Vivalyn'))}`}
+                        className="underline underline-offset-2 hover:text-amber-900 duration-[120ms]"
+                      >
+                        Contact us to renew.
+                      </a>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setExpiryBannerDismissed(true)}
+                    className="text-amber-500 hover:text-amber-800 shrink-0 duration-[120ms]"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </motion.div>
+              )
+            })()}
 
             {/* Tab bar */}
             <motion.div variants={fadeInUp}>

@@ -76,6 +76,15 @@ export default function QnAResourceStep({ language, personaName, isLoading, onGe
     })
   }
 
+  function arrayBufferToBase64(buffer: ArrayBuffer): string {
+    let binary = ''
+    const bytes = new Uint8Array(buffer)
+    for (let i = 0; i < bytes.length; i += 8192) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
+    }
+    return btoa(binary)
+  }
+
   async function handleFiles(incoming: File[]) {
     setFileError(null)
     const allowed = incoming.filter(f => f.type === 'application/pdf' || f.type === 'text/plain' || f.name.endsWith('.txt'))
@@ -92,19 +101,23 @@ export default function QnAResourceStep({ language, personaName, isLoading, onGe
       return
     }
 
-    const results: AttachedFile[] = []
-    for (const file of allowed) {
-      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-        const text = await readFileAsText(file)
-        results.push({ name: file.name, text })
-      } else {
-        // PDF — send as base64; backend extracts text
-        const buf = await file.arrayBuffer()
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
-        results.push({ name: file.name, text: `[PDF_BASE64:${b64}]` })
+    try {
+      const results: AttachedFile[] = []
+      for (const file of allowed) {
+        if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+          const text = await readFileAsText(file)
+          results.push({ name: file.name, text })
+        } else {
+          // PDF — encode as base64 in chunks to avoid call-stack overflow on large files
+          const buf = await file.arrayBuffer()
+          const b64 = arrayBufferToBase64(buf)
+          results.push({ name: file.name, text: `[PDF_BASE64:${b64}]` })
+        }
       }
+      setFiles(prev => [...prev, ...results])
+    } catch {
+      setFileError('Could not read file. Please try again.')
     }
-    setFiles(prev => [...prev, ...results])
   }
 
   function removeFile(idx: number) {
@@ -180,7 +193,10 @@ export default function QnAResourceStep({ language, personaName, isLoading, onGe
               accept=".pdf,.txt,text/plain,application/pdf"
               multiple
               className="hidden"
-              onChange={e => { if (e.target.files) handleFiles(Array.from(e.target.files)) }}
+              onChange={e => {
+                if (e.target.files) handleFiles(Array.from(e.target.files))
+                e.target.value = ''
+              }}
             />
             <Upload className="w-5 h-5 text-gray-400 mx-auto mb-2" />
             <p className="text-sm text-gray-600 font-medium">Attach reference materials</p>

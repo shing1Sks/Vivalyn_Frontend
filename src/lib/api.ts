@@ -1221,6 +1221,33 @@ export async function updateAdminSubscription(
   return res.json();
 }
 
+// ── Admin — Retention ─────────────────────────────────────────────────────────
+
+export interface AdminRetentionOrg {
+  agentspace_id: string;
+  agentspace_name: string;
+  plan_tier: string | null;
+  status: string;
+  expiring_soon: boolean;
+  period_start: string | null;
+  period_end: string | null;
+  sessions_last_30d: number;
+  sessions_last_60d: number;
+  sessions_last_90d: number;
+  last_session_at: string | null;
+}
+
+export interface AdminRetentionData {
+  orgs: AdminRetentionOrg[];
+  monthly_sessions: { month: string; count: number }[];
+}
+
+export async function fetchAdminRetention(token: string): Promise<AdminRetentionData> {
+  const res = await fetch(`${BASE}/api/v1/admin/retention`, { headers: adminHeaders(token) });
+  if (!res.ok) throw new ApiError("Failed to fetch retention data", res.status);
+  return res.json();
+}
+
 // ── Admin — Discounts ─────────────────────────────────────────────────────────
 
 export interface DiscountCode {

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, BarChart2, Check, Copy, Link2, Loader2, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, BarChart2, Check, Copy, Link2, Loader2, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { useAuth } from '../../../context/AuthContext'
 import {
+  ApiError,
   compileQnAAgent,
   generateEvaluationCriteria,
   generateQnAQuestions,
@@ -65,6 +66,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
   const [evalStatus, setEvalStatus] = useState<EvalStatus>('idle')
   const [evalCriteria, setEvalCriteria] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [isSubscriptionError, setIsSubscriptionError] = useState(false)
 
   // Prevent double triggers in strict mode
   const resourceStepStarted = useRef(false)
@@ -87,6 +89,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
       setEvalStatus('idle')
       setEvalCriteria('')
       setError(null)
+      setIsSubscriptionError(false)
       resourceStepStarted.current = false
     }
   }, [open])
@@ -172,8 +175,13 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
       setSavedAgent(agent)
       setStep('done')
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : undefined
-      setError(msg ?? 'Failed to save agent. Please try again.')
+      if (e instanceof ApiError && e.status === 403) {
+        setIsSubscriptionError(true)
+        setError('Your plan has expired. Renew to continue creating agents.')
+      } else {
+        setIsSubscriptionError(false)
+        setError(e instanceof Error ? e.message : 'Failed to save agent. Please try again.')
+      }
       setEvalStatus('idle')
     }
   }, [session, agentspaceId, compiledResult, evalCriteria, selectedLanguage, selectedVoiceName])
@@ -260,11 +268,19 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
                 initial={{ height: 0 }}
                 animate={{ height: 'auto' }}
                 exit={{ height: 0 }}
-                className="overflow-hidden bg-red-50 border-b border-red-200"
+                className={`overflow-hidden border-b ${isSubscriptionError ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}
               >
-                <div className="px-6 py-3 flex items-center justify-between">
-                  <p className="text-sm text-red-700">{error}</p>
-                  <button onClick={() => setError(null)} className="text-red-400 hover:text-red-700">
+                <div className="px-6 py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isSubscriptionError && <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
+                    <p className={`text-sm ${isSubscriptionError ? 'text-amber-800' : 'text-red-700'}`}>
+                      {error}
+                      {isSubscriptionError && (
+                        <> <a href="mailto:hello@vivalyn.in?subject=Renew%20plan" className="font-medium underline">Contact us to renew.</a></>
+                      )}
+                    </p>
+                  </div>
+                  <button onClick={() => { setError(null); setIsSubscriptionError(false) }} className={isSubscriptionError ? 'text-amber-400 hover:text-amber-700' : 'text-red-400 hover:text-red-700'}>
                     <X className="w-4 h-4" />
                   </button>
                 </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Loader2, ChevronDown, Trash2, Send, Clock, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, CreditCard, AlertCircle, Zap, Mail, Pencil } from 'lucide-react'
+import { X, Loader2, ChevronDown, Trash2, Send, Clock, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, FlaskConical, CreditCard, AlertCircle, Zap, Mail, Pencil } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
 import { useTokenBalance } from '../../context/TokenContext'
@@ -376,7 +376,7 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                 <div className="flex-1 min-w-0 mr-3">
-                  <h2 className="text-[15px] font-semibold text-gray-900">Workspace Settings</h2>
+                  <h2 className="text-[15px] font-semibold text-gray-900">Settings</h2>
                   {activeSpace && (
                     isAdmin && isEditingName ? (
                       <div className="mt-0.5 flex items-center gap-1.5">
@@ -696,27 +696,39 @@ export default function AgentSpaceSettingsPanel({ open, onClose }: Props) {
                                     <p className="text-sm text-gray-400 py-4 text-center">No transactions yet.</p>
                                   ) : (
                                     <div>
-                                      {transactions.map((tx) => (
-                                        <div key={tx.id} className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
-                                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${tx.delta > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                                            {tx.delta > 0
-                                              ? <ArrowUpRight className="w-3 h-3 text-emerald-600" />
-                                              : <ArrowDownLeft className="w-3 h-3 text-red-500" />
-                                            }
+                                      {transactions.map((tx) => {
+                                        const isTest = tx.reason === 'test_session'
+                                        return (
+                                          <div key={tx.id} className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isTest ? 'bg-gray-100' : tx.delta > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                                              {isTest
+                                                ? <FlaskConical className="w-3 h-3 text-gray-400" />
+                                                : tx.delta > 0
+                                                  ? <ArrowUpRight className="w-3 h-3 text-emerald-600" />
+                                                  : <ArrowDownLeft className="w-3 h-3 text-red-500" />
+                                              }
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-1.5">
+                                                <p className="text-xs font-medium text-gray-700 capitalize">
+                                                  {tx.reason.replace(/_/g, ' ')}
+                                                </p>
+                                                {isTest && (
+                                                  <span className="inline-flex items-center px-1.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                                    Test
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <p className="text-xs text-gray-400">
+                                                {new Date(tx.created_at).toLocaleDateString()} · bal: {tx.balance_after}
+                                              </p>
+                                            </div>
+                                            <span className={`text-sm font-semibold tabular-nums ${isTest ? 'text-gray-400' : tx.delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                              {isTest ? '0' : tx.delta > 0 ? `+${tx.delta}` : `${tx.delta}`}
+                                            </span>
                                           </div>
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-gray-700 capitalize">
-                                              {tx.reason.replace(/_/g, ' ')}
-                                            </p>
-                                            <p className="text-xs text-gray-400">
-                                              {new Date(tx.created_at).toLocaleDateString()} · bal: {tx.balance_after}
-                                            </p>
-                                          </div>
-                                          <span className={`text-sm font-semibold tabular-nums ${tx.delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                            {tx.delta > 0 ? '+' : ''}{tx.delta}
-                                          </span>
-                                        </div>
-                                      ))}
+                                        )
+                                      })}
                                     </div>
                                   )}
                                   {Math.ceil(txTotal / TX_PAGE_SIZE) > 1 && (
