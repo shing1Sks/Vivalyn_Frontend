@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { Activity, CreditCard, Loader2, MessageSquare, Tag } from 'lucide-react'
 import {
   fetchAdminDiscounts,
-  fetchAdminInquiries,
+  fetchContactEvents,
   fetchAdminOverview,
   fetchAdminSubscriptions,
   type AdminSubscription,
+  type ContactEvent,
   type DiscountCode,
-  type Inquiry,
 } from '../../lib/api'
 import type { AdminSection } from './AdminSidebar'
 
@@ -39,11 +39,11 @@ function timeAgo(iso: string): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  new: 'bg-blue-50 text-blue-700',
-  contacted: 'bg-yellow-50 text-yellow-700',
-  in_progress: 'bg-indigo-50 text-indigo-700',
-  closed: 'bg-gray-100 text-gray-500',
-  active: 'bg-green-50 text-green-700',
+  new:     'bg-indigo-50 text-indigo-700',
+  seen:    'bg-amber-50 text-amber-700',
+  replied: 'bg-blue-50 text-blue-700',
+  closed:  'bg-gray-100 text-gray-500',
+  active:  'bg-green-50 text-green-700',
   trial: 'bg-indigo-50 text-indigo-700',
   inactive: 'bg-gray-100 text-gray-500',
   cancelled: 'bg-red-50 text-red-700',
@@ -59,7 +59,7 @@ const PLAN_COLORS: Record<string, string> = {
 
 export function AdminHomeView({ token, onNavigate, onActivateSubscription }: AdminHomeViewProps) {
   const [stats, setStats] = useState<HomeStats | null>(null)
-  const [recentInquiries, setRecentInquiries] = useState<Inquiry[]>([])
+  const [recentInquiries, setRecentInquiries] = useState<ContactEvent[]>([])
   const [recentSubscriptions, setRecentSubscriptions] = useState<AdminSubscription[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -70,14 +70,14 @@ export function AdminHomeView({ token, onNavigate, onActivateSubscription }: Adm
 
     Promise.all([
       fetchAdminSubscriptions(token),
-      fetchAdminInquiries(token),
+      fetchContactEvents(token),
       fetchAdminDiscounts(token),
       fetchAdminOverview(token, formatDate(from), formatDate(to), true),
     ])
       .then(([subs, inquiries, discounts, overview]) => {
         setStats({
           activeSubscriptions: subs.filter((s) => s.status === 'active').length,
-          openInquiries: inquiries.filter((i) => i.status !== 'closed').length,
+          openInquiries: inquiries.filter((i: ContactEvent) => i.status !== 'closed').length,
           activeDiscountCodes: discounts.filter((d: DiscountCode) => d.is_active).length,
           sessionsLast30d: overview.total_sessions,
         })
@@ -177,7 +177,7 @@ export function AdminHomeView({ token, onNavigate, onActivateSubscription }: Adm
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[inq.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {inq.status.replace('_', ' ')}
+                      {inq.status}
                     </span>
                     <span className="text-xs text-gray-400">{timeAgo(inq.created_at)}</span>
                   </div>

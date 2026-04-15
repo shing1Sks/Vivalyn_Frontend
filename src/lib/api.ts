@@ -1058,25 +1058,30 @@ export async function fetchAdminOrgTokenTransactions(
   return res.json();
 }
 
-// ── Contact / Inquiry ─────────────────────────────────────────────────────────
+// ── Contact / OTP ─────────────────────────────────────────────────────────────
 
-export interface InquiryCreate {
-  name: string;
-  email: string;
-  business_name: string;
-  size: string;
-  use_case: string;
-  plan_interest: string | null;
-  currency_pref: string;
-}
-
-export async function submitInquiry(data: InquiryCreate): Promise<void> {
-  const res = await fetch(`${BASE}/api/v1/contact`, {
+export async function requestOtp(data: { name: string; email: string; message: string }): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/contact/request-otp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new ApiError("Failed to submit inquiry", res.status);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body.detail ?? "Failed to send verification code", res.status);
+  }
+}
+
+export async function verifyOtp(data: { email: string; otp: string }): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/contact/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body.detail ?? "Verification failed", res.status);
+  }
 }
 
 // ── Subscription (member-facing) ──────────────────────────────────────────────
@@ -1105,56 +1110,47 @@ export async function fetchAgentspaceSubscription(
   return res.json();
 }
 
-// ── Admin — Inquiries ─────────────────────────────────────────────────────────
+// ── Admin — Contact Events ────────────────────────────────────────────────────
 
-export interface Inquiry {
+export interface ContactEvent {
   id: string;
   created_at: string;
+  type: string;
   name: string;
   email: string;
-  business_name: string;
-  size: string;
-  use_case: string;
-  plan_interest: string | null;
-  currency_pref: string;
+  message: string;
+  source: string | null;
   status: string;
-  admin_notes: string | null;
+  notes: string | null;
 }
 
-export async function fetchAdminInquiries(token: string, status?: string): Promise<Inquiry[]> {
-  const url = status
-    ? `${BASE}/api/v1/admin/inquiries?status=${status}`
-    : `${BASE}/api/v1/admin/inquiries`;
+export async function fetchContactEvents(
+  token: string,
+  status?: string,
+  type?: string,
+): Promise<ContactEvent[]> {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (type) params.set('type', type);
+  const qs = params.toString();
+  const url = qs ? `${BASE}/api/v1/admin/contact-events?${qs}` : `${BASE}/api/v1/admin/contact-events`;
   const res = await fetch(url, { headers: adminHeaders(token) });
-  if (!res.ok) throw new ApiError("Failed to fetch inquiries", res.status);
+  if (!res.ok) throw new ApiError("Failed to fetch contact events", res.status);
   return res.json();
 }
 
-export async function updateAdminInquiry(
+export async function updateContactEvent(
   token: string,
   id: string,
-  data: { status?: string; admin_notes?: string },
-): Promise<Inquiry> {
-  const res = await fetch(`${BASE}/api/v1/admin/inquiries/${id}`, {
+  data: { status?: string; notes?: string },
+): Promise<ContactEvent> {
+  const res = await fetch(`${BASE}/api/v1/admin/contact-events/${id}`, {
     method: 'PATCH',
     headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new ApiError("Failed to update inquiry", res.status);
+  if (!res.ok) throw new ApiError("Failed to update contact event", res.status);
   return res.json();
-}
-
-export async function sendAdminFollowupEmail(
-  token: string,
-  id: string,
-  data: { subject: string; body_html: string },
-): Promise<void> {
-  const res = await fetch(`${BASE}/api/v1/admin/inquiries/${id}/followup-email`, {
-    method: 'POST',
-    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new ApiError("Failed to send follow-up email", res.status);
 }
 
 // ── Admin — Subscriptions ─────────────────────────────────────────────────────
@@ -1349,19 +1345,6 @@ export async function updateDiscountCode(
   });
   if (!res.ok) throw new ApiError("Failed to update discount", res.status);
   return res.json();
-}
-
-export async function sendDiscountEmail(
-  token: string,
-  id: string,
-  data: { to_email: string; to_name: string },
-): Promise<void> {
-  const res = await fetch(`${BASE}/api/v1/admin/discounts/${id}/send-email`, {
-    method: 'POST',
-    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new ApiError("Failed to send discount email", res.status);
 }
 
 export async function fetchDiscountUsage(

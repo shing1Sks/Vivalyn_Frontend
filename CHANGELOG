@@ -1,5 +1,20 @@
 # Changelog
 
+## [45] email-system-overhaul — 2026-04-16
+
+**Why:** Plans are now public so the inquiry form needed a full rethink. The contact flow becomes a conversion-blocker capture form with OTP verification. The admin panel loses email-sending actions (now handled from the Hostinger inbox). The `inquiry` DB table is replaced by `contact_event`. Sender addresses are cleaned up across the board.
+
+**What:** `InquiryModal` is rewritten as a 3-step form → OTP → success flow. `AdminInquiriesView` is replaced by `AdminContactEventsView` with new status values, type filter, expandable rows, and no email actions. `AdminDiscountsView` loses the send-email modal. `AdminHomeView` is updated to use `fetchContactEvents`. Pricing CTAs updated to "Talk to us".
+
+**Changes:**
+- `src/lib/api.ts`: removed `submitInquiry`, `sendAdminFollowupEmail`, `sendDiscountEmail`, `fetchAdminInquiries`, `updateAdminInquiry`, `Inquiry` interface; added `requestOtp`, `verifyOtp`, `fetchContactEvents`, `updateContactEvent`, `ContactEvent` interface
+- `src/components/ui/InquiryModal.tsx` — full rewrite: 3-step `form → otp → success` with Framer Motion `AnimatePresence` step transitions; fields trimmed to name/email/message; OTP input (6-digit numeric, large centered); resend code with 429 rate-limit display; removed currency/business/plan fields
+- `src/sections/Pricing.tsx`: CTA copy changed from "Contact Us" → "Talk to us" for Growth/Pro plans; removed `planInterest` pre-fill and `selectedTier` state
+- `src/components/admin/AdminContactEventsView.tsx` — new file replacing `AdminInquiriesView`: status options `new|seen|replied|closed`; type filter `all|inquiry|support`; expandable rows showing full message + editable notes with save; status dropdown fix: removed `overflow-hidden` from table container, replaced broken per-row `ref` with document-level `mousedown` listener keyed to `statusDropdownId`; `onMouseDown` + `stopPropagation` on dropdown toggle and items
+- `src/components/admin/AdminDiscountsView.tsx`: removed `SendEmailModal` component, `sendEmailTarget` state, "Send" button from discount rows, `sendDiscountEmail` + `Mail` imports
+- `src/components/admin/AdminHomeView.tsx`: switched to `fetchContactEvents`/`ContactEvent`; updated status color map to `new|seen|replied|closed`
+- `src/pages/AdminDashboard.tsx`: updated import `AdminInquiriesView` → `AdminContactEventsView`
+
 ## [44] retention-event-log — 2026-04-15
 
 **Why:** The retention view's bar chart showed aggregate monthly sessions but had no plan history, no utilisation signal, and no way to see whether orgs were renewing, upgrading, or churning. With a new backend `subscription_event` table tracking all plan lifecycle changes, the frontend can now surface a meaningful retention picture.

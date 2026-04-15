@@ -131,7 +131,7 @@ function PricingCard({
           className="w-full justify-center"
           onClick={() => onAction(plan.tier)}
         >
-          Contact Us
+          Talk to us
         </Button>
       ) : (
         <Button
@@ -155,7 +155,6 @@ function PricingCardSkeleton() {
 export default function Pricing() {
   const [region, setRegion] = useState<Region>('india')
   const [modalOpen, setModalOpen] = useState(false)
-  const [selectedTier, setSelectedTier] = useState<string | undefined>()
   const [plansIn, setPlansIn] = useState<PricingPlan[]>([])
   const [plansIntl, setPlansIntl] = useState<PricingPlan[]>([])
   const [plansLoading, setPlansLoading] = useState(true)
@@ -173,8 +172,7 @@ export default function Pricing() {
 
   const plans = region === 'india' ? plansIn : plansIntl
 
-  const handleAction = (tier: string) => {
-    setSelectedTier(tier)
+  const handleAction = () => {
     setModalOpen(true)
   }
 
@@ -242,7 +240,6 @@ export default function Pricing() {
       <InquiryModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        planInterest={selectedTier}
       />
     </SectionWrapper>
   )

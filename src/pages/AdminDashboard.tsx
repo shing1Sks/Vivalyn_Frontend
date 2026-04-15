@@ -5,7 +5,7 @@ import { adminMe } from '../lib/api'
 import { AdminAnalyticsView } from '../components/admin/AdminAnalyticsView'
 import { AdminHomeView } from '../components/admin/AdminHomeView'
 import { RunDetailPanel } from '../components/admin/RunDetailPanel'
-import { AdminInquiriesView } from '../components/admin/AdminInquiriesView'
+import { AdminContactEventsView } from '../components/admin/AdminContactEventsView'
 import { AdminSubscriptionsView } from '../components/admin/AdminSubscriptionsView'
 import { AdminDiscountsView } from '../components/admin/AdminDiscountsView'
 import { AdminRetentionView } from '../components/admin/AdminRetentionView'
@@ -146,7 +146,7 @@ export default function AdminDashboard() {
 
         {/* Inquiries */}
         <div className={activeSection !== 'inquiries' ? 'hidden' : ''}>
-          {mounted.inquiries && <AdminInquiriesView token={token} />}
+          {mounted.inquiries && <AdminContactEventsView token={token} />}
         </div>
 
         {/* Subscriptions */}

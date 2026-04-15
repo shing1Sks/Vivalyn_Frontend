@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertCircle, ChevronDown, Loader2, Mail, Plus, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, Loader2, Plus, X } from 'lucide-react'
 import {
   fetchAdminDiscounts,
   createDiscountCode,
   updateDiscountCode,
-  sendDiscountEmail,
   fetchDiscountUsage,
   projectDiscount,
   type DiscountCode,
@@ -20,99 +19,6 @@ const PLAN_PRICES_USD: Record<string, number> = { trial: 2.5, starter: 35, growt
 function generateCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-}
-
-function SendEmailModal({
-  code,
-  token,
-  onClose,
-}: {
-  code: DiscountCode
-  token: string
-  onClose: () => void
-}) {
-  const [toEmail, setToEmail] = useState('')
-  const [toName, setToName] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [sent, setSent] = useState(false)
-  const backdropRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  const handleSend = async () => {
-    if (!toEmail.trim() || !toName.trim()) { setError('Email and name are required.'); return }
-    setLoading(true); setError('')
-    try {
-      await sendDiscountEmail(token, code.id, { to_email: toEmail.trim(), to_name: toName.trim() })
-      setSent(true)
-    } catch {
-      setError('Failed to send. Try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        ref={backdropRef}
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.12 }}
-        onMouseDown={e => { if (e.target === backdropRef.current) onClose() }}
-      />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <motion.div
-          className="bg-white rounded-2xl shadow-xl w-full max-w-sm"
-          initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.12 }}
-        >
-          {sent ? (
-            <div className="p-8 text-center">
-              <p className="text-sm font-medium text-gray-900 mb-1">Discount email sent</p>
-              <p className="text-xs text-gray-500 mb-4">Code <strong>{code.code}</strong> sent to {toEmail}.</p>
-              <button onClick={onClose} className="text-sm text-indigo-600 font-medium">Close</button>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between p-5 border-b border-gray-100">
-                <p className="text-sm font-semibold text-gray-900">Send code <span className="text-indigo-600">{code.code}</span></p>
-                <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors duration-[120ms]"><X size={18} /></button>
-              </div>
-              <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Recipient name</label>
-                  <input value={toName} onChange={e => setToName(e.target.value)}
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Recipient email</label>
-                  <input type="email" value={toEmail} onChange={e => setToEmail(e.target.value)}
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                {error && <p className="text-xs text-red-600">{error}</p>}
-                <div className="flex gap-3">
-                  <button onClick={onClose} className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors duration-[120ms]">Cancel</button>
-                  <button onClick={handleSend} disabled={loading}
-                    className="flex-1 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms] disabled:opacity-50"
-                  >
-                    {loading ? 'Sending...' : 'Send'}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </motion.div>
-      </div>
-    </AnimatePresence>
-  )
 }
 
 function UsageDrawer({
@@ -245,7 +151,6 @@ export function AdminDiscountsView({ token }: { token: string }) {
   const [codes, setCodes] = useState<DiscountCode[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedUsage, setExpandedUsage] = useState<string | null>(null)
-  const [sendEmailTarget, setSendEmailTarget] = useState<DiscountCode | null>(null)
 
   // Generator form state
   const [code, setCode] = useState('')
@@ -495,13 +400,6 @@ export function AdminDiscountsView({ token }: { token: string }) {
                     <ChevronDown size={12} className={`transition-transform duration-[120ms] ${expandedUsage === dc.id ? 'rotate-180' : ''}`} />
                   </button>
                   <button
-                    onClick={() => setSendEmailTarget(dc)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-[120ms]"
-                  >
-                    <Mail size={12} />
-                    Send
-                  </button>
-                  <button
                     onClick={() => handleToggleActive(dc)}
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-[120ms] ${
                       dc.is_active
@@ -529,13 +427,6 @@ export function AdminDiscountsView({ token }: { token: string }) {
         </div>
       )}
 
-      {sendEmailTarget && (
-        <SendEmailModal
-          code={sendEmailTarget}
-          token={token}
-          onClose={() => setSendEmailTarget(null)}
-        />
-      )}
     </div>
   )
 }
