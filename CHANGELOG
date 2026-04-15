@@ -1,5 +1,23 @@
 # Changelog
 
+## [44] retention-event-log — 2026-04-15
+
+**Why:** The retention view's bar chart showed aggregate monthly sessions but had no plan history, no utilisation signal, and no way to see whether orgs were renewing, upgrading, or churning. With a new backend `subscription_event` table tracking all plan lifecycle changes, the frontend can now surface a meaningful retention picture.
+
+**What:** `AdminRetentionView` is rebuilt with two new chart sections. A stepped line chart shows each org's plan tier progression over time (one line per org, Y-axis = tier rank Trial→Pro) — when orgs have no events yet, a placeholder is shown. A utilisation section renders per-org progress bars showing minutes used vs included in the current billing period, colour-coded by health (green / amber for expiring or heavy use / red for expired). The org table gains a Util. column. The monthly sessions bar chart is removed (covered by the Analytics view).
+
+**Changes:**
+- `src/lib/api.ts`: added `SubscriptionEvent` interface; extended `AdminRetentionOrg` with `minutes_included`, `minutes_used_this_period`, and `events: SubscriptionEvent[]`
+- `src/components/admin/AdminRetentionView.tsx` — rebuilt:
+  - removed `Bar`, `BarChart` recharts imports; added `LineChart`, `Line`
+  - added helpers: `buildOrgTierByMonth`, `resolveTimeline`, `buildMonthRange` to transform event arrays into per-month tier rank series
+  - `PlanTierTimeline` component: stepped `LineChart` per org with `type="stepAfter"`, Y-axis tick-formatted to tier names, colour palette cycling, inline legend; placeholder rendered when no events exist
+  - `UtilizationSection` component: 2-col grid of per-org progress bars with `minutes_used_this_period / minutes_included` percentage, dynamic colour (emerald / amber / red), and `X / Y min` label
+  - `OrgRow`: added Util. column showing utilisation percentage, amber highlight at ≥80%
+  - table updated to 9 columns (added Util., removed monthly sessions chart)
+
+---
+
 ## [43] test-token-fix-and-agent-guard — 2026-04-14
 
 **Why:** Test sessions were charging the agentspace token balance the same as live sessions. Token history in the Settings panel and admin Org view didn't distinguish test from live transactions, making it impossible to audit real charges. Agent creation had no backend subscription guard — an expired plan couldn't stop a wizard submit. The settings panel header still read "Workspace Settings".

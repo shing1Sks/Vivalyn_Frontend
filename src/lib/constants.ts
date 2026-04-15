@@ -153,27 +153,27 @@ export const FAQ_ITEMS = [
   {
     question: 'How long does it take to launch an assessor?',
     answer:
-      'You can launch a basic assessor in under 10 minutes with our guided wizard. Define your objective, set a rubric, and you\'re ready to go.',
+      'You can launch a basic assessor in under 5 minutes with our guided wizard. Define your objective, set a rubric, and you\'re ready to go.',
   },
+  // {
+  //   question: 'Is my data private?', [[[]]]
+  //   answer:
+  //     'Yes — we support encryption-at-rest, role-based access, SSO and per-tenant isolation. Enterprise plans include customizable security configurations.',
+  // },
+  // {
+  //   question: 'Can I use my company\'s rubric?', [[[]]]
+  //   answer:
+  //     'Absolutely — import or configure your rubric in the wizard. You can customize criteria, weights, and scoring scales to match your exact needs.',
+  // },
   {
-    question: 'Is my data private?',
+    question: 'What languages are supported?',
     answer:
-      'Yes — we support encryption-at-rest, role-based access, SSO and per-tenant isolation. Enterprise plans include customizable security configurations.',
-  },
-  {
-    question: 'Can I use my company\'s rubric?',
-    answer:
-      'Absolutely — import or configure your rubric in the wizard. You can customize criteria, weights, and scoring scales to match your exact needs.',
-  },
-  {
-    question: 'What languages and accents are supported?',
-    answer:
-      'Current support includes English (US/UK/IN), Hindi, and many more native languages. More languages are planned — contact us for priority support.',
+      'Current support includes English, Hindi, Japanese, Chinese and many more native languages. More languages are planned — contact us for priority support.',
   },
   {
     question: 'What\'s the pricing model?',
     answer:
-      'We offer monthly subscriptions based on your usage needs. Trial (150 mins), Starter (1,500 mins/mo), Growth (4,000 mins/mo), and Pro (8,000 mins/mo + optional scaling) — each approximately 10 minutes per session. Contact us to explore Growth and Pro plans.',
+      'We offer monthly subscriptions based on your usage needs. Trial (150 mins), Starter (1,500 mins/mo), Growth (4,000 mins/mo), and Pro (8,000 mins/mo + optional scaling). Contact us to explore custom plans and pricing.',
   },
 ]
 

@@ -1223,6 +1223,18 @@ export async function updateAdminSubscription(
 
 // ── Admin — Retention ─────────────────────────────────────────────────────────
 
+export interface SubscriptionEvent {
+  id: string;
+  created_at: string;
+  agentspace_id: string;
+  event_type: 'activated' | 'renewed' | 'upgraded' | 'downgraded' | 'cancelled' | 'expired';
+  plan_tier: string;
+  previous_tier: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  minutes_included: number | null;
+}
+
 export interface AdminRetentionOrg {
   agentspace_id: string;
   agentspace_name: string;
@@ -1231,10 +1243,13 @@ export interface AdminRetentionOrg {
   expiring_soon: boolean;
   period_start: string | null;
   period_end: string | null;
+  minutes_included: number;
+  minutes_used_this_period: number;
   sessions_last_30d: number;
   sessions_last_60d: number;
   sessions_last_90d: number;
   last_session_at: string | null;
+  events: SubscriptionEvent[];
 }
 
 export interface AdminRetentionData {
