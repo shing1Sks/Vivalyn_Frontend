@@ -43,7 +43,6 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   // ── Wizard state ────────────────────────────────────────────────────────────
   const [step, setStep] = useState<WizardStep>('language-voice')
   const [selectedLanguage, setSelectedLanguage] = useState('')
-  const [selectedVoicePreference, setSelectedVoicePreference] = useState('')
   const [selectedVoiceName, setSelectedVoiceName] = useState('')
   const [selectedPersonaName, setSelectedPersonaName] = useState('')
   const [seedPrompt, setSeedPrompt] = useState('')
@@ -66,7 +65,6 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
     if (open) {
       setStep('language-voice')
       setSelectedLanguage('')
-      setSelectedVoicePreference('')
       setSelectedVoiceName('')
       setSelectedPersonaName('')
       setSeedPrompt('')
@@ -194,9 +192,8 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
 
   // ── Step handlers ───────────────────────────────────────────────────────────
 
-  function handleLanguageVoiceContinue(lang: string, pref: string, voiceName: string, personaName: string) {
+  function handleLanguageVoiceContinue(lang: string, _pref: string, voiceName: string, personaName: string) {
     setSelectedLanguage(lang)
-    setSelectedVoicePreference(pref)
     setSelectedVoiceName(voiceName)
     setSelectedPersonaName(personaName)
     setStep('prompt-input')

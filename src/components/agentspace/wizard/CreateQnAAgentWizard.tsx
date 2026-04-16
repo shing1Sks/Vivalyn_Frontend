@@ -51,7 +51,6 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
   // ── Wizard state ────────────────────────────────────────────────────────────
   const [step, setStep] = useState<QnAWizardStep>('language-voice')
   const [selectedLanguage, setSelectedLanguage] = useState('')
-  const [selectedVoicePreference, setSelectedVoicePreference] = useState('')
   const [selectedVoiceName, setSelectedVoiceName] = useState('')
   const [selectedPersonaName, setSelectedPersonaName] = useState('')
 
@@ -76,7 +75,6 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
     if (open) {
       setStep('language-voice')
       setSelectedLanguage('')
-      setSelectedVoicePreference('')
       setSelectedVoiceName('')
       setSelectedPersonaName('')
       setAssessmentContext('')
@@ -96,9 +94,8 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
 
   // ── Step handlers ────────────────────────────────────────────────────────────
 
-  function handleLanguageVoiceContinue(lang: string, pref: string, voiceName: string, personaName: string) {
+  function handleLanguageVoiceContinue(lang: string, _pref: string, voiceName: string, personaName: string) {
     setSelectedLanguage(lang)
-    setSelectedVoicePreference(pref)
     setSelectedVoiceName(voiceName)
     setSelectedPersonaName(personaName)
     setStep('resource-upload')

@@ -438,7 +438,7 @@ interface VoiceBarProps {
   onUpdated: (lang: string, voice: string) => void
 }
 
-function VoiceBar({ agentId, agentLanguage, agentVoice, editedSpec, onUpdated }: VoiceBarProps) {
+function VoiceBar({ agentId, agentLanguage, agentVoice, onUpdated }: VoiceBarProps) {
   const { session } = useAuth()
   const [open, setOpen] = useState(false)
   const [languages, setLanguages] = useState<LanguageVoiceOption[]>([])

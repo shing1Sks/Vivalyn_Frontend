@@ -330,7 +330,7 @@ function ActivateModal({
     if (!agentspaceId.trim()) { setError('Select an agentspace to continue.'); return }
     setLoading(true); setError('')
     try {
-      const sub = await activateSubscription(token, {
+      await activateSubscription(token, {
         agentspace_id: agentspaceId.trim(),
         plan_tier: planTier,
         currency,

@@ -10,7 +10,6 @@ import {
   type QnAPromptSpec,
   type QnAQuestion,
   type QnAQuestionBank,
-  type EvaluationMetrics,
 } from '../../../lib/api'
 import { useAuth } from '../../../context/AuthContext'
 
@@ -246,7 +245,6 @@ export default function QnAConfigureView({ agent }: Props) {
   const [savedProfileOk, setSavedProfileOk] = useState(false)
 
   // Evaluation state
-  const [metrics, setMetrics] = useState<EvaluationMetrics | null>(agent.transcript_evaluation_metrics ?? null)
   const [metricsList, setMetricsList] = useState<string[]>(agent.transcript_evaluation_metrics?.metrics ?? [])
   const [curatorPrompt, setCuratorPrompt] = useState(agent.transcript_evaluation_metrics?.report_curator_prompt ?? '')
   const [newMetric, setNewMetric] = useState('')

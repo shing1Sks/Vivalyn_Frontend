@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertCircle, ChevronDown, Loader2, Plus, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, Loader2, Plus } from 'lucide-react'
 import {
   fetchAdminDiscounts,
   createDiscountCode,
@@ -13,8 +13,6 @@ import {
 } from '../../lib/api'
 
 const PLAN_TIERS = ['trial', 'starter', 'growth', 'pro'] as const
-const PLAN_PRICES_INR: Record<string, number> = { trial: 200, starter: 2499, growth: 4499, pro: 8499 }
-const PLAN_PRICES_USD: Record<string, number> = { trial: 2.5, starter: 35, growth: 69, pro: 137 }
 
 function generateCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'

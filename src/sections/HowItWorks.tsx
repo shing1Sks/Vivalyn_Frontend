@@ -433,7 +433,7 @@ const slideVariants = {
   exit: (dir: number) => ({ x: dir * -28, opacity: 0 }),
 }
 
-const slideTransition = { duration: 0.22, ease: 'easeOut' }
+const slideTransition = { duration: 0.22, ease: 'easeOut' as const }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 

@@ -178,6 +178,13 @@ export const FAQ_ITEMS = [
   },
 ]
 
+export const METRICS = [
+  { value: '500+', label: 'Sessions run' },
+  { value: '10x', label: 'Faster assessment' },
+  { value: '98%', label: 'Uptime' },
+  { value: '5 min', label: 'Setup time' },
+]
+
 export const TESTIMONIALS = [
   {
     quote:

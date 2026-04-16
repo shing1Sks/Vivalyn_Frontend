@@ -123,7 +123,7 @@ export function UsageCharts({ overview, orgs }: Props) {
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(v: number, name: string) => [`₹${v.toFixed(2)}`, name]}
+                formatter={(v, name) => [`₹${(v as number).toFixed(2)}`, name]}
               />
               <Line
                 type="monotone"
@@ -186,7 +186,7 @@ export function UsageCharts({ overview, orgs }: Props) {
                 </Pie>
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value: number, name: string) => [value.toLocaleString(), name]}
+                  formatter={(value, name) => [(value as number).toLocaleString(), name]}
                 />
                 <Legend wrapperStyle={{ fontSize: '11px', color: '#6b7280' }} iconSize={8} iconType="circle" />
               </PieChart>

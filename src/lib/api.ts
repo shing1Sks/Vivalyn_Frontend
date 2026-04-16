@@ -9,11 +9,10 @@ export interface UserProfile {
 }
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
+  status: number;
+  constructor(message: string, status: number) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -1461,6 +1460,60 @@ export interface PlanConfigResponse {
   cost_floor_inr: number
   cost_floor_usd: number
 }
+
+// ── Admin — Inquiries ─────────────────────────────────────────────────────────
+
+export interface Inquiry {
+  id: string;
+  created_at: string;
+  name: string;
+  email: string;
+  business_name: string | null;
+  size: string | null;
+  use_case: string | null;
+  plan_interest: string | null;
+  currency_pref: string | null;
+  status: string;
+}
+
+export async function fetchAdminInquiries(
+  token: string,
+  status?: string,
+): Promise<Inquiry[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  const res = await fetch(`${BASE}/api/v1/admin/inquiries${qs}`, { headers: adminHeaders(token) });
+  if (!res.ok) throw new ApiError("Failed to fetch inquiries", res.status);
+  return res.json();
+}
+
+export async function updateAdminInquiry(
+  token: string,
+  id: string,
+  data: { status?: string; notes?: string },
+): Promise<Inquiry> {
+  const res = await fetch(`${BASE}/api/v1/admin/inquiries/${id}`, {
+    method: 'PATCH',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to update inquiry", res.status);
+  return res.json();
+}
+
+export async function sendAdminFollowupEmail(
+  token: string,
+  id: string,
+  data: { subject: string; body_html: string },
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/admin/inquiries/${id}/followup`, {
+    method: 'POST',
+    headers: { ...adminHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new ApiError("Failed to send follow-up email", res.status);
+}
+
+// ── Plan config ───────────────────────────────────────────────────────────────
 
 export async function fetchPlanConfig(): Promise<PlanConfigResponse> {
   const res = await fetch(`${BASE}/api/v1/plans`);

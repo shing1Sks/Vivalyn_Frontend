@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, AlertCircle, ArrowLeft, Users, Clock, Cpu, Mic, Volume2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Loader2, AlertCircle, ArrowLeft, Users, Clock, Cpu, Mic, ChevronLeft, ChevronRight } from 'lucide-react'
 import { fetchAdminAgentDetail } from '../../lib/api'
 import type { AdminAgentDetail, AdminRunSummary } from '../../lib/api'
 

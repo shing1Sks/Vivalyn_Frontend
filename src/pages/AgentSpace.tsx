@@ -51,7 +51,7 @@ import { fadeInUp, staggerContainer } from '../lib/motion'
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function extractPersonaName(agent: Agent): string {
-  return agent.agent_prompt.name ?? ''
+  return (agent.agent_prompt as unknown as Record<string, unknown>).name as string ?? ''
 }
 
 function formatRelativeDate(iso: string): string {

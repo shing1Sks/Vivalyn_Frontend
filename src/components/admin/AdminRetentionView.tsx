@@ -224,7 +224,7 @@ function PlanTierTimeline({ orgs }: { orgs: AdminRetentionOrg[] }) {
           />
           <Tooltip
             contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: 'none' }}
-            formatter={(value: number, name: string) => [TIER_LABELS[value] ?? value, name]}
+            formatter={(value, name) => [TIER_LABELS[value as number] ?? value, name]}
           />
           {orgsWithEvents.map((org, i) => (
             <Line
