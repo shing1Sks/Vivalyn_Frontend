@@ -1058,6 +1058,25 @@ export async function fetchAdminOrgTokenTransactions(
   return res.json();
 }
 
+// ── Support (authenticated) ───────────────────────────────────────────────────
+
+export type SupportTicketType = 'billing' | 'technical' | 'feedback' | 'other'
+
+export async function submitSupport(
+  token: string,
+  data: { type: SupportTicketType; message: string },
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/support/submit`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body.detail ?? "Failed to submit support request", res.status);
+  }
+}
+
 // ── Contact / OTP ─────────────────────────────────────────────────────────────
 
 export async function requestOtp(data: { name: string; email: string; message: string }): Promise<void> {

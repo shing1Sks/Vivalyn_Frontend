@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Menu, X, LogOut, Orbit } from 'lucide-react'
+import { Menu, X, LogOut, Orbit, LifeBuoy } from 'lucide-react'
 import Logo from '../ui/Logo'
 import Button from '../ui/Button'
 import UserAvatar from '../ui/UserAvatar'
+import SupportModal from '../ui/SupportModal'
 import { NAV_LINKS } from '../../lib/constants'
 import { useAuth } from '../../context/AuthContext'
 import { useProfile } from '../../context/ProfileContext'
@@ -11,6 +12,7 @@ import { useProfile } from '../../context/ProfileContext'
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const { user, loading, signOut } = useAuth()
   const { profile } = useProfile()
@@ -85,6 +87,13 @@ export default function Header() {
                     Agent Space
                   </button>
                   <button
+                    onClick={() => { setDropdownOpen(false); setSupportOpen(true) }}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                  >
+                    <LifeBuoy className="w-4 h-4" />
+                    Support
+                  </button>
+                  <button
                     onClick={handleSignOut}
                     className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
                   >
@@ -110,6 +119,8 @@ export default function Header() {
         </button>
       </div>
 
+      <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} />
+
       {mobileOpen && (
         <div className="md:hidden bg-white border-b border-gray-200 px-6 py-4">
           <nav className="flex flex-col gap-4">
@@ -132,6 +143,13 @@ export default function Header() {
                 >
                   <Orbit className="w-4 h-4" />
                   Agent Space
+                </button>
+                <button
+                  onClick={() => { setMobileOpen(false); setSupportOpen(true) }}
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
+                >
+                  <LifeBuoy className="w-4 h-4" />
+                  Support
                 </button>
                 <button
                   onClick={handleSignOut}

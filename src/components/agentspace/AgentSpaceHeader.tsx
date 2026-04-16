@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, LayoutDashboard, LogOut, Settings, Shield } from 'lucide-react'
+import { Bell, LayoutDashboard, LifeBuoy, LogOut, Settings, Shield } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useProfile } from '../../context/ProfileContext'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
 import UserAvatar from '../ui/UserAvatar'
 import AgentSpaceSwitcher from './AgentSpaceSwitcher'
 import TokenBalanceBar from './TokenBalanceBar'
+import SupportModal from '../ui/SupportModal'
 import { usePendingInviteCount } from './InboxPanel'
 import { adminMe } from '../../lib/api'
 
@@ -28,6 +29,7 @@ export default function AgentSpaceHeader({
   const { activeSpace } = useAgentSpace()
   const navigate = useNavigate()
   const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const pendingCount = usePendingInviteCount()
 
@@ -154,6 +156,14 @@ export default function AgentSpaceHeader({
                 <div className="h-px bg-gray-100" />
 
                 <button
+                  onClick={() => { setUserDropdownOpen(false); setSupportOpen(true) }}
+                  className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                >
+                  <LifeBuoy className="w-4 h-4" />
+                  Support
+                </button>
+
+                <button
                   onClick={() => {
                     setUserDropdownOpen(false)
                     onSignOut()
@@ -168,6 +178,8 @@ export default function AgentSpaceHeader({
           </div>
         </div>
       </div>
+
+      <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} />
     </header>
   )
 }

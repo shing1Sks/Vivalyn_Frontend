@@ -1,5 +1,19 @@
 # Changelog
 
+## [46] mail-subdomain-and-support-widget — 2026-04-16
+
+**Why:** Resend sender addresses clashed with the Hostinger inbox on `@vivalyn.in`. Moving Resend to `mail.vivalyn.in` keeps the two mail paths cleanly separated. Separately, authenticated users had no in-app channel to reach support — the existing OTP contact form is public-only and too heavy for a logged-in user who just needs to file a quick ticket.
+
+**What:** `submitSupport` API function added. A new `SupportModal` gives logged-in users a direct support form (type selector + message, no OTP) rendered via React portal so it escapes any header stacking context. A "Support" entry is wired into both the landing page header dropdown and the agent space header dropdown.
+
+**Changes:**
+- `src/lib/api.ts`: added `SupportTicketType` union type and `submitSupport(token, { type, message })` — `POST /api/v1/support/submit` with Bearer auth
+- `src/components/ui/SupportModal.tsx` — new: modal with 2×2 type selector grid (Billing / Technical+Bug / Feedback / Other, each with icon + description), message textarea, submit → success flow; renders via `createPortal(…, document.body)` to avoid `backdrop-blur` stacking-context clipping
+- `src/components/layout/Header.tsx`: imported `LifeBuoy` and `SupportModal`; added `supportOpen` state; "Support" button in desktop dropdown and mobile menu (logged-in only); `<SupportModal>` rendered as sibling to `<header>` via portal
+- `src/components/agentspace/AgentSpaceHeader.tsx`: same `LifeBuoy` + `SupportModal` additions; "Support" button placed above Sign out in the user dropdown; `<SupportModal>` rendered inside the header return via portal
+
+---
+
 ## [45] email-system-overhaul — 2026-04-16
 
 **Why:** Plans are now public so the inquiry form needed a full rethink. The contact flow becomes a conversion-blocker capture form with OTP verification. The admin panel loses email-sending actions (now handled from the Hostinger inbox). The `inquiry` DB table is replaced by `contact_event`. Sender addresses are cleaned up across the board.
