@@ -4,7 +4,7 @@ import ProblemSolution from '../sections/ProblemSolution'
 import FeatureGrid from '../sections/FeatureGrid'
 import HowItWorks from '../sections/HowItWorks'
 import Pricing from '../sections/Pricing'
-import SocialProof from '../sections/SocialProof'
+// import SocialProof from '../sections/SocialProof'
 import BookDemo from '../sections/BookDemo'
 import FAQ from '../sections/FAQ'
 import CTASection from '../sections/CTASection'
@@ -20,7 +20,7 @@ export default function Landing() {
         <FeatureGrid />
         <HowItWorks />
         <Pricing />
-        <SocialProof />
+        {/* <SocialProof /> */}
         <BookDemo />
         <FAQ />
         <CTASection />

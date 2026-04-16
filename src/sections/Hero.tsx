@@ -25,7 +25,7 @@ const SCENARIOS: Scenario[] = [
     criteria: [
       { label: "Content Knowledge", score: 92 },
       { label: "Objection Handling", score: 78 },
-      { label: "Communication", score: 88 },
+      // { label: "Communication", score: 88 },
       { label: "Closing Technique", score: 81 },
     ],
     recommendation:
@@ -48,7 +48,7 @@ const SCENARIOS: Scenario[] = [
     criteria: [
       { label: "Empathy & Tone", score: 82 },
       { label: "Issue Resolution", score: 68 },
-      { label: "De-escalation", score: 71 },
+      // { label: "De-escalation", score: 71 },
       { label: "Follow-up Actions", score: 76 },
     ],
     recommendation:
@@ -71,7 +71,7 @@ const SCENARIOS: Scenario[] = [
     criteria: [
       { label: "Conceptual Clarity", score: 95 },
       { label: "Problem Solving", score: 88 },
-      { label: "Communication", score: 92 },
+      // { label: "Communication", score: 92 },
       { label: "Critical Thinking", score: 89 },
     ],
     recommendation:
@@ -89,7 +89,7 @@ const SCENARIOS: Scenario[] = [
   },
 ];
 
-const CYCLE_INTERVAL = 8000;
+const CYCLE_INTERVAL = 10000;
 
 const cardVariants = {
   enter: { opacity: 0, x: 8 },

@@ -473,7 +473,7 @@ export default function HowItWorks() {
   return (
     <section id="how-it-works" className="scroll-mt-[40px] bg-white">
       {/* Section header — scrolls normally */}
-      <div className="max-w-[1100px] mx-auto px-6 pt-16 md:pt-24 pb-10 text-center">
+      <div className="max-w-[1100px] mx-auto px-6 pt-16 md:pt-24 text-center">
         <p className="text-xs font-medium uppercase tracking-wide text-indigo-600 mb-4">
           Simple Setup
         </p>

@@ -20,7 +20,7 @@ export const NAV_LINKS = [
   { label: 'Products', href: '#products' },
   { label: 'How It Works', href: '#how-it-works' },
   { label: 'Pricing', href: '#pricing' },
-  { label: 'Reviews', href: '#reviews' },
+  // { label: 'Reviews', href: '#reviews' },
   { label: 'FAQ', href: '#faq' },
   { label: 'Book a demo', href: '#demo' },
 ]
@@ -176,13 +176,6 @@ export const FAQ_ITEMS = [
     answer:
       'We offer monthly subscriptions based on your usage needs. Trial (150 mins), Starter (1,500 mins/mo), Growth (4,000 mins/mo), and Pro (8,000 mins/mo + optional scaling). Contact us to explore custom plans and pricing.',
   },
-]
-
-export const METRICS = [
-  { value: '10k+', label: 'Sessions run monthly' },
-  { value: '50+', label: 'Organizations' },
-  { value: '40%', label: 'Faster onboarding' },
-  { value: '98%', label: 'Satisfaction rate' },
 ]
 
 export const TESTIMONIALS = [
