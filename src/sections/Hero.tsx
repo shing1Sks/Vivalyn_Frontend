@@ -107,7 +107,7 @@ const barVariants = {
 
 function MockReportCard({ scenario }: { scenario: Scenario }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-5">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
