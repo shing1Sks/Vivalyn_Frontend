@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Menu, X, LogOut, Orbit, LifeBuoy } from 'lucide-react'
+import { Menu, X, LogOut, Orbit, LifeBuoy, Calendar } from 'lucide-react'
 import Logo from '../ui/Logo'
 import Button from '../ui/Button'
 import UserAvatar from '../ui/UserAvatar'
@@ -87,6 +87,20 @@ export default function Header() {
                     Agent Space
                   </button>
                   <button
+                    onClick={() => {
+                      setDropdownOpen(false)
+                      if (location.pathname === '/') {
+                        document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })
+                      } else {
+                        navigate('/#demo')
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    Book a demo
+                  </button>
+                  <button
                     onClick={() => { setDropdownOpen(false); setSupportOpen(true) }}
                     className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
                   >
@@ -143,6 +157,20 @@ export default function Header() {
                 >
                   <Orbit className="w-4 h-4" />
                   Agent Space
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileOpen(false)
+                    if (location.pathname === '/') {
+                      document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })
+                    } else {
+                      navigate('/#demo')
+                    }
+                  }}
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Book a demo
                 </button>
                 <button
                   onClick={() => { setMobileOpen(false); setSupportOpen(true) }}

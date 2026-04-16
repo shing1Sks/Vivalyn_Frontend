@@ -1,5 +1,21 @@
 # Changelog
 
+## [47] calendly-demo-booking — 2026-04-16
+
+**Why:** There was no direct path for a visitor (or logged-in user) to book a conversation with the founder. The Hero "Get a demo" and CTASection "Book a demo" buttons were inert, and the header nav had no persistent call-to-action for scheduling.
+
+**What:** A new `BookDemo` section embeds the Calendly inline widget in a styled card at `#demo` on the landing page, placed between `SocialProof` and `FAQ`. The Hero and CTASection buttons are wired to scroll to this section. "Book a demo" is added to the global nav and to both the desktop and mobile logged-in user dropdowns in the Header (with a `Calendar` icon).
+
+**Changes:**
+- `src/sections/BookDemo.tsx` — new: `#demo` section with Calendar icon badge, heading/subtext, Calendly inline widget (`https://calendly.com/shreyash-singh/30min`) in a `rounded-xl border-gray-200 shadow-sm` card; Calendly script loaded idempotently via `useEffect`; `bg-gray-50` section background
+- `src/pages/Landing.tsx`: imported and rendered `BookDemo` between `SocialProof` and `FAQ`
+- `src/lib/constants.ts`: appended `{ label: 'Book a demo', href: '#demo' }` to `NAV_LINKS`
+- `src/sections/Hero.tsx`: "Get a demo" button now smooth-scrolls to `#demo`
+- `src/sections/CTASection.tsx`: "Book a demo" button now smooth-scrolls to `#demo`
+- `src/components/layout/Header.tsx`: imported `Calendar`; added "Book a demo" button (with `Calendar` icon) to desktop profile popover and mobile logged-in menu — smooth-scrolls on `/`, navigates to `/#demo` from other routes
+
+---
+
 ## [46] mail-subdomain-and-support-widget — 2026-04-16
 
 **Why:** Resend sender addresses clashed with the Hostinger inbox on `@vivalyn.in`. Moving Resend to `mail.vivalyn.in` keeps the two mail paths cleanly separated. Separately, authenticated users had no in-app channel to reach support — the existing OTP contact form is public-only and too heavy for a logged-in user who just needs to file a quick ticket.

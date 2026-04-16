@@ -38,6 +38,7 @@ export default function CTASection() {
           <Button
             variant="ghost"
             className="text-white hover:bg-indigo-500"
+            onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
           >
             Book a demo
           </Button>

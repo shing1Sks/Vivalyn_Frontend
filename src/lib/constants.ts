@@ -22,6 +22,7 @@ export const NAV_LINKS = [
   { label: 'Pricing', href: '#pricing' },
   { label: 'Reviews', href: '#reviews' },
   { label: 'FAQ', href: '#faq' },
+  { label: 'Book a demo', href: '#demo' },
 ]
 
 export interface Feature {

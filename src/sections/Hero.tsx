@@ -355,7 +355,12 @@ export default function Hero() {
               variants={fadeInUp}
               className="flex flex-wrap gap-4 pt-2"
             >
-              <Button variant="primary">Get a demo</Button>
+              <Button
+                variant="primary"
+                onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
+              >
+                Get a demo
+              </Button>
               <Button variant="secondary" onClick={() => navigate('/auth')}>Get started</Button>
             </motion.div>
           </motion.div>
