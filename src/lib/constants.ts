@@ -296,23 +296,40 @@ export async function getPricingPlansIntl(): Promise<PricingPlan[]> {
     .map(e => entryToPricingPlan(e, 'intl'))
 }
 
-export const FOOTER_LINKS = {
+export interface FooterLinkItem {
+  label: string
+  href: string
+}
+
+export interface FooterLinks {
+  product: FooterLinkItem[]
+  company: FooterLinkItem[]
+  resources: FooterLinkItem[]
+  legal: FooterLinkItem[]
+}
+
+export const FOOTER_LINKS: FooterLinks = {
   product: [
     { label: 'General Agents', href: '#products' },
     { label: 'QnA Assessment Agents', href: '#products' },
     { label: 'Simulation Agents', href: '#products' },
-    { label: 'Pricing', href: '#pricing' },
+    // { label: 'Pricing', href: '/pricing' }, // standalone pricing page — build later
   ],
   company: [
-    { label: 'About', href: '#' },
-    { label: 'Blog', href: '#' },
-    { label: 'Careers', href: '#' },
-    { label: 'Contact', href: '#' },
+    // { label: 'About', href: '/about' },     // build later
+    // { label: 'Blog', href: '/blog' },        // build later
+    // { label: 'Careers', href: '/careers' },  // build later
+    // { label: 'Contact', href: '/contact' },  // build later
   ],
   resources: [
-    { label: 'Documentation', href: '#' },
-    { label: 'Case Studies', href: '#' },
-    { label: 'API Reference', href: '#' },
-    { label: 'Support', href: '#' },
+    { label: 'Support', href: '/support' },
+    // { label: 'Documentation', href: '/docs' },          // build later
+    // { label: 'Case Studies', href: '/case-studies' },   // build later
+    // { label: 'API Reference', href: '/api-reference' }, // build later
+  ],
+  legal: [
+    { label: 'Terms of Service', href: '/terms' },
+    { label: 'Privacy Policy', href: '/privacy' },
+    { label: 'Refund Policy', href: '/refund-policy' },
   ],
 }
