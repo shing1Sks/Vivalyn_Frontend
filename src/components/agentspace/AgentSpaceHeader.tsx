@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, LayoutDashboard, LifeBuoy, LogOut, Settings, Shield } from 'lucide-react'
+import { Bell, CreditCard, LayoutDashboard, LifeBuoy, LogOut, Receipt, Shield, UserPlus, Users } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useProfile } from '../../context/ProfileContext'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
@@ -14,14 +14,20 @@ import { adminMe } from '../../lib/api'
 interface AgentSpaceHeaderProps {
   onSignOut: () => void
   onCreateSpaceClick: () => void
-  onSettingsClick: () => void
+  onMembersClick: () => void
+  onInvitesClick: () => void
+  onPlanClick: () => void
+  onBillingClick: () => void
   onInboxClick: () => void
 }
 
 export default function AgentSpaceHeader({
   onSignOut,
   onCreateSpaceClick,
-  onSettingsClick,
+  onMembersClick,
+  onInvitesClick,
+  onPlanClick,
+  onBillingClick,
   onInboxClick,
 }: AgentSpaceHeaderProps) {
   const { user, session } = useAuth()
@@ -63,9 +69,9 @@ export default function AgentSpaceHeader({
 
   return (
     <header className="h-16 sticky top-0 z-40 bg-white border-b border-gray-200">
-      <div className="px-3 md:px-5 flex items-center justify-between h-full">
+      <div className="px-3 md:px-5 flex items-center justify-between h-full gap-2">
         {/* Left: Logo + Switcher */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <button
             onClick={() => navigate('/')}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-120 cursor-pointer"
@@ -91,7 +97,7 @@ export default function AgentSpaceHeader({
         </div>
 
         {/* Right: Inbox + Token + Avatar */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 shrink-0">
           {/* Inbox bell */}
           <button
             onClick={onInboxClick}
@@ -108,8 +114,10 @@ export default function AgentSpaceHeader({
             )}
           </button>
 
-          {/* Token balance */}
-          <TokenBalanceBar />
+          {/* Token balance — hidden on small screens to avoid overflow */}
+          <div className="hidden sm:block">
+            <TokenBalanceBar />
+          </div>
 
           {/* User dropdown */}
           <div className="relative" ref={dropdownRef}>
@@ -132,15 +140,38 @@ export default function AgentSpaceHeader({
 
                 <div className="h-px bg-gray-100" />
 
-                {/* Workspace Settings — space admins only */}
+                {/* Workspace management — space admins only */}
                 {isSpaceAdmin && (
-                  <button
-                    onClick={() => { setUserDropdownOpen(false); onSettingsClick() }}
-                    className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
-                  >
-                    <Settings className="w-4 h-4" />
-                    Settings
-                  </button>
+                  <>
+                    <button
+                      onClick={() => { setUserDropdownOpen(false); onMembersClick() }}
+                      className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                    >
+                      <Users className="w-4 h-4" />
+                      Members
+                    </button>
+                    <button
+                      onClick={() => { setUserDropdownOpen(false); onInvitesClick() }}
+                      className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Invites
+                    </button>
+                    <button
+                      onClick={() => { setUserDropdownOpen(false); onPlanClick() }}
+                      className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      Plan
+                    </button>
+                    <button
+                      onClick={() => { setUserDropdownOpen(false); onBillingClick() }}
+                      className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+                    >
+                      <Receipt className="w-4 h-4" />
+                      Billing
+                    </button>
+                  </>
                 )}
 
                 {isVivalynAdmin && (

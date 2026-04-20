@@ -21,8 +21,8 @@ export const NAV_LINKS = [
   { label: 'How It Works', href: '#how-it-works' },
   { label: 'Pricing', href: '#pricing' },
   // { label: 'Reviews', href: '#reviews' },
-  { label: 'FAQ', href: '#faq' },
   { label: 'Book a demo', href: '#demo' },
+  { label: 'FAQ', href: '#faq' },
 ]
 
 export interface Feature {
@@ -174,7 +174,7 @@ export const FAQ_ITEMS = [
   {
     question: 'What\'s the pricing model?',
     answer:
-      'We offer monthly subscriptions based on your usage needs. Trial (150 mins), Starter (1,500 mins/mo), Growth (4,000 mins/mo), and Pro (8,000 mins/mo + optional scaling). Contact us to explore custom plans and pricing.',
+      'We offer monthly subscriptions based on your usage needs. Trial (150 mins), Starter (1,500 mins/mo), Growth (4,000 mins/mo + optional scaling), and Pro (8,000 mins/mo + scaling at a better per-minute rate). Contact us to explore custom plans and pricing.',
   },
 ]
 
@@ -214,8 +214,8 @@ export interface PricingPlan {
   billingLabel: string
   sessions: string
   minutes: number
-  additionalRate: string | null   // overage cost per extra minute, null = not available
-  scalingAvailable?: boolean      // Pro only
+  additionalRate: string | null   // scaling cost per extra minute, null = not available
+  scalingAvailable?: boolean      // Growth and Pro
   note?: string
 }
 
@@ -242,8 +242,8 @@ function entryToPricingPlan(entry: PlanConfigEntry, currency: 'inr' | 'intl', sh
   const billingLabel = entry.tier === 'trial' ? 'one-time' : '/mo'
   const additionalRate = entry.scaling_available
     ? (isInr
-        ? `₹${entry.overage_rate_inr}/min`
-        : `$${entry.overage_rate_usd}/min`)
+        ? `₹${entry.scaling_rate_inr}/min`
+        : `$${entry.scaling_rate_usd}/min`)
     : null
   return {
     name: entry.tier.charAt(0).toUpperCase() + entry.tier.slice(1),

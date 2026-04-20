@@ -28,7 +28,10 @@ import { AgentSpaceProvider, useAgentSpace } from '../context/AgentSpaceContext'
 import { TokenProvider } from '../context/TokenContext'
 import AgentSpaceHeader from '../components/agentspace/AgentSpaceHeader'
 import CreateAgentSpaceModal from '../components/agentspace/CreateAgentSpaceModal'
-import AgentSpaceSettingsPanel from '../components/agentspace/AgentSpaceSettingsPanel'
+import MembersPanel from '../components/agentspace/MembersPanel'
+import InvitesPanel from '../components/agentspace/InvitesPanel'
+import PlanPanel from '../components/agentspace/PlanPanel'
+import BillingPanel from '../components/agentspace/BillingPanel'
 import InboxPanel from '../components/agentspace/InboxPanel'
 import CreateAgentWizard from '../components/agentspace/CreateAgentWizard'
 import AgentConfigureView from '../components/agentspace/wizard/AgentConfigureView'
@@ -654,7 +657,10 @@ function AgentSpaceContent() {
   const { signOut, session } = useAuth()
   const navigate = useNavigate()
   const [createOpen, setCreateOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [membersOpen, setMembersOpen] = useState(false)
+  const [invitesOpen, setInvitesOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
+  const [billingOpen, setBillingOpen] = useState(false)
   const [inboxOpen, setInboxOpen] = useState(false)
   const [typeSelectOpen, setTypeSelectOpen] = useState(false)
   const [createAgentOpen, setCreateAgentOpen] = useState(false)
@@ -760,7 +766,10 @@ function AgentSpaceContent() {
         <AgentSpaceHeader
           onSignOut={handleSignOut}
           onCreateSpaceClick={() => setCreateOpen(true)}
-          onSettingsClick={() => setSettingsOpen(true)}
+          onMembersClick={() => setMembersOpen(true)}
+          onInvitesClick={() => setInvitesOpen(true)}
+          onPlanClick={() => setPlanOpen(true)}
+          onBillingClick={() => setBillingOpen(true)}
           onInboxClick={() => setInboxOpen(true)}
         />
         <div className="flex-1 flex items-center justify-center">
@@ -776,7 +785,10 @@ function AgentSpaceContent() {
         <AgentSpaceHeader
           onSignOut={handleSignOut}
           onCreateSpaceClick={() => setCreateOpen(true)}
-          onSettingsClick={() => setSettingsOpen(true)}
+          onMembersClick={() => setMembersOpen(true)}
+          onInvitesClick={() => setInvitesOpen(true)}
+          onPlanClick={() => setPlanOpen(true)}
+          onBillingClick={() => setBillingOpen(true)}
           onInboxClick={() => setInboxOpen(true)}
         />
         <div className="flex-1 flex items-center justify-center px-6">
@@ -791,7 +803,10 @@ function AgentSpaceContent() {
       <AgentSpaceHeader
         onSignOut={handleSignOut}
         onCreateSpaceClick={() => setCreateOpen(true)}
-        onSettingsClick={() => setSettingsOpen(true)}
+        onMembersClick={() => setMembersOpen(true)}
+        onInvitesClick={() => setInvitesOpen(true)}
+        onPlanClick={() => setPlanOpen(true)}
+        onBillingClick={() => setBillingOpen(true)}
         onInboxClick={() => setInboxOpen(true)}
       />
 
@@ -1072,10 +1087,10 @@ function AgentSpaceContent() {
         onSuccess={() => setCreateOpen(false)}
       />
 
-      <AgentSpaceSettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
+      <MembersPanel open={membersOpen} onClose={() => setMembersOpen(false)} />
+      <InvitesPanel open={invitesOpen} onClose={() => setInvitesOpen(false)} />
+      <PlanPanel open={planOpen} onClose={() => setPlanOpen(false)} />
+      <BillingPanel open={billingOpen} onClose={() => setBillingOpen(false)} />
 
       <InboxPanel
         open={inboxOpen}

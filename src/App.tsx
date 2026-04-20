@@ -9,6 +9,7 @@ import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
 import RefundPolicy from './pages/RefundPolicy'
 import Support from './pages/Support'
+import PaymentSuccess from './pages/PaymentSuccess'
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/refund-policy" element={<RefundPolicy />} />
       <Route path="/support" element={<Support />} />
+      <Route path="/payment/success" element={<PaymentSuccess />} />
     </Routes>
   )
 }

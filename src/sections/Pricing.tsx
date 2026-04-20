@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
 import { fadeInUp, staggerContainer } from '../lib/motion'
-import { getAllPlansIn, getAllPlansIntl } from '../lib/constants'
+import { getAllPlansIn } from '../lib/constants'
 import type { PricingPlan } from '../lib/constants'
 import SectionWrapper from '../components/ui/SectionWrapper'
 import Button from '../components/ui/Button'
 import InquiryModal from '../components/ui/InquiryModal'
-
-type Region = 'india' | 'international'
+import { supabase } from '../lib/supabase'
 
 const TRIAL_LABELS = ['Request a Demo', 'Start Free Trial']
 
@@ -153,27 +153,24 @@ function PricingCardSkeleton() {
 }
 
 export default function Pricing() {
-  const [region, setRegion] = useState<Region>('india')
+  const navigate = useNavigate()
   const [modalOpen, setModalOpen] = useState(false)
-  const [plansIn, setPlansIn] = useState<PricingPlan[]>([])
-  const [plansIntl, setPlansIntl] = useState<PricingPlan[]>([])
+  const [plans, setPlans] = useState<PricingPlan[]>([])
   const [plansLoading, setPlansLoading] = useState(true)
 
   useEffect(() => {
     setPlansLoading(true)
-    Promise.all([getAllPlansIn(), getAllPlansIntl()])
-      .then(([inPlans, intlPlans]) => {
-        setPlansIn(inPlans)
-        setPlansIntl(intlPlans)
-      })
+    getAllPlansIn()
+      .then(setPlans)
       .catch(() => {})
       .finally(() => setPlansLoading(false))
   }, [])
 
-  const plans = region === 'india' ? plansIn : plansIntl
-
-  const handleAction = () => {
-    setModalOpen(true)
+  const handleAction = async (tier: string) => {
+    if (tier === 'growth' || tier === 'pro') { setModalOpen(true); return }
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) navigate('/agent-space')
+    else navigate('/auth')
   }
 
   return (
@@ -189,28 +186,6 @@ export default function Pricing() {
           Monthly plans with a fixed minute allowance. Reset every billing cycle.
         </p>
 
-        <div className="inline-flex items-center bg-gray-100 rounded-lg p-1 mt-8">
-          <button
-            onClick={() => setRegion('india')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-[120ms] cursor-pointer ${
-              region === 'india'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            India (₹)
-          </button>
-          <button
-            onClick={() => setRegion('international')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-[120ms] cursor-pointer ${
-              region === 'international'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            International ($)
-          </button>
-        </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -220,7 +195,7 @@ export default function Pricing() {
           </div>
         ) : (
           <motion.div
-            key={region}
+            key="plans"
             variants={staggerContainer}
             initial="hidden"
             animate="visible"

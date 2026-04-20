@@ -1,5 +1,66 @@
 # Changelog
 
+## [51] all-plans-self-serve — 2026-04-21
+
+**Why:** Growth and Pro plans were gated behind "Talk to us" even though the Razorpay subscription flow was already in place for Trial/Starter. This blocked users from self-upgrading to higher tiers without a sales touch.
+
+**What:** All four plan tiers are now purchasable directly via Razorpay checkout. The "Talk to us" CTA is removed from PlanPanel and replaced with "Get [Plan]" / "Upgrade now" / "Downgrade now" buttons for Growth and Pro cards.
+
+**Changes:**
+- `src/components/agentspace/PlanPanel.tsx`: `SELF_SERVE_TIERS` expanded from `{trial, starter}` to `{trial, starter, growth, pro}`; removed dead "Talk to us" fallback link from plan cards
+- `src/components/agentspace/NoActivePlanScreen.tsx`: `SELF_SERVE_TIERS` expanded to all four tiers — Growth/Pro cards now render "Get Growth" / "Get Pro" pay buttons instead of mailto links
+
+---
+
+## [50] settings-restructure-plan-actions-billing — 2026-04-21
+
+**Why:** The single `AgentSpaceSettingsPanel` with People/Plan tabs was hard to navigate and mixed member management with billing. Plan actions (switch, cancel) and a payment history view had no home. The settings entry point was a single "Settings" dropdown item instead of direct-access links.
+
+**What:** `AgentSpaceSettingsPanel` is deleted and replaced by four focused slide-in panels (`MembersPanel`, `InvitesPanel`, `PlanPanel`, `BillingPanel`) accessible individually from the user dropdown. `PlanPanel` adds switch-plan (immediate Razorpay checkout or schedule-at-renewal) and cancel-subscription (now or at renewal) actions with inline confirm toggles. `BillingPanel` surfaces paginated `payment_transaction` history. A shared `SlidePanel` shell handles the slide-from-right animation and backdrop. `AgentSpaceHeader` replaces the single Settings button with four admin-only items.
+
+**Changes:**
+- `src/components/agentspace/SlidePanel.tsx` — new: shared backdrop + slide-from-right panel shell; props `open`, `onClose`, `title`, `subtitle?`, `children`; uses `AnimatePresence` + `motion.div` with `initial={{ x: '100%' }}`
+- `src/components/agentspace/MembersPanel.tsx` — new: member list with role dropdown and remove action; extracted from `AgentSpaceSettingsPanel`
+- `src/components/agentspace/InvitesPanel.tsx` — new: invite form + pending invite list with revoke; extracted from `AgentSpaceSettingsPanel`
+- `src/components/agentspace/PlanPanel.tsx` — new: current plan card (status, period dates, cancel-at-renewal badge, used/remaining stats), cancel section with inline confirm toggle ("Cancel now" / "Cancel at renewal"), all-plans grid with switch buttons ("Upgrade/Downgrade now" + "At renewal") for non-current self-serve tiers, renew button for expired/cancelled subs, top-10 token history with test-session badge; no pagination
+- `src/components/agentspace/BillingPanel.tsx` — new: paginated `payment_transaction` list (10/page); shows date, event label (Activated/Renewed/Cancelled/Failed), plan tier, amount (₹), status badge; fetch errors treated as empty state
+- `src/components/agentspace/AgentSpaceHeader.tsx`: removed `onSettingsClick`; added `onMembersClick`, `onInvitesClick`, `onPlanClick`, `onBillingClick` props; replaced single Settings button with four admin-only dropdown items (Members/Users, Invites/UserPlus, Plan/CreditCard, Billing/Receipt); `TokenBalanceBar` wrapped in `hidden sm:block` to prevent mobile overflow; removed `overflow-hidden` from right-section container to allow dropdown positioning
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx` — deleted (all content moved to the four panels above)
+- `src/pages/AgentSpace.tsx`: replaced `settingsOpen` state with `membersOpen`, `invitesOpen`, `planOpen`, `billingOpen`; wired all four panels into render; all three `AgentSpaceHeader` render sites updated with new props
+- `src/lib/api.ts`: added `cancel_at_period_end?: boolean` to `AgentspaceSubscription` interface; added `cancelSubscription(token, {agentspace_id, at_period_end})`, `switchPlan(token, {agentspace_id, new_plan_tier, at_period_end})`, `fetchPaymentTransactions(token, agentspace_id, page, page_size)`; added `PaymentTransaction` interface `{id, created_at, event_type, plan_tier, currency, amount_paid, status}`
+
+---
+
+## [49] razorpay-only-payment-flow — 2026-04-21
+
+**Why:** Stripe India moved to invite-only and blocks individual accounts from accepting payments in test mode. All payment flows route through Razorpay, which handles INR and currency conversion natively. The currency/region toggles in the UI added confusion without providing value.
+
+**What:** Currency and region toggles removed from all three plan-selection surfaces. All payment calls hardcode `currency: "INR"`. Stripe checkout path remains gated behind `STRIPE_ENABLED=true` for future re-enablement.
+
+**Changes:**
+- `src/components/agentspace/NoActivePlanScreen.tsx`: removed `currency` state, `plansIntl` state and `getAllPlansIntl()` fetch, `India (₹) / Intl ($)` segmented toggle, Stripe checkout branch; `initiatePayment` always called with `currency: "INR"`
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx`: removed `planCurrency` state, `allPlansIntl` state and `getAllPlansIntl()` fetch, `₹ INR / $ Intl` toggle in All Plans section, Stripe checkout branch in `handleRenewClick`; plan grid sourced from `allPlansIn` only
+- `src/sections/Pricing.tsx`: removed `region` state, `Region` type, `plansIntl` state and `getAllPlansIntl()` fetch, `India (₹) / International ($)` toggle; plan cards sourced from `plansIn` only
+
+---
+
+## [48] self-serve-payments — 2026-04-21
+
+**Why:** Subscriptions were activated manually by admins via an internal API call. Users had no way to purchase or renew a plan without a human in the loop. Trial and Starter plans needed a self-serve checkout flow (Razorpay INR recurring + Stripe USD) with automatic activation on webhook confirmation.
+
+**What:** End-to-end recurring subscription purchase flow added for Trial and Starter plans. Frontend initiates a payment intent via a new `POST /api/v1/payments/initiate` endpoint, opens the Razorpay modal (or redirects to Stripe Checkout for USD), and polls `GET /api/v1/payments/status` on a new `/payment/success` page until the webhook-triggered activation lands. Activation is handled exclusively by gateway webhooks (`subscription.charged` for Razorpay, `checkout.session.completed` for Stripe) via an internal helper that replicates the admin activation logic. A renew button is surfaced in `AgentSpaceSettingsPanel` for expired/cancelled subs. Overage events are emitted to Stripe Meters for Growth/Pro USD workspaces at session end.
+
+**Changes:**
+- `src/lib/razorpay.ts` — new: `loadRazorpayScript()` idempotent script loader; `RazorpayOptions` and `RazorpayInstance` interfaces; `Window.Razorpay` global declaration
+- `src/lib/api.ts`: added `RazorpayCheckoutData`, `StripeCheckoutData`, `CheckoutData` union, `PaymentStatusResponse` types; added `initiatePayment(token, {agentspace_id, plan_tier, currency})` and `fetchPaymentStatus(token, provider, ref)`
+- `src/pages/PaymentSuccess.tsx` — new: polls `fetchPaymentStatus` every 2s up to 15 attempts; renders loading spinner → success card (plan name + "Go to Workspace") → timeout error card with support mailto
+- `src/App.tsx`: added `<Route path="/payment/success" element={<PaymentSuccess />} />`
+- `src/components/agentspace/NoActivePlanScreen.tsx`: Trial/Starter CTA buttons wired to `handlePayClick` — opens Razorpay modal (INR) or redirects Stripe (USD); Growth/Pro remain mailto; loading state per tier; error banner below grid
+- `src/sections/Pricing.tsx`: Trial/Starter CTAs navigate to `/agent-space` (authenticated) or `/auth` (unauthenticated) instead of opening a modal
+- `src/components/agentspace/AgentSpaceSettingsPanel.tsx`: added renew button for expired/cancelled subs in Plan tab; trial-expired renews as Starter; same `handleRenewClick` Razorpay pattern
+
+---
+
 ## [47] calendly-demo-booking — 2026-04-16
 
 **Why:** There was no direct path for a visitor (or logged-in user) to book a conversation with the founder. The Hero "Get a demo" and CTASection "Book a demo" buttons were inert, and the header nav had no persistent call-to-action for scheduling.

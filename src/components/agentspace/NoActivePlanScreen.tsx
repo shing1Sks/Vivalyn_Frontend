@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Clock, Zap, Mail } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Clock, Zap, Mail, Loader2 } from 'lucide-react'
 import type { AgentspaceSubscription } from '../../lib/api'
-import { getAllPlansIn, getAllPlansIntl } from '../../lib/constants'
+import { initiatePayment } from '../../lib/api'
+import { getAllPlansIn } from '../../lib/constants'
 import type { PricingPlan } from '../../lib/constants'
+import { useAuth } from '../../context/AuthContext'
+import { useAgentSpace } from '../../context/AgentSpaceContext'
+import { loadRazorpayScript } from '../../lib/razorpay'
 
 const CONTACT_EMAIL = 'hello@vivalyn.in'
+const SELF_SERVE_TIERS = new Set(['trial', 'starter', 'growth', 'pro'])
 
 function tierBadgeClass(tier: string): string {
   const map: Record<string, string> = {
@@ -21,14 +27,51 @@ interface Props {
 }
 
 export default function NoActivePlanScreen({ subscription }: Props) {
-  const [currency, setCurrency] = useState<'inr' | 'intl'>('inr')
+  const { session } = useAuth()
+  const { activeSpace } = useAgentSpace()
+  const navigate = useNavigate()
   const [plansIn, setPlansIn] = useState<PricingPlan[]>([])
-  const [plansIntl, setPlansIntl] = useState<PricingPlan[]>([])
+  const [payingTier, setPayingTier] = useState<string | null>(null)
+  const [payError, setPayError] = useState<string | null>(null)
 
   useEffect(() => {
     getAllPlansIn().then(setPlansIn).catch(() => {})
-    getAllPlansIntl().then(setPlansIntl).catch(() => {})
   }, [])
+
+  async function handlePayClick(tier: string) {
+    if (!session || !activeSpace) return
+    setPayingTier(tier)
+    setPayError(null)
+    try {
+      const checkout = await initiatePayment(session.access_token, {
+        agentspace_id: activeSpace.id,
+        plan_tier: tier,
+        currency: "INR",
+      })
+      if (checkout.gateway === 'stripe') {
+        window.location.href = checkout.checkout_url
+      } else {
+        const loaded = await loadRazorpayScript()
+        if (!loaded) throw new Error('Failed to load Razorpay. Please try again.')
+        const rz = new window.Razorpay({
+          key: checkout.razorpay_key_id,
+          subscription_id: checkout.subscription_id,
+          name: 'Vivalyn',
+          description: checkout.description,
+          handler: (response) => {
+            navigate(`/payment/success?provider=razorpay&sub_id=${response.razorpay_subscription_id}`)
+          },
+          modal: { ondismiss: () => setPayingTier(null) },
+          theme: { color: '#4f46e5' },
+        })
+        rz.open()
+        setPayingTier(null)
+      }
+    } catch (err: unknown) {
+      setPayError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      setPayingTier(null)
+    }
+  }
 
   const isPending = subscription?.has_subscription && subscription.status === 'inactive'
   const isExpired = subscription?.has_subscription &&
@@ -51,58 +94,67 @@ export default function NoActivePlanScreen({ subscription }: Props) {
   }
 
   if (isExpired) {
+    const expiredTier = subscription?.plan_tier ?? 'starter'
+    // Trial can't be re-bought — renew as starter
+    const renewTier = expiredTier === 'trial' ? 'starter' : expiredTier
+    const canSelfServeRenew = SELF_SERVE_TIERS.has(renewTier)
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 max-w-sm w-full text-center">
           <h2 className="text-lg font-semibold text-gray-900 mb-2">Your plan has ended</h2>
           <p className="text-sm text-gray-500 mb-6">
             {subscription?.period_end
-              ? <>Your plan expired on {new Date(subscription.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}. Contact us to renew.</>
-              : <>Your plan is no longer active. Contact us to renew.</>
+              ? <>Your plan expired on {new Date(subscription.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.</>
+              : <>Your plan is no longer active.</>
             }
           </p>
-          <a
-            href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Plan Renewal — ' + (subscription?.plan_tier ?? 'Vivalyn'))}`}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms]"
-          >
-            Renew Plan
-          </a>
+          {payError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 text-left">{payError}</div>
+          )}
+          {canSelfServeRenew ? (
+            <button
+              onClick={() => handlePayClick(renewTier)}
+              disabled={payingTier === renewTier}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms] disabled:opacity-60"
+            >
+              {payingTier === renewTier && <Loader2 className="w-4 h-4 animate-spin" />}
+              Renew Plan
+            </button>
+          ) : (
+            <a
+              href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Plan Renewal — ' + expiredTier)}`}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms]"
+            >
+              Contact us to renew
+            </a>
+          )}
         </div>
       </div>
     )
   }
 
-  const plans = currency === 'inr' ? plansIn : plansIntl
+  const plans = plansIn
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4 py-10">
       <div className="w-full max-w-3xl">
 
-        {/* Header + toggle */}
-        <div className="flex items-start justify-between mb-8 gap-4">
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-1">Choose a plan</h2>
-            <p className="text-sm text-gray-500">All plans run ~10 minutes per session.</p>
-          </div>
-          <div className="flex items-center bg-gray-100 rounded-lg p-1 shrink-0">
-            {(['inr', 'intl'] as const).map((c) => (
-              <button
-                key={c}
-                onClick={() => setCurrency(c)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-[120ms] cursor-pointer ${
-                  currency === c ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {c === 'inr' ? 'India (₹)' : 'Intl ($)'}
-              </button>
-            ))}
-          </div>
+        {/* Header */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-1">Choose a plan</h2>
+          <p className="text-sm text-gray-500">All plans run ~10 minutes per session.</p>
         </div>
+
+        {payError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{payError}</div>
+        )}
 
         {/* Plan cards */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           {plans.map((plan) => {
+            const isSelfServe = SELF_SERVE_TIERS.has(plan.tier)
             const mailtoSubject = encodeURIComponent(`Plan Request — ${plan.name}`)
+            const isPaying = payingTier === plan.tier
 
             return (
               <div
@@ -156,16 +208,27 @@ export default function NoActivePlanScreen({ subscription }: Props) {
                 )}
 
                 {/* CTA */}
-                <a
-                  href={`mailto:${CONTACT_EMAIL}?subject=${mailtoSubject}`}
-                  className={`w-full py-2 px-4 text-sm font-medium rounded-lg text-center transition-colors duration-[120ms] ${
-                    plan.tier === 'starter'
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                      : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Request {plan.name}
-                </a>
+                {isSelfServe ? (
+                  <button
+                    onClick={() => handlePayClick(plan.tier)}
+                    disabled={isPaying || payingTier !== null}
+                    className={`w-full py-2 px-4 text-sm font-medium rounded-lg text-center transition-colors duration-[120ms] inline-flex items-center justify-center gap-2 disabled:opacity-60 ${
+                      plan.tier === 'starter'
+                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                        : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {isPaying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {isPaying ? 'Loading...' : `Get ${plan.name}`}
+                  </button>
+                ) : (
+                  <a
+                    href={`mailto:${CONTACT_EMAIL}?subject=${mailtoSubject}`}
+                    className="w-full py-2 px-4 text-sm font-medium rounded-lg text-center transition-colors duration-[120ms] border border-gray-200 text-gray-700 hover:bg-gray-50"
+                  >
+                    Talk to us
+                  </a>
+                )}
               </div>
             )
           })}

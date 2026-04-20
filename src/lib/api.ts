@@ -1115,6 +1115,7 @@ export interface AgentspaceSubscription {
   scaling_enabled: boolean;
   overflow_minutes: number;
   balance: number;
+  cancel_at_period_end?: boolean;
 }
 
 export async function fetchAgentspaceSubscription(
@@ -1451,8 +1452,8 @@ export interface PlanConfigEntry {
   crossed_inr: number | null
   crossed_usd: number | null
   scaling_available: boolean
-  overage_rate_inr: number | null
-  overage_rate_usd: number | null
+  scaling_rate_inr: number | null
+  scaling_rate_usd: number | null
 }
 
 export interface PlanConfigResponse {
@@ -1520,3 +1521,118 @@ export async function fetchPlanConfig(): Promise<PlanConfigResponse> {
   if (!res.ok) throw new ApiError("Failed to fetch plan config", res.status);
   return res.json();
 }
+
+// ── Payments ──────────────────────────────────────────────────────────────────
+
+export interface RazorpayCheckoutData {
+  gateway: "razorpay";
+  razorpay_key_id: string;
+  subscription_id: string;
+  plan_tier: string;
+  amount_display: string;
+  description: string;
+}
+
+export interface StripeCheckoutData {
+  gateway: "stripe";
+  checkout_url: string;
+}
+
+export type CheckoutData = RazorpayCheckoutData | StripeCheckoutData;
+
+export interface PaymentStatusResponse {
+  found: boolean;
+  status: string; // 'pending' | 'completed' | 'expired' | 'not_found'
+  plan_tier?: string;
+  agentspace_id?: string;
+}
+
+export async function initiatePayment(
+  token: string,
+  body: { agentspace_id: string; plan_tier: string; currency: string }
+): Promise<CheckoutData> {
+  const res = await fetch(`${BASE}/api/v1/payments/initiate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Payment initiation failed" }));
+    throw new ApiError(err.detail ?? "Payment initiation failed", res.status);
+  }
+  return res.json();
+}
+
+export async function fetchPaymentStatus(
+  token: string,
+  provider: string,
+  ref: string
+): Promise<PaymentStatusResponse> {
+  const res = await fetch(
+    `${BASE}/api/v1/payments/status?provider=${encodeURIComponent(provider)}&ref=${encodeURIComponent(ref)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) throw new ApiError("Failed to fetch payment status", res.status);
+  return res.json();
+}
+
+export async function cancelSubscription(
+  token: string,
+  body: { agentspace_id: string; at_period_end: boolean }
+): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE}/api/v1/payments/cancel`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError((err as { detail?: string }).detail ?? "Failed to cancel subscription", res.status);
+  }
+  return res.json();
+}
+
+export async function switchPlan(
+  token: string,
+  body: { agentspace_id: string; new_plan_tier: string; at_period_end: boolean }
+): Promise<CheckoutData | { ok: boolean; message: string }> {
+  const res = await fetch(`${BASE}/api/v1/payments/switch`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError((err as { detail?: string }).detail ?? "Failed to switch plan", res.status);
+  }
+  return res.json();
+}
+
+export interface PaymentTransaction {
+  id: string;
+  created_at: string;
+  event_type: string;
+  plan_tier: string;
+  currency: string;
+  amount_paid: number | null;
+  status: string;
+}
+
+export async function fetchPaymentTransactions(
+  token: string,
+  agentspace_id: string,
+  page: number,
+  page_size: number
+): Promise<{ transactions: PaymentTransaction[]; total: number }> {
+  const params = new URLSearchParams({
+    agentspace_id,
+    page: String(page),
+    page_size: String(page_size),
+  });
+  const res = await fetch(`${BASE}/api/v1/payments/transactions?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new ApiError("Failed to fetch billing history", res.status);
+  return res.json();
+}
+
