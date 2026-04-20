@@ -13,6 +13,7 @@ interface TokenContextValue {
   scalingEnabled: boolean
   overflowMinutes: number
   hasSubscription: boolean
+  subscriptionActive: boolean
 }
 
 const TokenContext = createContext<TokenContextValue>({
@@ -24,6 +25,7 @@ const TokenContext = createContext<TokenContextValue>({
   scalingEnabled: false,
   overflowMinutes: 0,
   hasSubscription: false,
+  subscriptionActive: false,
 })
 
 export function TokenProvider({ children }: { children: React.ReactNode }) {
@@ -72,6 +74,7 @@ export function TokenProvider({ children }: { children: React.ReactNode }) {
         scalingEnabled: subscription?.scaling_enabled ?? false,
         overflowMinutes: subscription?.overflow_minutes ?? 0,
         hasSubscription: subscription?.has_subscription ?? false,
+        subscriptionActive: subscription?.status === 'active',
       }}
     >
       {children}

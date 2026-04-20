@@ -37,9 +37,9 @@ function RingGauge({ pct, color }: { pct: number; color: 'indigo' | 'amber' | 'r
 }
 
 export default function TokenBalanceBar() {
-  const { balance, lowThreshold, balanceLoading, minutesIncluded, scalingEnabled, overflowMinutes } = useTokenBalance()
+  const { balance, lowThreshold, balanceLoading, minutesIncluded, scalingEnabled, overflowMinutes, subscriptionActive } = useTokenBalance()
 
-  if (balanceLoading || balance === null) return null
+  if (balanceLoading || balance === null || !subscriptionActive) return null
 
   const color: 'indigo' | 'amber' | 'red' =
     balance > lowThreshold * 3 ? 'indigo'

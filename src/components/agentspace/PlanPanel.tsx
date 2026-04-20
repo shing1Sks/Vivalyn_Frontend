@@ -263,24 +263,6 @@ export default function PlanPanel({ open, onClose }: Props) {
                     </p>
                   )}
 
-                  {/* Renew button for expired/cancelled */}
-                  {(subscription.status === 'expired' || subscription.status === 'cancelled') &&
-                    SELF_SERVE_TIERS.has(subscription.plan_tier === 'trial' ? 'starter' : subscription.plan_tier ?? '') && (() => {
-                      const renewTier = subscription.plan_tier === 'trial' ? 'starter' : subscription.plan_tier!
-                      return (
-                        <div className="pt-1">
-                          {renewPayError && <p className="text-xs text-red-600 mb-2">{renewPayError}</p>}
-                          <button
-                            onClick={() => handleRenewClick(renewTier)}
-                            disabled={renewPayingTier === renewTier}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms] disabled:opacity-60"
-                          >
-                            {renewPayingTier === renewTier && <Loader2 className="w-3 h-3 animate-spin" />}
-                            Renew Plan
-                          </button>
-                        </div>
-                      )
-                    })()}
 
                   {/* Stats */}
                   <div className="grid grid-cols-2 gap-2 pt-1">
@@ -363,10 +345,16 @@ export default function PlanPanel({ open, onClose }: Props) {
                 <p className="text-xs text-emerald-600 mb-2">{switchMessage}</p>
               )}
               <div className="space-y-2">
-                {allPlansIn.map((plan) => {
+                {allPlansIn.filter((plan) => {
+                  // Hide trial if this workspace already used one
+                  if (plan.tier === 'trial' && subscription.has_subscription && subscription.plan_tier === 'trial') return false
+                  return true
+                }).map((plan) => {
                   const isCurrent = subscription.plan_tier === plan.tier && subscription.status === 'active'
+                  const isExpiredOrCancelled = subscription.status === 'expired' || subscription.status === 'cancelled'
                   const canSwitch = isAdmin && subscription.status === 'active' && !isCurrent && SELF_SERVE_TIERS.has(plan.tier)
                   const canSubscribe = isAdmin && !subscription.has_subscription && SELF_SERVE_TIERS.has(plan.tier)
+                  const canRenew = isAdmin && isExpiredOrCancelled && SELF_SERVE_TIERS.has(plan.tier)
                   const currentRank = _TIER_RANK[subscription.plan_tier ?? ''] ?? 0
                   const planRank = _TIER_RANK[plan.tier] ?? 0
                   const switchLabel = planRank > currentRank ? 'Upgrade' : 'Downgrade'
@@ -422,6 +410,22 @@ export default function PlanPanel({ open, onClose }: Props) {
                       )}
 
                       {canSubscribe && (
+                        <div>
+                          {renewPayError && renewPayingTier === plan.tier && (
+                            <p className="text-xs text-red-600 mb-1.5">{renewPayError}</p>
+                          )}
+                          <button
+                            onClick={() => handleRenewClick(plan.tier)}
+                            disabled={renewPayingTier !== null}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors duration-[120ms]"
+                          >
+                            {renewPayingTier === plan.tier && <Loader2 className="w-3 h-3 animate-spin" />}
+                            Get {plan.name}
+                          </button>
+                        </div>
+                      )}
+
+                      {canRenew && (
                         <div>
                           {renewPayError && renewPayingTier === plan.tier && (
                             <p className="text-xs text-red-600 mb-1.5">{renewPayError}</p>
