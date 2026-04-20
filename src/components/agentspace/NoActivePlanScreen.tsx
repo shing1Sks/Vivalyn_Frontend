@@ -93,46 +93,6 @@ export default function NoActivePlanScreen({ subscription }: Props) {
     )
   }
 
-  if (isExpired) {
-    const expiredTier = subscription?.plan_tier ?? 'starter'
-    // Trial can't be re-bought — renew as starter
-    const renewTier = expiredTier === 'trial' ? 'starter' : expiredTier
-    const canSelfServeRenew = SELF_SERVE_TIERS.has(renewTier)
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 max-w-sm w-full text-center">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Your plan has ended</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            {subscription?.period_end
-              ? <>Your plan expired on {new Date(subscription.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.</>
-              : <>Your plan is no longer active.</>
-            }
-          </p>
-          {payError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 text-left">{payError}</div>
-          )}
-          {canSelfServeRenew ? (
-            <button
-              onClick={() => handlePayClick(renewTier)}
-              disabled={payingTier === renewTier}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms] disabled:opacity-60"
-            >
-              {payingTier === renewTier && <Loader2 className="w-4 h-4 animate-spin" />}
-              Renew Plan
-            </button>
-          ) : (
-            <a
-              href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Plan Renewal — ' + expiredTier)}`}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms]"
-            >
-              Contact us to renew
-            </a>
-          )}
-        </div>
-      </div>
-    )
-  }
-
   const plans = plansIn
 
   return (
@@ -141,8 +101,15 @@ export default function NoActivePlanScreen({ subscription }: Props) {
 
         {/* Header */}
         <div className="mb-8">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-1">Choose a plan</h2>
-          <p className="text-sm text-gray-500">All plans run ~10 minutes per session.</p>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-1">
+            {isExpired ? 'Your plan has ended' : 'Choose a plan'}
+          </h2>
+          <p className="text-sm text-gray-500">
+            {isExpired && subscription?.period_end
+              ? <>Expired on {new Date(subscription.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}. Pick a plan to continue.</>
+              : <>All plans run ~10 minutes per session.</>
+            }
+          </p>
         </div>
 
         {payError && (
