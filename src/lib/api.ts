@@ -1116,6 +1116,7 @@ export interface AgentspaceSubscription {
   overflow_minutes: number;
   balance: number;
   cancel_at_period_end?: boolean;
+  had_trial: boolean;
 }
 
 export async function fetchAgentspaceSubscription(

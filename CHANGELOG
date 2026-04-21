@@ -1,5 +1,34 @@
 # Changelog
 
+## [53] trial-gating-and-balance-visibility — 2026-04-21
+
+**Why:** Two UX gaps after the payment flow launched: (1) The Trial card was still shown as a "Downgrade" option to users who had already used a trial and then upgraded — the frontend was checking only the *current* subscription tier, missing the upgrade-from-trial case. (2) The token balance ring gauge and credit count in the header remained visible even when a subscription was cancelled or expired, showing stale data against a plan with no access.
+
+**What:** Trial card is now filtered using a `had_trial` boolean returned by the backend (which checks both the current subscription row and `subscription_event` history). Balance bar is hidden when the subscription is not active via a new `subscriptionActive` field in `TokenContext`.
+
+**Changes:**
+- `src/lib/api.ts`: added `had_trial: boolean` to `AgentspaceSubscription` interface
+- `src/context/TokenContext.tsx`: added `subscriptionActive: boolean` to context interface, default, and provider value (`subscription?.status === 'active'`)
+- `src/components/agentspace/TokenBalanceBar.tsx`: returns `null` when `!subscriptionActive`, hiding the gauge for cancelled/expired plans
+- `src/components/agentspace/PlanPanel.tsx`: trial filter now uses `subscription.had_trial` instead of `subscription.plan_tier === 'trial'` — correctly hides trial after upgrade
+- `src/components/agentspace/NoActivePlanScreen.tsx`: same `subscription?.had_trial` filter applied to the plan grid
+
+---
+
+## [52] payment-flow-fixes — 2026-04-21
+
+**Why:** Several rough edges after initial payment launch: `BillingPanel` crashed on open due to a leftover `setError` call. Expired/cancelled plans showed only a single locked "Renew Plan" button instead of the full plan picker. The payment confirmation page timed out after 30 seconds, which was too short for Razorpay webhook delivery in some regions.
+
+**What:** `BillingPanel` crash fixed. Expired/cancelled plan state now falls through to the full plan grid with an expiry banner — users can pick any tier. `PlanPanel` adds "Get [Plan]" buttons for all tiers when the subscription is expired/cancelled. `PaymentSuccess` polling window extended to ~2 minutes.
+
+**Changes:**
+- `src/components/agentspace/BillingPanel.tsx`: removed stale `setError(null)` call that referenced an undefined setter — caused a crash on panel open
+- `src/components/agentspace/NoActivePlanScreen.tsx`: removed the dedicated expired-plan screen that only showed a single "Renew Plan" button; expired state now renders the full plan grid with heading "Your plan has ended" and expiry date subtext
+- `src/components/agentspace/PlanPanel.tsx`: removed single "Renew Plan" button from the current plan card; added `canRenew` condition in the all-plans grid that shows "Get [Plan]" buttons for all self-serve tiers when the subscription is expired or cancelled
+- `src/pages/PaymentSuccess.tsx`: polling increased from 15 × 2s (30s) to 45 × 3s (~2 min); loading copy updated to "This can take up to a minute. Please don't close this page."
+
+---
+
 ## [51] all-plans-self-serve — 2026-04-21
 
 **Why:** Growth and Pro plans were gated behind "Talk to us" even though the Razorpay subscription flow was already in place for Trial/Starter. This blocked users from self-upgrading to higher tiers without a sales touch.

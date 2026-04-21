@@ -93,8 +93,7 @@ export default function NoActivePlanScreen({ subscription }: Props) {
     )
   }
 
-  const hadTrial = subscription?.has_subscription && subscription.plan_tier === 'trial'
-  const plans = plansIn.filter((p) => !(p.tier === 'trial' && hadTrial))
+  const plans = plansIn.filter((p) => !(p.tier === 'trial' && subscription?.had_trial))
 
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4 py-10">

@@ -346,8 +346,7 @@ export default function PlanPanel({ open, onClose }: Props) {
               )}
               <div className="space-y-2">
                 {allPlansIn.filter((plan) => {
-                  // Hide trial if this workspace already used one
-                  if (plan.tier === 'trial' && subscription.has_subscription && subscription.plan_tier === 'trial') return false
+                  if (plan.tier === 'trial' && subscription.had_trial) return false
                   return true
                 }).map((plan) => {
                   const isCurrent = subscription.plan_tier === plan.tier && subscription.status === 'active'
