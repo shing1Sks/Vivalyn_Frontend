@@ -1,17 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCircle2, ChevronDown, ChevronUp, Loader2, Plus, Sparkles, Trash2, Zap, ArrowLeftRight } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ChevronUp, Loader2, Plus, Settings2, Trash2, X, Zap, ArrowLeftRight } from 'lucide-react'
 import {
-  rewriteAgentSection,
   updateAgent,
   updateAgentQuestionBank,
-  generateEvaluationCriteria,
   type Agent,
   type QnAPromptSpec,
   type QnAQuestion,
   type QnAQuestionBank,
 } from '../../../lib/api'
 import { useAuth } from '../../../context/AuthContext'
+import VoiceSettingsModal from './VoiceSettingsModal'
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 
@@ -20,51 +19,6 @@ interface Props {
 }
 
 type Tab = 'questions' | 'profile' | 'evaluation'
-
-// ── AI rewrite popup ───────────────────────────────────────────────────────────
-
-interface AiRewritePopupProps {
-  onApply: (instruction: string) => void
-  onClose: () => void
-  loading: boolean
-}
-
-function AiRewritePopup({ onApply, onClose, loading }: AiRewritePopupProps) {
-  const [instruction, setInstruction] = useState('')
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -4 }}
-      transition={{ duration: 0.12 }}
-      className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-md p-3 w-72"
-    >
-      <input
-        autoFocus
-        type="text"
-        value={instruction}
-        onChange={e => setInstruction(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && instruction.trim() && !loading) { onApply(instruction.trim()); } if (e.key === 'Escape') onClose() }}
-        placeholder="Describe the change..."
-        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
-      />
-      <div className="flex gap-2 mt-2">
-        <button
-          onClick={() => { if (instruction.trim() && !loading) onApply(instruction.trim()) }}
-          disabled={!instruction.trim() || loading}
-          className="flex-1 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed duration-[120ms] flex items-center justify-center gap-1"
-        >
-          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-          Apply
-        </button>
-        <button onClick={onClose} className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 duration-[120ms]">
-          Cancel
-        </button>
-      </div>
-    </motion.div>
-  )
-}
 
 // ── Question bank editor ───────────────────────────────────────────────────────
 
@@ -121,7 +75,7 @@ function QuestionBankEditor({ bank, onChange }: QuestionBankEditorProps) {
             </div>
             <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">{bank.fixed.length}</span>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
             {bank.fixed.map(q => (
               <QuestionItem key={q.id} question={q} showCross={false}
                 onEdit={t => editFixed(q.id, t)} onDelete={() => deleteFixed(q.id)}
@@ -142,7 +96,7 @@ function QuestionBankEditor({ bank, onChange }: QuestionBankEditorProps) {
             </div>
             <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">{bank.randomized_pool.length}</span>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
             {bank.randomized_pool.map(q => (
               <QuestionItem key={q.id} question={q} showCross={true}
                 onEdit={t => editRandomized(q.id, t)} onDelete={() => deleteRandomized(q.id)}
@@ -200,14 +154,14 @@ function QuestionItem({ question, showCross, onEdit, onDelete, onMove, onToggleC
   }
 
   return (
-    <div className="flex items-start gap-2 group bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:border-gray-300 duration-[120ms]">
+    <div className="flex items-start gap-2 group bg-white border border-gray-200 rounded-lg px-3 py-2 hover:border-gray-300 duration-[120ms]">
       {editing ? (
         <textarea autoFocus value={draft} onChange={e => setDraft(e.target.value)}
           onBlur={commitEdit}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit() } if (e.key === 'Escape') { setDraft(question.text); setEditing(false) } }}
-          rows={2} className="flex-1 text-sm text-gray-900 resize-none border-none outline-none bg-transparent" />
+          rows={1} className="flex-1 text-sm text-gray-900 resize-none border-none outline-none bg-transparent" />
       ) : (
-        <p onClick={() => setEditing(true)} className="flex-1 text-sm text-gray-800 cursor-text leading-relaxed">{question.text}</p>
+        <p onClick={() => setEditing(true)} className="flex-1 text-sm text-gray-800 cursor-text leading-relaxed truncate">{question.text}</p>
       )}
       <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 duration-[120ms]">
         {showCross && onToggleCross && (
@@ -228,6 +182,7 @@ function QuestionItem({ question, showCross, onEdit, onDelete, onMove, onToggleC
 export default function QnAConfigureView({ agent }: Props) {
   const { session } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('questions')
+  const [voiceModalOpen, setVoiceModalOpen] = useState(false)
 
   const spec = agent.agent_prompt as QnAPromptSpec
 
@@ -243,19 +198,41 @@ export default function QnAConfigureView({ agent }: Props) {
   const [editedGuardrails, setEditedGuardrails] = useState<string[]>([...spec.guardrails])
   const [savingProfile, setSavingProfile] = useState(false)
   const [savedProfileOk, setSavedProfileOk] = useState(false)
+  const [behaviorOpen, setBehaviorOpen] = useState(true)
+  const [guardrailsOpen, setGuardrailsOpen] = useState(false)
 
   // Evaluation state
-  const [metricsList, setMetricsList] = useState<string[]>(agent.transcript_evaluation_metrics?.metrics ?? [])
   const [curatorPrompt, setCuratorPrompt] = useState(agent.transcript_evaluation_metrics?.report_curator_prompt ?? '')
-  const [newMetric, setNewMetric] = useState('')
-  const [evalCriteria, setEvalCriteria] = useState('')
-  const [generatingEval, setGeneratingEval] = useState(false)
   const [savingEval, setSavingEval] = useState(false)
   const [savedEvalOk, setSavedEvalOk] = useState(false)
+  const MAX_METRICS = 4
 
-  // AI rewrite popups
-  const [rewriteTarget, setRewriteTarget] = useState<string | null>(null)
-  const [rewriting, setRewriting] = useState(false)
+  // 4 editable metric slots
+  const [slotDrafts, setSlotDrafts] = useState<string[]>(() => {
+    const m = agent.transcript_evaluation_metrics?.metrics ?? []
+    const slots = m.slice(0, MAX_METRICS)
+    while (slots.length < MAX_METRICS) slots.push('')
+    return slots
+  })
+
+  const originalMetrics = useMemo(() => new Set(agent.transcript_evaluation_metrics?.metrics ?? []), [])
+  const metricsList = slotDrafts.filter(Boolean)
+
+  function updateSlot(idx: number, value: string) {
+    setSlotDrafts(prev => {
+      const next = [...prev]
+      next[idx] = value
+      return next
+    })
+  }
+
+  function clearSlot(idx: number) {
+    setSlotDrafts(prev => {
+      const next = [...prev]
+      next[idx] = ''
+      return next
+    })
+  }
 
   // ── Question bank save ───────────────────────────────────────────────────────
 
@@ -295,57 +272,14 @@ export default function QnAConfigureView({ agent }: Props) {
     }
   }
 
-  // ── AI rewrite ───────────────────────────────────────────────────────────────
-
-  async function handleRewrite(sectionName: string, currentContent: string, instruction: string) {
-    if (!session) return
-    setRewriting(true)
-    try {
-      const { updated_content } = await rewriteAgentSection(session.access_token, {
-        section_name: sectionName,
-        current_content: currentContent,
-        instruction,
-      })
-      if (sectionName === 'identity_and_persona') setEditedIdentity(updated_content)
-      else if (sectionName === 'session_brief') setEditedBrief(updated_content)
-      else if (sectionName === 'guardrails') {
-        try { setEditedGuardrails(JSON.parse(updated_content)) } catch { setEditedGuardrails(updated_content.split('\n').filter(l => l.trim())) }
-      } else {
-        try {
-          const parsed = JSON.parse(updated_content)
-          if (typeof parsed === 'object' && !Array.isArray(parsed)) setEditedRules(parsed)
-        } catch { /* fall through */ }
-      }
-    } catch { /* silent */ } finally {
-      setRewriting(false)
-      setRewriteTarget(null)
-    }
-  }
-
-  // ── Eval save ────────────────────────────────────────────────────────────────
-
-  async function handleGenerateEval() {
-    if (!session || !evalCriteria.trim()) return
-    setGeneratingEval(true)
-    try {
-      const result = await generateEvaluationCriteria(session.access_token, {
-        session_brief: spec.session_brief,
-        users_raw_evaluation_criteria: evalCriteria.trim(),
-      })
-      setMetricsList(result.metrics)
-      setCuratorPrompt(result.report_curator_prompt)
-    } catch { /* silent */ } finally {
-      setGeneratingEval(false)
-    }
-  }
-
   async function handleSaveEval() {
     if (!session) return
     setSavingEval(true)
     setSavedEvalOk(false)
     try {
+      const metrics = slotDrafts.filter(Boolean)
       await updateAgent(session.access_token, agent.id, {
-        transcript_evaluation_metrics: { report_curator_prompt: curatorPrompt, metrics: metricsList },
+        transcript_evaluation_metrics: { report_curator_prompt: curatorPrompt, metrics },
       })
       setSavedEvalOk(true)
       setTimeout(() => setSavedEvalOk(false), 3000)
@@ -357,215 +291,278 @@ export default function QnAConfigureView({ agent }: Props) {
   // ── Tab nav ───────────────────────────────────────────────────────────────────
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'questions', label: 'Questions' },
     { key: 'profile', label: 'Profile' },
+    { key: 'questions', label: 'Questions' },
     { key: 'evaluation', label: 'Evaluation' },
   ]
+
+  const isSaving = activeTab === 'questions' ? savingBank : activeTab === 'profile' ? savingProfile : savingEval
+  const isSaved = activeTab === 'questions' ? savedBankOk : activeTab === 'profile' ? savedProfileOk : savedEvalOk
+
+  function handleVoiceUpdated(lang: string, voice: string) {
+    // Update agent object locally since QnA doesn't have onAgentUpdated prop
+    agent.agent_language = lang
+    agent.agent_voice = voice
+  }
+
+  async function handleHeaderSave() {
+    if (activeTab === 'questions') await handleSaveBank()
+    else if (activeTab === 'profile') await handleSaveProfile()
+    else await handleSaveEval()
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col bg-gray-50 min-h-full">
-      {/* Header */}
-      <div className="sticky top-0 z-10 px-4 md:px-6 py-2.5 md:py-3.5 border-b border-gray-100 flex items-center justify-between bg-white">
-        <div>
+      {/* Header: title + pill tabs + lang badge + gear + save */}
+      <div className="sticky top-0 z-10 px-4 md:px-6 py-2.5 md:py-3 border-b border-gray-100 flex items-center justify-between bg-white">
+        <div className="flex items-center gap-3 md:gap-4">
           <h2 className="text-sm md:text-base font-semibold text-gray-900">Configure Agent</h2>
-          <p className="hidden md:block text-xs text-gray-400 mt-0.5">{agent.agent_name} · QnA</p>
-        </div>
-
-        {activeTab === 'questions' && (
-          <button onClick={handleSaveBank} disabled={savingBank}
-            className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed duration-[120ms]">
-            {savingBank ? <><Loader2 className="w-3 h-3 animate-spin" /> Saving…</>
-              : savedBankOk ? <><CheckCircle2 className="w-3 h-3" /> Saved</>
-              : 'Save Changes'}
-          </button>
-        )}
-
-        {activeTab === 'profile' && (
-          <button onClick={handleSaveProfile} disabled={savingProfile}
-            className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed duration-[120ms]">
-            {savingProfile ? <><Loader2 className="w-3 h-3 animate-spin" /> Saving…</>
-              : savedProfileOk ? <><CheckCircle2 className="w-3 h-3" /> Saved</>
-              : 'Save Changes'}
-          </button>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div className="px-4 md:px-6 pt-4 bg-white border-b border-gray-100">
-        <div className="flex gap-5">
-          {tabs.map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={`pb-2.5 text-sm font-medium border-b-2 duration-[120ms] ${
-                activeTab === t.key ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-900'
-              }`}>
-              {t.label}
+          <div className="inline-flex bg-gray-100 rounded-lg p-1 gap-1">
+            {tabs.map(t => (
+              <button key={t.key} onClick={() => setActiveTab(t.key)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-md duration-[120ms] ${
+                  activeTab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {/* Language badge + settings */}
+          <div className="hidden md:flex items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1">
+              {agent.agent_language}
+            </span>
+            <button
+              onClick={() => setVoiceModalOpen(true)}
+              title="Change voice & language"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
             </button>
-          ))}
+          </div>
         </div>
+        <button onClick={handleHeaderSave} disabled={isSaving}
+          className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed duration-[120ms]">
+          {isSaving ? <><Loader2 className="w-3 h-3 animate-spin" /> Saving…</>
+            : isSaved ? <><CheckCircle2 className="w-3 h-3" /> Saved</>
+            : 'Save Changes'}
+        </button>
       </div>
+
+      {/* Mobile language/voice row */}
+      <div className="md:hidden flex items-center justify-between px-4 py-2 bg-white border-b border-gray-100">
+        <span className="text-xs text-gray-500">
+          {agent.agent_voice} · <span className="font-medium text-gray-700">{agent.agent_language.toUpperCase()}</span>
+        </span>
+        <button
+          onClick={() => setVoiceModalOpen(true)}
+          className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-3 py-1.5 duration-[120ms]"
+        >
+          <Settings2 className="w-3 h-3" /> Voice
+        </button>
+      </div>
+
+      <VoiceSettingsModal
+        agentId={agent.id}
+        agentLanguage={agent.agent_language}
+        agentVoice={agent.agent_voice}
+        open={voiceModalOpen}
+        onClose={() => setVoiceModalOpen(false)}
+        onUpdated={handleVoiceUpdated}
+      />
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 md:px-6 py-6">
 
         {/* ── Questions tab ──────────────────────────────────────────────── */}
         {activeTab === 'questions' && (
-          <div className="max-w-4xl mx-auto">
+          <div className="px-5 py-5">
             <QuestionBankEditor bank={bank} onChange={setBank} />
           </div>
         )}
 
         {/* ── Profile tab ───────────────────────────────────────────────── */}
         {activeTab === 'profile' && (
-          <div className="max-w-3xl mx-auto space-y-5">
-
-            {/* Identity & Persona */}
-            <SectionCard label="Identity & Persona">
-              <SectionAiButton
-                sectionName="identity_and_persona"
-                currentContent={editedIdentity}
-                active={rewriteTarget === 'identity_and_persona'}
-                loading={rewriting && rewriteTarget === 'identity_and_persona'}
-                onOpen={() => setRewriteTarget('identity_and_persona')}
-                onClose={() => setRewriteTarget(null)}
-                onApply={(instruction) => handleRewrite('identity_and_persona', editedIdentity, instruction)}
-              />
-              <textarea value={editedIdentity} onChange={e => setEditedIdentity(e.target.value)} rows={4}
-                className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] bg-white" />
-            </SectionCard>
-
-            {/* Session Brief */}
-            <SectionCard label="Session Brief">
-              <SectionAiButton
-                sectionName="session_brief"
-                currentContent={editedBrief}
-                active={rewriteTarget === 'session_brief'}
-                loading={rewriting && rewriteTarget === 'session_brief'}
-                onOpen={() => setRewriteTarget('session_brief')}
-                onClose={() => setRewriteTarget(null)}
-                onApply={(instruction) => handleRewrite('session_brief', editedBrief, instruction)}
-              />
-              <textarea value={editedBrief} onChange={e => setEditedBrief(e.target.value)} rows={3}
-                className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] bg-white" />
-            </SectionCard>
-
-            {/* Behavior Rules */}
-            <SectionCard label="Behavior Rules">
-              <SectionAiButton
-                sectionName="behavior_rules"
-                currentContent={JSON.stringify(editedRules)}
-                active={rewriteTarget === 'behavior_rules'}
-                loading={rewriting && rewriteTarget === 'behavior_rules'}
-                onOpen={() => setRewriteTarget('behavior_rules')}
-                onClose={() => setRewriteTarget(null)}
-                onApply={(instruction) => handleRewrite('behavior_rules', JSON.stringify(editedRules, null, 2), instruction)}
-              />
-              <div className="space-y-3">
-                {['opening', 'transition', 'closing'].map(key => (
-                  <div key={key}>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{key}</p>
-                    <textarea
-                      value={editedRules[key] ?? ''}
-                      onChange={e => setEditedRules(prev => ({ ...prev, [key]: e.target.value }))}
-                      rows={3}
-                      className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] bg-white"
-                    />
-                  </div>
-                ))}
+          <div className="flex flex-col md:flex-row md:items-start">
+            {/* LHS — string sections */}
+            <div className="w-full md:w-[55%] flex flex-col gap-4 px-5 py-5 border-b md:border-b-0 md:border-r border-gray-100">
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Identity & Persona</span>
+                </div>
+                <div className="px-5 pb-5 pt-4">
+                  <textarea value={editedIdentity} onChange={e => setEditedIdentity(e.target.value)} rows={10}
+                    className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] leading-relaxed" />
+                </div>
               </div>
-            </SectionCard>
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Session Brief</span>
+                </div>
+                <div className="px-5 pb-5 pt-4">
+                  <textarea value={editedBrief} onChange={e => setEditedBrief(e.target.value)} rows={4}
+                    className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] leading-relaxed" />
+                </div>
+              </div>
+            </div>
 
-            {/* Guardrails */}
-            <SectionCard label="Guardrails">
-              <SectionAiButton
-                sectionName="guardrails"
-                currentContent={JSON.stringify(editedGuardrails)}
-                active={rewriteTarget === 'guardrails'}
-                loading={rewriting && rewriteTarget === 'guardrails'}
-                onOpen={() => setRewriteTarget('guardrails')}
-                onClose={() => setRewriteTarget(null)}
-                onApply={(instruction) => handleRewrite('guardrails', JSON.stringify(editedGuardrails), instruction)}
-              />
-              <div className="space-y-2">
-                {editedGuardrails.map((g, i) => (
-                  <div key={i} className="flex gap-2">
-                    <textarea value={g} onChange={e => {
-                      const next = [...editedGuardrails]; next[i] = e.target.value; setEditedGuardrails(next)
-                    }} rows={2}
-                      className="flex-1 text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] bg-white" />
-                    <button onClick={() => setEditedGuardrails(prev => prev.filter((_, j) => j !== i))}
-                      className="text-gray-400 hover:text-red-500 duration-[120ms] flex-shrink-0 mt-1">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-                <button onClick={() => setEditedGuardrails(prev => [...prev, ''])}
-                  className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-indigo-600 duration-[120ms]">
-                  <Plus className="w-4 h-4" /> Add guardrail
+            {/* RHS — behavior rules + guardrails */}
+            <div className="flex-1 flex flex-col gap-3 px-5 py-5">
+              {/* Behavior Rules */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setBehaviorOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 duration-[120ms] group"
+                >
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Behavior Rules</span>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 duration-[120ms] ${behaviorOpen ? 'rotate-180' : ''}`} />
                 </button>
+                <AnimatePresence initial={false}>
+                  {behaviorOpen && (
+                    <motion.div
+                      key="behavior"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-5 pb-5 pt-1 space-y-3 border-t border-gray-100">
+                        {['opening', 'transition', 'closing'].map(key => (
+                          <div key={key}>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{key}</p>
+                            <textarea
+                              value={editedRules[key] ?? ''}
+                              onChange={e => setEditedRules(prev => ({ ...prev, [key]: e.target.value }))}
+                              rows={3}
+                              className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] leading-relaxed"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            </SectionCard>
+
+              {/* Guardrails */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setGuardrailsOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 duration-[120ms] group"
+                >
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Guardrails</span>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 duration-[120ms] ${guardrailsOpen ? 'rotate-180' : ''}`} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {guardrailsOpen && (
+                    <motion.div
+                      key="guardrails"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-5 pb-5 pt-1 space-y-2.5 border-t border-gray-100">
+                        {editedGuardrails.map((g, i) => (
+                          <div key={i} className="flex gap-2 items-start">
+                            <span className="text-xs text-gray-400 font-mono mt-2.5 w-5 flex-shrink-0 text-right">{i + 1}.</span>
+                            <textarea value={g} onChange={e => {
+                              const next = [...editedGuardrails]; next[i] = e.target.value; setEditedGuardrails(next)
+                            }} rows={2}
+                              className="flex-1 text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] leading-relaxed" />
+                            <button onClick={() => setEditedGuardrails(prev => prev.filter((_, j) => j !== i))}
+                              className="text-gray-400 hover:text-red-500 duration-[120ms] flex-shrink-0 mt-1">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                        <button onClick={() => setEditedGuardrails(prev => [...prev, ''])}
+                          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-indigo-600 duration-[120ms] py-1">
+                          <Plus className="w-4 h-4" /> Add guardrail
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
           </div>
         )}
 
         {/* ── Evaluation tab ─────────────────────────────────────────────── */}
         {activeTab === 'evaluation' && (
-          <div className="max-w-2xl mx-auto space-y-5">
-            {/* Metrics list */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Scoring Metrics</h4>
-              <div className="flex flex-wrap gap-2 mb-3">
-                {metricsList.map((m, i) => (
-                  <div key={i} className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-full px-3 py-1">
-                    <span className="text-xs font-medium text-indigo-700">{m}</span>
-                    <button onClick={() => setMetricsList(prev => prev.filter((_, j) => j !== i))}
-                      className="text-indigo-400 hover:text-indigo-700 duration-[120ms]">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+          <div className="flex flex-col md:flex-row gap-5">
+            {/* Eval Prompt — main content */}
+            <div className="flex-1 order-2 md:order-1">
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Eval Prompt</span>
+                </div>
+                <div className="px-5 py-4">
+                  <textarea
+                    value={curatorPrompt}
+                    onChange={e => setCuratorPrompt(e.target.value)}
+                    rows={10}
+                    placeholder="Scoring rubric and instructions for evaluating sessions…"
+                    className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] leading-relaxed"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Metrics — sidebar */}
+            <div className="w-full md:w-[280px] flex-shrink-0 order-1 md:order-2">
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Metrics</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${metricsList.length >= MAX_METRICS ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
+                      {metricsList.length}/{MAX_METRICS}
+                    </span>
                   </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input type="text" value={newMetric} onChange={e => setNewMetric(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && newMetric.trim()) { setMetricsList(p => [...p, newMetric.trim()]); setNewMetric('') } }}
-                  placeholder="Add metric..."
-                  className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]" />
-                <button onClick={() => { if (newMetric.trim()) { setMetricsList(p => [...p, newMetric.trim()]); setNewMetric('') } }}
-                  className="px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 duration-[120ms]">
-                  Add
-                </button>
+                </div>
+                <div className="px-5 py-4 flex flex-col gap-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {slotDrafts.map((draft, i) => {
+                      const isOriginal = draft && originalMetrics.has(draft)
+                      return (
+                        <div key={i} className="relative">
+                          <input
+                            type="text"
+                            value={draft}
+                            onChange={e => updateSlot(i, e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                            disabled={!draft && metricsList.length >= MAX_METRICS}
+                            placeholder={!draft && metricsList.length < MAX_METRICS ? '+' : ''}
+                            className={`w-full text-sm rounded-lg px-3 py-2 pr-7 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 duration-[120ms] ${
+                              draft
+                                ? isOriginal
+                                  ? 'bg-gray-50 border border-gray-200 text-gray-600 font-medium placeholder:text-gray-300'
+                                  : 'bg-indigo-50 border border-indigo-100 text-indigo-700 font-medium placeholder:text-indigo-300'
+                                : 'bg-white border border-gray-200 text-gray-900 placeholder:text-gray-400'
+                            } disabled:opacity-40 disabled:cursor-not-allowed`}
+                          />
+                          {draft && (
+                            <button
+                              onClick={() => clearSlot(i)}
+                              className={`absolute right-2 top-1/2 -translate-y-1/2 duration-[120ms] ${
+                                isOriginal ? 'text-gray-400 hover:text-gray-600' : 'text-indigo-400 hover:text-indigo-600'
+                              }`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
-
-            {/* Regenerate */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4">
-              <h4 className="text-sm font-semibold text-gray-900 mb-1">Regenerate Evaluation</h4>
-              <p className="text-xs text-gray-500 mb-3">Describe how sessions should be evaluated and we'll regenerate the metrics.</p>
-              <textarea value={evalCriteria} onChange={e => setEvalCriteria(e.target.value)} rows={3} placeholder="e.g. Focus on accuracy, depth, and communication clarity..."
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]" />
-              <button onClick={handleGenerateEval} disabled={!evalCriteria.trim() || generatingEval}
-                className="mt-2 flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed duration-[120ms]">
-                {generatingEval ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                Generate
-              </button>
-            </div>
-
-            {/* Curator prompt */}
-            {curatorPrompt && (
-              <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-2">Evaluation Guide</h4>
-                <textarea value={curatorPrompt} onChange={e => setCuratorPrompt(e.target.value)} rows={5}
-                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]" />
-              </div>
-            )}
-
-            <button onClick={handleSaveEval} disabled={savingEval}
-              className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed duration-[120ms] flex items-center justify-center gap-2">
-              {savingEval ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
-                : savedEvalOk ? <><CheckCircle2 className="w-4 h-4" /> Saved</>
-                : 'Save Evaluation'}
-            </button>
           </div>
         )}
       </div>
@@ -573,43 +570,4 @@ export default function QnAConfigureView({ agent }: Props) {
   )
 }
 
-// ── Section card ───────────────────────────────────────────────────────────────
 
-function SectionCard({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 relative">
-      <h4 className="text-sm font-semibold text-gray-900 mb-3">{label}</h4>
-      {children}
-    </div>
-  )
-}
-
-// ── Section AI button ──────────────────────────────────────────────────────────
-
-interface SectionAiButtonProps {
-  sectionName: string
-  currentContent: string
-  active: boolean
-  loading: boolean
-  onOpen: () => void
-  onClose: () => void
-  onApply: (instruction: string) => void
-}
-
-function SectionAiButton({ active, loading, onOpen, onClose, onApply }: SectionAiButtonProps) {
-  return (
-    <div className="absolute top-3 right-4 z-10">
-      <button
-        onClick={() => active ? onClose() : onOpen()}
-        className={`p-1.5 rounded-lg duration-[120ms] ${active ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-indigo-500 hover:bg-gray-50'}`}
-      >
-        <Sparkles className="w-3.5 h-3.5" />
-      </button>
-      <AnimatePresence>
-        {active && (
-          <AiRewritePopup onApply={onApply} onClose={onClose} loading={loading} />
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}

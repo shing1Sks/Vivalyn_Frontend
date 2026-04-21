@@ -496,11 +496,11 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={() => copyLink(liveUrl, 'live')}
-            className={tileClass}
+            className={`${tileClass} hover:border-emerald-300 hover:bg-emerald-50/50`}
           >
             {copiedLive
               ? <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-              : <Link2 className="w-4 h-4 text-gray-400 shrink-0" />
+              : <Link2 className="w-4 h-4 text-emerald-500 shrink-0" />
             }
             <span className="text-sm text-gray-700 font-medium truncate">
               {copiedLive ? 'Copied!' : 'Live link'}
@@ -511,11 +511,11 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={() => copyLink(testUrl, 'test')}
-            className={tileClass}
+            className={`${tileClass} hover:border-orange-300 hover:bg-orange-50/50`}
           >
             {copiedTest
               ? <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-              : <Copy className="w-4 h-4 text-gray-400 shrink-0" />
+              : <Copy className="w-4 h-4 text-orange-400 shrink-0" />
             }
             <span className="text-sm text-gray-700 font-medium truncate">
               {copiedTest ? 'Copied!' : 'Test link'}

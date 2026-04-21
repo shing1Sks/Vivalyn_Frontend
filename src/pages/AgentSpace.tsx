@@ -171,10 +171,10 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
         {/* Row 2: action buttons + date */}
         <div className="flex items-center justify-between mt-2.5">
           <div className="flex items-center gap-0.5">
-            <button onClick={() => copyLink(liveUrl, 'live')} title="Copy live link" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+            <button onClick={() => copyLink(liveUrl, 'live')} title="Copy live link" className={`p-1.5 rounded-lg duration-[120ms] ${isLive ? 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50' : 'text-gray-300 hover:text-gray-400 hover:bg-gray-50'}`}>
               {copiedLive ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Link2 className="w-3.5 h-3.5" />}
             </button>
-            <button onClick={() => copyLink(testUrl, 'test')} title="Copy test link" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+            <button onClick={() => copyLink(testUrl, 'test')} title="Copy test link" className="p-1.5 rounded-lg text-orange-400 hover:text-orange-600 hover:bg-orange-50 duration-[120ms]">
               {copiedTest ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
             <button onClick={handleToggleStatus} disabled={toggling} title={isLive ? 'Pause agent' : 'Deploy agent live'} className="group p-1.5 rounded-lg hover:bg-indigo-50 disabled:opacity-50 duration-[120ms]">
@@ -224,10 +224,10 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
 
         {/* Links */}
         <div className="flex items-center justify-center gap-1">
-          <button onClick={() => copyLink(liveUrl, 'live')} title="Copy live link" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+          <button onClick={() => copyLink(liveUrl, 'live')} title="Copy live link" className={`p-1.5 rounded-lg duration-[120ms] ${isLive ? 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50' : 'text-gray-300 hover:text-gray-400 hover:bg-gray-50'}`}>
             {copiedLive ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Link2 className="w-3.5 h-3.5" />}
           </button>
-          <button onClick={() => copyLink(testUrl, 'test')} title="Copy test link" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
+          <button onClick={() => copyLink(testUrl, 'test')} title="Copy test link" className="p-1.5 rounded-lg text-orange-400 hover:text-orange-600 hover:bg-orange-50 duration-[120ms]">
             {copiedTest ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
         </div>
