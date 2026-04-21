@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowRight, CheckCircle, ChevronRight, Loader2, MessageSquare, X } from 'lucide-react'
-import { fetchRunRecordById, type EvaluationReport, type RunRecord } from '../../lib/api'
+import { ArrowRight, CheckCircle, ChevronRight, Loader2, MessageSquare, Pause, PlayCircle, X } from 'lucide-react'
+import { fetchRecording, fetchRunRecordById, type EvaluationReport, type RecordingData, type RunRecord } from '../../lib/api'
 
 // ── Types ────────────────────────────────────────────────────────────────────────
 
@@ -21,6 +21,12 @@ function resolveContent(content: string | Record<string, unknown>): string {
 type TranscriptStatus = 'loading' | 'loaded' | 'error'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
+
+function fmtTime(secs: number): string {
+  const m = Math.floor(secs / 60)
+  const s = Math.floor(secs % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
 
 function avgScore(report: EvaluationReport | null): string {
   if (!report?.scoring) return '—'
@@ -228,6 +234,185 @@ function TranscriptPanel({ transcript, status, onClose, onRetry }: TranscriptPan
   )
 }
 
+// ── Recording panel ─────────────────────────────────────────────────────────────
+
+type RecordingStatus = 'loading' | 'loaded' | 'unavailable' | 'error'
+
+interface RecordingPanelProps {
+  runId: string
+  token: string
+  onClose: () => void
+}
+
+function RecordingPanel({ runId, token, onClose }: RecordingPanelProps) {
+  const [status, setStatus] = useState<RecordingStatus>('loading')
+  const [data, setData] = useState<RecordingData | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const [currentMs, setCurrentMs] = useState(0)
+  const [durationSecs, setDurationSecs] = useState(0)
+  const [currentTurnIdx, setCurrentTurnIdx] = useState(-1)
+  const agentRef = useRef<HTMLAudioElement>(null)
+  const userRef = useRef<HTMLAudioElement>(null)
+  const turnRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  useEffect(() => {
+    fetchRecording(token, runId)
+      .then(rec => {
+        if (!rec) { setStatus('unavailable'); return }
+        setData(rec)
+        setStatus('loaded')
+      })
+      .catch(() => setStatus('error'))
+  }, [runId, token])
+
+  const togglePlay = useCallback(() => {
+    const a = agentRef.current
+    const u = userRef.current
+    if (!a) return
+    if (playing) {
+      a.pause()
+      u?.pause()
+    } else {
+      a.play()
+      u?.play()
+    }
+    setPlaying(p => !p)
+  }, [playing])
+
+  function handleTimeUpdate() {
+    const t = agentRef.current?.currentTime ?? 0
+    const ms = t * 1000
+    setCurrentMs(ms)
+    if (!data) return
+    let idx = -1
+    for (let i = 0; i < data.manifest.length; i++) {
+      if (data.manifest[i].start_ms <= ms) idx = i
+      else break
+    }
+    if (idx !== currentTurnIdx) {
+      setCurrentTurnIdx(idx)
+      turnRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }
+
+  function handleSeek(e: React.ChangeEvent<HTMLInputElement>) {
+    const secs = parseFloat(e.target.value)
+    if (agentRef.current) agentRef.current.currentTime = secs
+    if (userRef.current) userRef.current.currentTime = secs
+    setCurrentMs(secs * 1000)
+  }
+
+  return (
+    <motion.div
+      initial={{ x: '100%' }}
+      animate={{ x: 0 }}
+      exit={{ x: '100%' }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+      className="fixed top-0 right-0 md:right-[500px] h-full w-full md:w-[420px] bg-white border-l border-gray-200 shadow-lg z-50 md:z-40 flex flex-col"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <PlayCircle className="w-4 h-4 text-gray-400" />
+          <span className="text-sm font-semibold text-gray-900">Recording</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 duration-[120ms]"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {status === 'loading' && (
+          <div className="flex items-center gap-2 text-sm text-gray-400 py-8 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading…
+          </div>
+        )}
+        {status === 'unavailable' && (
+          <p className="text-sm text-gray-400 py-8 text-center px-5">
+            Recording not available for this session.
+          </p>
+        )}
+        {status === 'error' && (
+          <p className="text-sm text-gray-400 py-8 text-center px-5">Failed to load recording.</p>
+        )}
+        {status === 'loaded' && data && (
+          <>
+            <audio
+              ref={agentRef}
+              src={data.agent_audio_url ?? undefined}
+              onTimeUpdate={handleTimeUpdate}
+              onEnded={() => setPlaying(false)}
+              onLoadedMetadata={() => setDurationSecs(agentRef.current?.duration ?? 0)}
+              preload="auto"
+            />
+            <audio ref={userRef} src={data.user_audio_url ?? undefined} preload="auto" />
+
+            {/* Player controls */}
+            <div className="px-5 py-4 border-b border-gray-100 shrink-0 flex flex-col gap-2.5">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={togglePlay}
+                  className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white duration-[120ms] shrink-0"
+                >
+                  {playing ? <Pause className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={durationSecs || 1}
+                  step={0.1}
+                  value={currentMs / 1000}
+                  onChange={handleSeek}
+                  className="flex-1 h-1 accent-indigo-600 cursor-pointer"
+                />
+                <span className="text-[11px] text-gray-400 tabular-nums shrink-0">
+                  {fmtTime(currentMs / 1000)} / {fmtTime(durationSecs)}
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-400">Agent and participant audio play simultaneously.</p>
+            </div>
+
+            {/* Transcript from manifest */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {data.manifest.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">No transcript available.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {data.manifest.map((turn, i) => (
+                    <div
+                      key={i}
+                      ref={el => { turnRefs.current[i] = el }}
+                      className={`flex flex-col gap-0.5 ${turn.speaker === 'user' ? 'items-end' : 'items-start'} duration-[120ms] ${i === currentTurnIdx ? 'opacity-100' : 'opacity-50'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] px-3 py-2 text-sm leading-relaxed rounded-xl ${
+                          i === currentTurnIdx ? 'ring-1 ring-indigo-300' : ''
+                        } ${
+                          turn.speaker === 'user'
+                            ? 'bg-indigo-50 text-indigo-900 rounded-tr-sm'
+                            : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                        }`}
+                      >
+                        {turn.content}
+                      </div>
+                      <span className="text-[10px] text-gray-400 px-1">{fmtTime(turn.start_ms / 1000)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Main panel ──────────────────────────────────────────────────────────────────
 
 export interface RunDetailPanelProps {
@@ -244,6 +429,7 @@ export default function RunDetailPanel({ run, agentspaceId, token, onClose }: Ru
   const [transcriptData, setTranscriptData] = useState<TranscriptMsg[]>([])
   const [transcriptStatus, setTranscriptStatus] = useState<TranscriptStatus>('loading')
   const [transcriptOpen, setTranscriptOpen] = useState(false)
+  const [recordingOpen, setRecordingOpen] = useState(false)
 
   function fetchTranscript() {
     setTranscriptStatus('loading')
@@ -261,6 +447,7 @@ export default function RunDetailPanel({ run, agentspaceId, token, onClose }: Ru
 
   function handleClose() {
     setTranscriptOpen(false)
+    setRecordingOpen(false)
     onClose()
   }
 
@@ -391,7 +578,7 @@ export default function RunDetailPanel({ run, agentspaceId, token, onClose }: Ru
             <div>
               <SectionLabel>Transcript</SectionLabel>
               <button
-                onClick={() => setTranscriptOpen(true)}
+                onClick={() => { setRecordingOpen(false); setTranscriptOpen(true) }}
                 disabled={transcriptStatus === 'loading' || transcriptStatus === 'error'}
                 className="w-full flex items-center justify-between px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed duration-[120ms] group"
               >
@@ -427,6 +614,21 @@ export default function RunDetailPanel({ run, agentspaceId, token, onClose }: Ru
                 )}
               </button>
             </div>
+
+            {/* Recording row — always shown */}
+            <div>
+              <SectionLabel>Recording</SectionLabel>
+              <button
+                onClick={() => { setTranscriptOpen(false); setRecordingOpen(true) }}
+                className="w-full flex items-center justify-between px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 duration-[120ms] group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <PlayCircle className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-700">Play Recording</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600 duration-[120ms]" />
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -439,6 +641,17 @@ export default function RunDetailPanel({ run, agentspaceId, token, onClose }: Ru
             status={transcriptStatus}
             onClose={() => setTranscriptOpen(false)}
             onRetry={fetchTranscript}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Recording panel */}
+      <AnimatePresence>
+        {recordingOpen && (
+          <RecordingPanel
+            runId={run.id}
+            token={token}
+            onClose={() => setRecordingOpen(false)}
           />
         )}
       </AnimatePresence>

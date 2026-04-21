@@ -1,5 +1,17 @@
 # Changelog
 
+## [59] session-recording-replay — 2026-04-22
+
+**Why:** Sessions left no artifact beyond the transcript and evaluation report. There was no way for reviewers or participants to hear what was actually said — critical for QA, assessment review, and resolving disputes about session quality.
+
+**What:** Added a "Play Recording" button to `RunDetailPanel` that opens a `RecordingPanel` slide-in. The panel fetches two presigned R2 URLs (agent audio + user audio), plays them simultaneously through hidden `<audio>` elements, and syncs a scrolling transcript to the current playback position. Both WAV files are constructed server-side with silence gaps so that when played together they interleave naturally with no overlap.
+
+**Changes:**
+- `src/lib/api.ts`: added `RecordingData` interface (`agent_audio_url`, `user_audio_url`, `manifest`, `duration_ms`); added `fetchRecording(accessToken, runId)` calling `GET /api/v1/recordings/:runId`
+- `src/components/agentspace/RunDetailPanel.tsx`: added `fmtTime` helper; added `RecordingPanel` component — fetches recording on open, renders two hidden `<audio>` elements driven by a single play/pause button, seekable range input, and a manifest-driven transcript that dims inactive turns and auto-scrolls to the current one; added `recordingOpen` state; added "Play Recording" button row in the detail panel (mutually exclusive with transcript panel); added `RecordingPanel` in `AnimatePresence`
+
+---
+
 ## [58] agent-first-speaker — 2026-04-22
 
 **Why:** The `agent_first_speaker` backend flag required matching frontend changes: UI toggles to set the value at creation and in config views, correct API typings, and critically, a bug fix in the session hook — on `session_ready` the hook was unconditionally setting `agentState = 'listening'` which enabled `sendAudioRef` immediately. When the backend was streaming the agent's opener, the mic was already sending audio, creating a stale buffer that the STT loop consumed as a phantom first user turn.

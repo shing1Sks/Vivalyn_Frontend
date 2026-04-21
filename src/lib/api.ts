@@ -807,6 +807,25 @@ export async function fetchRunRecordById(
   return res.json();
 }
 
+export interface RecordingData {
+  agent_audio_url: string | null;
+  user_audio_url: string | null;
+  manifest: Array<{ turn_index: number; speaker: string; content: string; start_ms: number }>;
+  duration_ms: number;
+}
+
+export async function fetchRecording(
+  accessToken: string,
+  runId: string,
+): Promise<RecordingData | null> {
+  const res = await fetch(`${BASE}/api/v1/recordings/${runId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to fetch recording');
+  return res.json();
+}
+
 // ── Admin ──────────────────────────────────────────────────────────────────
 
 export interface AdminDailyPoint {
