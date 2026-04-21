@@ -1,6 +1,6 @@
 import { useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCircle2, ChevronDown, Loader2, Settings2, X } from 'lucide-react'
+import { Bot, CheckCircle2, ChevronDown, Loader2, Settings2, User, X } from 'lucide-react'
 import {
   updateAgent,
   type AgentPromptSpec,
@@ -149,16 +149,19 @@ export default function AgentConfigureView({
             </button>
           </div>
           {/* Who opens the session */}
-          <div className="hidden md:inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+          <div className="hidden md:flex items-center gap-2">
             {(['agent', 'user'] as const).map(val => (
               <button
                 key={val}
                 onClick={() => handleFirstSpeakerChange(val)}
-                className={`text-[11px] font-medium px-2.5 py-1 rounded-md duration-[120ms] ${
-                  firstSpeaker === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                className={`flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg border transition-all duration-150 ${
+                  firstSpeaker === val
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-200'
+                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900'
                 }`}
               >
-                {val === 'agent' ? 'Agent first' : 'Participant first'}
+                {val === 'agent' ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                {val === 'agent' ? 'Agent starts' : 'Participant starts'}
               </button>
             ))}
           </div>
@@ -184,15 +187,18 @@ export default function AgentConfigureView({
           <span className="text-xs text-gray-500">
             {agentVoice} · <span className="font-medium text-gray-700">{agentLanguage.toUpperCase()}</span>
           </span>
-          <div className="inline-flex bg-gray-100 rounded-md p-0.5 gap-0.5">
+          <div className="flex items-center gap-2">
             {(['agent', 'user'] as const).map(val => (
               <button
                 key={val}
                 onClick={() => handleFirstSpeakerChange(val)}
-                className={`text-[10px] font-medium px-2 py-1 rounded duration-[120ms] ${
-                  firstSpeaker === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-all duration-150 ${
+                  firstSpeaker === val
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900'
                 }`}
               >
+                {val === 'agent' ? <Bot className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
                 {val === 'agent' ? 'Agent' : 'Participant'}
               </button>
             ))}
