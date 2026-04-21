@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Brain, FileText, Loader2, Upload, X } from 'lucide-react'
+import { Brain, FileText, Image, Loader2, Upload, X } from 'lucide-react'
 
 // ── Thinking panel ─────────────────────────────────────────────────────────────
 
@@ -48,14 +48,96 @@ function ThinkingPanel() {
 
 interface AttachedFile {
   name: string
-  text: string  // extracted text content
+  // 'text' — .txt or text-layer PDF; 'image' — jpg/png/webp; 'scanned-pdf' — image-only PDF rendered as pages
+  fileType: 'text' | 'image' | 'scanned-pdf'
+  text: string
+  dataUri?: string      // single image data URI
+  pageImages?: string[] // rendered page data URIs for scanned PDFs
 }
 
 interface Props {
   language: string
   personaName: string
   isLoading: boolean
-  onGenerate: (context: string, resourceText: string) => void
+  onGenerate: (context: string, resourceText: string, resourceImages: string[]) => void
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+async function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = e => resolve((e.target?.result as string) ?? '')
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsText(file)
+  })
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
+  }
+  return btoa(binary)
+}
+
+// Tries text extraction first. If the PDF has no text layer (scanned),
+// renders the first 1–3 pages to canvas and returns them as JPEG data URIs.
+async function extractPdfContent(file: File): Promise<{ text: string; pageImages: string[] }> {
+  const pdfjsLib = await import('pdfjs-dist')
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).href
+  const buf = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise
+
+  // Attempt text extraction across all pages
+  const textParts: string[] = []
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const content = await page.getTextContent()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    textParts.push(content.items.map((item: any) => ('str' in item ? item.str : '')).join(' '))
+  }
+  const text = textParts.join('\n').trim()
+  if (text) return { text, pageImages: [] }
+
+  // Scanned PDF — render first min(3, numPages) pages as JPEG images
+  const pageImages: string[] = []
+  const pageCount = Math.min(3, pdf.numPages)
+  for (let i = 1; i <= pageCount; i++) {
+    const page = await pdf.getPage(i)
+    const viewport = page.getViewport({ scale: 1.0 })
+    const canvas = document.createElement('canvas')
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    const ctx = canvas.getContext('2d')!
+    await page.render({ canvasContext: ctx, viewport }).promise
+    pageImages.push(canvas.toDataURL('image/jpeg', 0.7))
+  }
+  return { text: '', pageImages }
+}
+
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp']
+
+function isImageFile(file: File) {
+  return IMAGE_TYPES.has(file.type) || IMAGE_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext))
+}
+
+function isPdfFile(file: File) {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+}
+
+function isTxtFile(file: File) {
+  return file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt')
+}
+
+// Counts how many "image slots" a file list occupies (images + scanned PDFs each take 1 slot)
+function imageSlotCount(list: AttachedFile[]) {
+  return list.filter(f => f.fileType === 'image' || f.fileType === 'scanned-pdf').length
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -67,54 +149,59 @@ export default function QnAResourceStep({ language, personaName, isLoading, onGe
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  async function readFileAsText(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = e => resolve((e.target?.result as string) ?? '')
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsText(file)
-    })
-  }
-
-  function arrayBufferToBase64(buffer: ArrayBuffer): string {
-    let binary = ''
-    const bytes = new Uint8Array(buffer)
-    for (let i = 0; i < bytes.length; i += 8192) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
-    }
-    return btoa(binary)
-  }
-
   async function handleFiles(incoming: File[]) {
     setFileError(null)
-    const allowed = incoming.filter(f => f.type === 'application/pdf' || f.type === 'text/plain' || f.name.endsWith('.txt'))
+
+    const allowed = incoming.filter(f => isPdfFile(f) || isTxtFile(f) || isImageFile(f))
     if (allowed.length !== incoming.length) {
-      setFileError('Only PDF and .txt files are supported.')
+      setFileError('Only PDF, .txt, JPG, PNG, and WebP files are supported.')
     }
-    const oversized = allowed.filter(f => f.size > 5 * 1024 * 1024)
-    if (oversized.length > 0) {
-      setFileError('Files must be under 5 MB.')
-      return
-    }
+    if (allowed.length === 0) return
+
     if (files.length + allowed.length > 3) {
       setFileError('Maximum 3 files allowed.')
+      return
+    }
+
+    const oversized = allowed.filter(f => {
+      const cap = isImageFile(f) ? 2 * 1024 * 1024 : 5 * 1024 * 1024
+      return f.size > cap
+    })
+    if (oversized.length > 0) {
+      setFileError(isImageFile(oversized[0]) ? 'Images must be under 2 MB.' : 'Files must be under 5 MB.')
       return
     }
 
     try {
       const results: AttachedFile[] = []
       for (const file of allowed) {
-        if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+        if (isTxtFile(file)) {
           const text = await readFileAsText(file)
-          results.push({ name: file.name, text })
+          results.push({ name: file.name, fileType: 'text', text })
+        } else if (isPdfFile(file)) {
+          const { text, pageImages } = await extractPdfContent(file)
+          if (text) {
+            results.push({ name: file.name, fileType: 'text', text })
+          } else {
+            // Scanned PDF — check image slot limit before adding
+            if (imageSlotCount(files) + imageSlotCount(results) >= 2) {
+              setFileError('Maximum 2 images allowed.')
+              continue
+            }
+            results.push({ name: file.name, fileType: 'scanned-pdf', text: '', pageImages })
+          }
         } else {
-          // PDF — encode as base64 in chunks to avoid call-stack overflow on large files
+          // Direct image upload
+          if (imageSlotCount(files) + imageSlotCount(results) >= 2) {
+            setFileError('Maximum 2 images allowed.')
+            continue
+          }
           const buf = await file.arrayBuffer()
           const b64 = arrayBufferToBase64(buf)
-          results.push({ name: file.name, text: `[PDF_BASE64:${b64}]` })
+          results.push({ name: file.name, fileType: 'image', text: '', dataUri: `data:${file.type};base64,${b64}` })
         }
       }
-      setFiles(prev => [...prev, ...results])
+      if (results.length > 0) setFiles(prev => [...prev, ...results])
     } catch {
       setFileError('Could not read file. Please try again.')
     }
@@ -132,8 +219,12 @@ export default function QnAResourceStep({ language, personaName, isLoading, onGe
 
   function handleSubmit() {
     if (!context.trim()) return
-    const resourceText = files.map(f => f.text).join('\n\n')
-    onGenerate(context.trim(), resourceText)
+    const resourceText = files.filter(f => f.fileType === 'text').map(f => f.text).join('\n\n')
+    const resourceImages = [
+      ...files.filter(f => f.fileType === 'image').map(f => f.dataUri!),
+      ...files.filter(f => f.fileType === 'scanned-pdf').flatMap(f => f.pageImages!),
+    ]
+    onGenerate(context.trim(), resourceText, resourceImages)
   }
 
   if (isLoading) {
@@ -190,7 +281,7 @@ export default function QnAResourceStep({ language, personaName, isLoading, onGe
             <input
               ref={inputRef}
               type="file"
-              accept=".pdf,.txt,text/plain,application/pdf"
+              accept=".pdf,.txt,text/plain,application/pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
               multiple
               className="hidden"
               onChange={e => {
@@ -200,7 +291,7 @@ export default function QnAResourceStep({ language, personaName, isLoading, onGe
             />
             <Upload className="w-5 h-5 text-gray-400 mx-auto mb-2" />
             <p className="text-sm text-gray-600 font-medium">Attach reference materials</p>
-            <p className="text-xs text-gray-400 mt-1">PDF or .txt, max 3 files, 5 MB each — optional</p>
+            <p className="text-xs text-gray-400 mt-1">PDF, .txt, or image (JPG/PNG/WebP) — max 3 files</p>
           </div>
 
           {/* File error */}
@@ -222,8 +313,16 @@ export default function QnAResourceStep({ language, personaName, isLoading, onGe
             <div className="mt-3 flex flex-col gap-2">
               {files.map((f, i) => (
                 <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                  <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  {f.fileType === 'text'
+                    ? <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    : <Image className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  }
                   <span className="text-sm text-gray-700 truncate flex-1">{f.name}</span>
+                  {f.fileType === 'scanned-pdf' && (
+                    <span className="text-xs text-gray-400 shrink-0">
+                      {f.pageImages!.length}p scanned
+                    </span>
+                  )}
                   <button
                     onClick={e => { e.stopPropagation(); removeFile(i) }}
                     className="text-gray-400 hover:text-gray-700 duration-[120ms]"

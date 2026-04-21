@@ -628,7 +628,7 @@ export async function toggleAgentStatus(
 
 export async function generateQnAQuestions(
   accessToken: string,
-  payload: { context: string; resource_text?: string },
+  payload: { context: string; resource_text?: string; resource_images?: string[] },
 ): Promise<{ questions: Array<{ text: string; type: "fixed" | "randomized"; cross_question_enabled: boolean }> }> {
   const res = await fetch(`${BASE}/api/v1/agents/qna/generate-questions`, {
     method: "POST",

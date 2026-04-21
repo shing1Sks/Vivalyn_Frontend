@@ -1,5 +1,27 @@
 # Changelog
 
+## [56] qna-resource-pdf-extraction-and-image-vision — 2026-04-21
+
+**Why:** The QnA resource upload was base64-encoding raw PDF binaries and sending them as `[PDF_BASE64:...]` strings — useless for the LLM and catastrophic for token limits on scanned PDFs (2.4 MB → 606K tokens → 429 rate limit error). The upload also only supported PDF and .txt, with no way to attach image-based reference material.
+
+**What:** PDF files are now processed with `pdfjs-dist` to extract their text layer before sending. Scanned/image-only PDFs (no text layer) fall back to rendering the first 1–3 pages as JPEG canvas snapshots, which are passed to the backend as vision content. Direct image upload (JPG/PNG/WebP) is also added with a 2 MB cap. Images — whether uploaded directly or rendered from a scanned PDF — are sent as base64 data URIs to the backend and forwarded to the LLM as vision content.
+
+**Changes:**
+- `package.json`: added `pdfjs-dist` dependency
+- `src/components/agentspace/wizard/QnAResourceStep.tsx`:
+  - `AttachedFile` interface gains `fileType: 'text' | 'image' | 'scanned-pdf'` and `pageImages?: string[]`
+  - `arrayBufferToBase64` kept for image encoding
+  - `extractPdfText` replaced by `extractPdfContent` — extracts text across all pages; if empty (scanned), renders pages 1–min(3, n) to canvas at scale 1.0 / JPEG 0.7 and returns `pageImages`
+  - `handleFiles` now accepts JPG/PNG/WebP (2 MB cap); scanned PDFs count as one image slot (max 2 image slots total); image slot limit checked inline per file
+  - `handleSubmit` builds `resourceImages` by merging direct image `dataUri` values and scanned PDF `pageImages`
+  - `onGenerate` prop gains third arg `resourceImages: string[]`
+  - File list shows `Image` icon for images and scanned PDFs; scanned PDFs show a `"Np scanned"` label
+  - Upload zone hint updated to mention image formats
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: `handleGenerateQuestions` signature gains `resourceImages: string[]`; passes `resource_images` to `generateQnAQuestions`
+- `src/lib/api.ts`: `generateQnAQuestions` payload type gains `resource_images?: string[]`
+
+---
+
 ## [55] agent-session-complete-signal — 2026-04-21
 
 **Why:** After an agent delivered its closing statement the session stayed open indefinitely — the WebSocket kept waiting for user audio with no UI transition. The user had no indication the session was over unless they manually pressed End Session.

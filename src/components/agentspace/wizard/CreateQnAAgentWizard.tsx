@@ -101,7 +101,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
     setStep('resource-upload')
   }
 
-  const handleGenerateQuestions = useCallback(async (context: string, resourceText: string) => {
+  const handleGenerateQuestions = useCallback(async (context: string, resourceText: string, resourceImages: string[]) => {
     if (!session) return
     setAssessmentContext(context)
     setIsGeneratingQuestions(true)
@@ -111,6 +111,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
       const result = await generateQnAQuestions(session.access_token, {
         context,
         resource_text: resourceText || undefined,
+        resource_images: resourceImages.length > 0 ? resourceImages : undefined,
       })
       setGeneratedQuestions(result.questions)
       setStep('question-review')
