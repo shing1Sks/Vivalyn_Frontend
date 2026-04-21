@@ -228,6 +228,19 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
           }
           break
 
+        case 'session_complete':
+          // Agent signaled end — mirror endSession() mic teardown, wait for session_report
+          processorRef.current?.disconnect()
+          processorRef.current = null
+          micStreamRef.current?.getTracks().forEach(t => t.stop())
+          micStreamRef.current = null
+          micCtxRef.current?.close().catch(() => {})
+          micCtxRef.current = null
+          sendAudioRef.current = false
+          setMicEnabled(false)
+          setPhase('reporting')
+          break
+
         case 'error':
           console.warn('[AgentSession] server error:', msg.message)
           setAgentState('listening')

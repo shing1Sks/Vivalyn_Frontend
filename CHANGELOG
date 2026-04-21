@@ -1,5 +1,16 @@
 # Changelog
 
+## [55] agent-session-complete-signal — 2026-04-21
+
+**Why:** After an agent delivered its closing statement the session stayed open indefinitely — the WebSocket kept waiting for user audio with no UI transition. The user had no indication the session was over unless they manually pressed End Session.
+
+**What:** Frontend now handles a new `session_complete` message sent by the backend when the agent calls the `signal_session_complete` tool. On receipt, the mic is torn down (same path as manual `endSession()`) and the phase transitions to `'reporting'`, showing the report-loading UI while the evaluation runs. The WebSocket stays open to receive `session_report` as before.
+
+**Changes:**
+- `src/hooks/useAgentSession.ts`: added `case 'session_complete'` to the `ws.onmessage` switch — disconnects processor, stops mic stream, closes mic AudioContext, sets `sendAudioRef.current = false`, calls `setMicEnabled(false)`, transitions phase to `'reporting'`
+
+---
+
 ## [54] agent-config-ui-ux-overhaul — 2026-04-21
 
 **Why:** The agent configure pages (General and QnA) had accumulated several UX inconsistencies and layout issues: AI helper boxes cluttered every section with "Describe the change" popups that weren't needed; the metrics section had no visible constraint (users could add unlimited metrics despite a 4-slot backend limit); the voice/language picker was an inline expandable panel that pushed content down awkwardly; the Session/Evaluation tabs had mismatched save button placement; and the QnA config page diverged significantly from the General agent layout with no voice/language support, a centralized questions view, and underline tabs instead of pills.
