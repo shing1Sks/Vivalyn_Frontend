@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, ArrowLeft, Check, Link2, Loader2, Copy, Rocket, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, Link2, Loader2, Copy, MessageSquare, Rocket, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
   ApiError,
@@ -9,6 +9,7 @@ import {
   planAgent,
   saveAgent,
   toggleAgentStatus,
+  updateAgent,
   type Agent,
   type AgentPromptSpec,
   type CompileResult,
@@ -344,8 +345,14 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
                 agentId={savedAgent.id}
                 agentLanguage={savedAgent.agent_language}
                 agentVoice={savedAgent.agent_voice}
+                agentFirstSpeaker={savedAgent.agent_first_speaker}
                 evaluationMetrics={savedAgent.transcript_evaluation_metrics}
                 onSaved={spec => setConfiguredSpec(spec)}
+                onAgentUpdated={updates => {
+                  savedAgent.agent_language = updates.agent_language
+                  savedAgent.agent_voice = updates.agent_voice
+                  if (updates.agent_first_speaker) savedAgent.agent_first_speaker = updates.agent_first_speaker
+                }}
               />
             )}
           </div>
@@ -430,6 +437,9 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
   const [toggling, setToggling] = useState(false)
   const [copiedLive, setCopiedLive] = useState(false)
   const [copiedTest, setCopiedTest] = useState(false)
+  const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
+    (savedAgent.agent_first_speaker as 'agent' | 'user') ?? 'agent'
+  )
 
   const liveUrl = `${window.location.origin}/agent/${savedAgent.id}`
   const testUrl = `${window.location.origin}/agent/${savedAgent.id}?mode=test`
@@ -456,6 +466,14 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
         setTimeout(() => setCopiedTest(false), 2000)
       }
     })
+  }
+
+  async function handleFirstSpeakerToggle(val: 'agent' | 'user') {
+    if (val === firstSpeaker) return
+    setFirstSpeaker(val)
+    try {
+      await updateAgent(token, savedAgent.id, { agent_first_speaker: val })
+    } catch { /* silent */ }
   }
 
   const tileClass = 'border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 hover:border-indigo-300 hover:bg-indigo-50/50 duration-[120ms] cursor-pointer w-full text-left'
@@ -551,6 +569,27 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
             <span className="text-sm text-gray-700 font-medium truncate">Configure</span>
           </motion.button>
         </motion.div>
+
+        {/* Who opens the session */}
+        <div className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <MessageSquare className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-sm text-gray-700 font-medium">Who opens the session</span>
+          </div>
+          <div className="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+            {(['agent', 'user'] as const).map(val => (
+              <button
+                key={val}
+                onClick={() => handleFirstSpeakerToggle(val)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-md duration-[120ms] ${
+                  firstSpeaker === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {val === 'agent' ? 'Agent' : 'Participant'}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <button
           onClick={onClose}

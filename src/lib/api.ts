@@ -487,6 +487,7 @@ export interface Agent {
   created_by_id: string;
   created_by_name: string;
   agent_status: "live" | "idle";
+  agent_first_speaker: string;
   transcript_evaluation_metrics?: EvaluationMetrics | null;
   agent_type: "general" | "qna";
 }
@@ -526,6 +527,7 @@ export async function saveAgent(
     agent_prompt: AgentPromptSpec;
     agent_language: string;
     agent_voice: string;
+    agent_first_speaker?: string;
     transcript_evaluation_metrics?: EvaluationMetrics;
   },
 ): Promise<Agent> {
@@ -572,6 +574,7 @@ export async function updateAgent(
     agent_prompt?: AgentPromptSpec;
     agent_language?: string;
     agent_voice?: string;
+    agent_first_speaker?: string;
     transcript_evaluation_metrics?: EvaluationMetrics | null;
   },
 ): Promise<Agent> {
@@ -683,6 +686,7 @@ export async function saveQnAAgent(
     agent_prompt: QnAPromptSpec;
     agent_language: string;
     agent_voice: string;
+    agent_first_speaker?: string;
     transcript_evaluation_metrics?: EvaluationMetrics;
   },
 ): Promise<Agent> {
@@ -734,6 +738,7 @@ export interface AgentPublicConfig {
   agent_language: string;
   agent_status: string;
   persona_name?: string | null; // voice_character.name from prompt, if set
+  agent_first_speaker: string; // "agent" | "user"
 }
 
 export async function fetchAgentPublicConfig(
@@ -1099,6 +1104,32 @@ export async function verifyOtp(data: { email: string; otp: string }): Promise<v
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new ApiError(body.detail ?? "Verification failed", res.status);
+  }
+}
+
+// ── Live session OTP ──────────────────────────────────────────────────────────
+
+export async function requestSessionOtp(email: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/live/otp/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body.detail ?? 'Failed to send verification code', res.status);
+  }
+}
+
+export async function verifySessionOtp(email: string, otp: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/live/otp/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body.detail ?? 'Verification failed', res.status);
   }
 }
 

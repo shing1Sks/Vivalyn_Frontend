@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, ArrowLeft, BarChart2, Check, Copy, Link2, Loader2, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, BarChart2, Check, Copy, Link2, Loader2, MessageSquare, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { useAuth } from '../../../context/AuthContext'
 import {
   ApiError,
@@ -9,6 +9,7 @@ import {
   generateQnAQuestions,
   saveQnAAgent,
   toggleAgentStatus,
+  updateAgent,
   type Agent,
   type QnACompileResult,
   type QnAPromptSpec,
@@ -422,6 +423,17 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
   const [toggling, setToggling] = useState(false)
   const [copiedLive, setCopiedLive] = useState(false)
   const [copiedTest, setCopiedTest] = useState(false)
+  const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
+    (savedAgent.agent_first_speaker as 'agent' | 'user') ?? 'agent'
+  )
+
+  async function handleFirstSpeakerToggle(val: 'agent' | 'user') {
+    if (val === firstSpeaker) return
+    setFirstSpeaker(val)
+    try {
+      await updateAgent(token, savedAgent.id, { agent_first_speaker: val })
+    } catch { /* silent */ }
+  }
 
   const liveUrl = `${window.location.origin}/agent/${savedAgent.id}`
   const testUrl = `${window.location.origin}/agent/${savedAgent.id}?mode=test`
@@ -525,6 +537,23 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
             <span className="text-sm text-gray-700 font-medium truncate">Configure</span>
           </motion.button>
         </motion.div>
+
+        <div className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <MessageSquare className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-sm text-gray-700 font-medium">Who opens the session</span>
+          </div>
+          <div className="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+            {(['agent', 'user'] as const).map(val => (
+              <button key={val} onClick={() => handleFirstSpeakerToggle(val)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-md capitalize duration-[120ms] ${
+                  firstSpeaker === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {val === 'agent' ? 'Agent' : 'Participant'}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <button
           onClick={onClose}

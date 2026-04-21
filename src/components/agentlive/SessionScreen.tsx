@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { MutableRefObject } from 'react'
 import { Mic, MicOff, PhoneOff } from 'lucide-react'
 import AgentAvatar from './AgentAvatar'
 import UserAvatar from './UserAvatar'
@@ -12,6 +13,7 @@ interface SessionScreenProps {
   micEnabled: boolean
   onToggleMic: () => void
   onEndCall: () => void
+  audioLevelRef: MutableRefObject<number>
 }
 
 const STATE_LABELS: Record<AgentState, string> = {
@@ -39,6 +41,7 @@ export default function SessionScreen({
   micEnabled,
   onToggleMic,
   onEndCall,
+  audioLevelRef,
 }: SessionScreenProps) {
   const elapsed = useElapsed()
   const isUserSpeaking = agentState === 'listening' && micEnabled
@@ -87,6 +90,7 @@ export default function SessionScreen({
             userName={userName}
             isSpeaking={isUserSpeaking}
             micEnabled={micEnabled}
+            audioLevelRef={audioLevelRef}
           />
           <div className="text-center">
             <p className="text-sm font-semibold text-white">{userName}</p>

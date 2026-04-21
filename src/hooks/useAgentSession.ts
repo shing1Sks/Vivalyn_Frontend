@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { MutableRefObject } from 'react'
 import type { EvaluationReport } from '../lib/api'
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000'
@@ -22,6 +23,7 @@ export type SessionPhase = 'connecting' | 'active' | 'reporting' | 'ended' | 'er
 export interface TranscriptEntry {
   role: 'user' | 'agent'
   text: string
+  timestamp: number
 }
 
 export interface SessionReport {
@@ -35,25 +37,31 @@ interface UseAgentSessionOptions {
   name: string
   mode: 'live' | 'test'
   token?: string
+  agentFirstSpeaker?: string
 }
 
 interface UseAgentSessionReturn {
   phase: SessionPhase
   agentState: AgentState
   transcript: TranscriptEntry[]
+  streamingAgentText: string
+  partialUserText: string
   micEnabled: boolean
   toggleMic: () => void
   endSession: () => void
   error: string | null
   sessionReport: SessionReport | null
+  audioLevelRef: MutableRefObject<number>
 }
 
 export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionReturn {
-  const { agentId, email, name, mode, token } = opts
+  const { agentId, email, name, mode, token, agentFirstSpeaker } = opts
 
   const [phase, setPhase] = useState<SessionPhase>('connecting')
   const [agentState, setAgentState] = useState<AgentState>('listening')
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
+  const [streamingAgentText, setStreamingAgentText] = useState<string>('')
+  const [partialUserText, setPartialUserText] = useState<string>('')
   const [micEnabled, setMicEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sessionReport, setSessionReport] = useState<SessionReport | null>(null)
@@ -64,6 +72,10 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const micStreamRef = useRef<MediaStream | null>(null)
   const nextPlayTimeRef = useRef<number>(0)
+  const lastSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const audioLevelRef = useRef<number>(0)
+  const agentTextBufferRef = useRef<string>('')
+  const audioReceivedThisTurnRef = useRef<boolean>(false)
   const sendAudioRef = useRef(true)
 
   // ── Cleanup (idempotent) ─────────────────────────────────────────────────────
@@ -101,7 +113,8 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
 
     const startAt = Math.max(nextPlayTimeRef.current, playCtx.currentTime)
     source.start(startAt)
-    nextPlayTimeRef.current = startAt + audioBuf.duration
+    nextPlayTimeRef.current = startAt + audioBuf.duration + 0.25
+    lastSourceRef.current = source
   }, [])
 
   // ── Start mic ───────────────────────────────────────────────────────────────
@@ -132,10 +145,15 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
     processorRef.current = processor
 
     processor.onaudioprocess = (e) => {
+      const input = e.inputBuffer.getChannelData(0)
+
+      let sumSq = 0
+      for (let i = 0; i < input.length; i++) sumSq += input[i] * input[i]
+      audioLevelRef.current = Math.min(1, Math.sqrt(sumSq / input.length))
+
       if (!sendAudioRef.current) return
       if (ws.readyState !== WebSocket.OPEN) return
 
-      const input = e.inputBuffer.getChannelData(0)
       const pcm = new Int16Array(input.length)
       for (let i = 0; i < input.length; i++) {
         pcm[i] = Math.max(-32768, Math.min(32767, input[i] * 32768))
@@ -170,6 +188,13 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
       if (event.data instanceof ArrayBuffer) {
         setAgentState('speaking')
         sendAudioRef.current = false
+        if (!audioReceivedThisTurnRef.current) {
+          audioReceivedThisTurnRef.current = true
+          if (agentTextBufferRef.current) {
+            setStreamingAgentText(agentTextBufferRef.current)
+            agentTextBufferRef.current = ''
+          }
+        }
         enqueueAudio(event.data)
         return
       }
@@ -189,42 +214,66 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
           }
           if (!mounted) return  // check again after await
           setPhase('active')
-          setAgentState('listening')
+          if (agentFirstSpeaker === 'user') {
+            setAgentState('listening')
+          } else {
+            // Agent speaks first — keep sendAudio blocked until audio_done
+            sendAudioRef.current = false
+            setAgentState('thinking')
+          }
           startMic(ws, mountedCheck)
           break
         }
 
         case 'user_transcript':
+          setPartialUserText('')
           setAgentState('thinking')
           if (msg.text) {
-            setTranscript(prev => [...prev, { role: 'user', text: msg.text! }])
+            setTranscript(prev => [...prev, { role: 'user', text: msg.text!, timestamp: Date.now() }])
           }
+          break
+
+        case 'user_transcript_partial':
+          if (msg.text) setPartialUserText(msg.text)
           break
 
         case 'agent_text_delta':
           // Don't override 'speaking' — audio chunks and text deltas can arrive concurrently
           setAgentState(prev => prev === 'speaking' ? 'speaking' : 'thinking')
+          if (msg.text) {
+            if (audioReceivedThisTurnRef.current) {
+              setStreamingAgentText(prev => prev + msg.text!)
+            } else {
+              agentTextBufferRef.current += msg.text
+            }
+          }
           break
 
         case 'audio_done': {
-          // Poll until the scheduled audio has finished playing
-          const checkDone = () => {
-            if (!mounted) return
-            const ctx = playCtxRef.current
-            if (ctx && ctx.state !== 'closed' && ctx.currentTime >= nextPlayTimeRef.current - 0.05) {
-              sendAudioRef.current = true
-              setAgentState('listening')
-            } else {
-              setTimeout(checkDone, 100)
+          const lastSource = lastSourceRef.current
+          const ctx = playCtxRef.current
+          if (!lastSource || !ctx || ctx.state === 'closed' || ctx.currentTime >= nextPlayTimeRef.current - 0.05) {
+            sendAudioRef.current = true
+            setAgentState('listening')
+          } else {
+            lastSource.onended = () => {
+              if (!mounted) return
+              setTimeout(() => {
+                if (!mounted) return
+                sendAudioRef.current = true
+                setAgentState('listening')
+              }, 150)
             }
           }
-          setTimeout(checkDone, 100)
           break
         }
 
         case 'agent_done':
+          audioReceivedThisTurnRef.current = false
+          agentTextBufferRef.current = ''
+          setStreamingAgentText('')
           if (msg.text) {
-            setTranscript(prev => [...prev, { role: 'agent', text: msg.text! }])
+            setTranscript(prev => [...prev, { role: 'agent', text: msg.text!, timestamp: Date.now() }])
           }
           break
 
@@ -237,6 +286,9 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
           micCtxRef.current?.close().catch(() => {})
           micCtxRef.current = null
           sendAudioRef.current = false
+          playCtxRef.current?.close().catch(() => {})
+          playCtxRef.current = null
+          nextPlayTimeRef.current = 0
           setMicEnabled(false)
           setPhase('reporting')
           break
@@ -315,7 +367,7 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'end_session' }))
     }
-    // Stop mic only — keep WS open so we can receive session_report from backend
+    // Stop mic and audio — keep WS open so we can receive session_report from backend
     processorRef.current?.disconnect()
     processorRef.current = null
     micStreamRef.current?.getTracks().forEach(t => t.stop())
@@ -323,6 +375,9 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
     micCtxRef.current?.close().catch(() => {})
     micCtxRef.current = null
     sendAudioRef.current = false
+    playCtxRef.current?.close().catch(() => {})
+    playCtxRef.current = null
+    nextPlayTimeRef.current = 0
     setPhase('reporting')
   }, [])
 
@@ -331,5 +386,5 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
     sendAudioRef.current = micEnabled && agentState === 'listening'
   }, [micEnabled, agentState])
 
-  return { phase, agentState, transcript, micEnabled, toggleMic, endSession, error, sessionReport }
+  return { phase, agentState, transcript, streamingAgentText, partialUserText, micEnabled, toggleMic, endSession, error, sessionReport, audioLevelRef }
 }

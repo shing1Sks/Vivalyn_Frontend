@@ -14,9 +14,10 @@ interface Props {
   agentId: string
   agentLanguage: string
   agentVoice: string
+  agentFirstSpeaker?: string
   evaluationMetrics?: EvaluationMetrics | null
   onSaved: (spec: AgentPromptSpec) => void
-  onAgentUpdated?: (updates: { agent_language: string; agent_voice: string }) => void
+  onAgentUpdated?: (updates: { agent_language: string; agent_voice: string; agent_first_speaker?: string }) => void
 }
 
 type Tab = 'session' | 'evaluation'
@@ -24,12 +25,15 @@ type Tab = 'session' | 'evaluation'
 // ── Main component ──────────────────────────────────────────────────────────────
 
 export default function AgentConfigureView({
-  spec, agentId, agentLanguage, agentVoice, evaluationMetrics, onSaved, onAgentUpdated,
+  spec, agentId, agentLanguage, agentVoice, agentFirstSpeaker, evaluationMetrics, onSaved, onAgentUpdated,
 }: Props) {
   const { session } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('session')
   const [edited, setEdited] = useState<AgentPromptSpec>({ ...spec })
   const [voiceModalOpen, setVoiceModalOpen] = useState(false)
+  const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
+    (agentFirstSpeaker as 'agent' | 'user') ?? 'agent'
+  )
 
   // Save states per tab
   const [sessionSaving, setSessionSaving] = useState(false)
@@ -91,6 +95,15 @@ export default function AgentConfigureView({
     onAgentUpdated?.({ agent_language: lang, agent_voice: voice })
   }
 
+  async function handleFirstSpeakerChange(val: 'agent' | 'user') {
+    if (val === firstSpeaker || !session) return
+    setFirstSpeaker(val)
+    try {
+      await updateAgent(session.access_token, agentId, { agent_first_speaker: val })
+      onAgentUpdated?.({ agent_language: agentLanguage, agent_voice: agentVoice, agent_first_speaker: val })
+    } catch { /* silent */ }
+  }
+
   const isSaving = activeTab === 'session' ? sessionSaving : evalSaving
   const isSaved = activeTab === 'session' ? sessionSaved : evalSaved
 
@@ -135,6 +148,20 @@ export default function AgentConfigureView({
               <Settings2 className="w-3.5 h-3.5" />
             </button>
           </div>
+          {/* Who opens the session */}
+          <div className="hidden md:inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+            {(['agent', 'user'] as const).map(val => (
+              <button
+                key={val}
+                onClick={() => handleFirstSpeakerChange(val)}
+                className={`text-[11px] font-medium px-2.5 py-1 rounded-md duration-[120ms] ${
+                  firstSpeaker === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {val === 'agent' ? 'Agent first' : 'Participant first'}
+              </button>
+            ))}
+          </div>
         </div>
         <button
           onClick={handleHeaderSave}
@@ -151,11 +178,26 @@ export default function AgentConfigureView({
         </button>
       </div>
 
-      {/* Mobile language/voice row */}
+      {/* Mobile language/voice + first-speaker row */}
       <div className="md:hidden flex items-center justify-between px-4 py-2 bg-white border-b border-gray-100">
-        <span className="text-xs text-gray-500">
-          {agentVoice} · <span className="font-medium text-gray-700">{agentLanguage.toUpperCase()}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">
+            {agentVoice} · <span className="font-medium text-gray-700">{agentLanguage.toUpperCase()}</span>
+          </span>
+          <div className="inline-flex bg-gray-100 rounded-md p-0.5 gap-0.5">
+            {(['agent', 'user'] as const).map(val => (
+              <button
+                key={val}
+                onClick={() => handleFirstSpeakerChange(val)}
+                className={`text-[10px] font-medium px-2 py-1 rounded duration-[120ms] ${
+                  firstSpeaker === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                }`}
+              >
+                {val === 'agent' ? 'Agent' : 'Participant'}
+              </button>
+            ))}
+          </div>
+        </div>
         <button
           onClick={() => setVoiceModalOpen(true)}
           className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-3 py-1.5 duration-[120ms]"

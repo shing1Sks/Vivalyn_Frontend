@@ -37,6 +37,7 @@ interface ActiveSessionProps {
   name: string
   mode: 'live' | 'test'
   token?: string
+  agentFirstSpeaker: string
   turnCount: number
   onEnded: (turnCount: number, report: SessionReport | null) => void
 }
@@ -48,10 +49,11 @@ function ActiveSession({
   name,
   mode,
   token,
+  agentFirstSpeaker,
   onEnded,
 }: ActiveSessionProps) {
-  const { phase, agentState, transcript, micEnabled, toggleMic, endSession, error, sessionReport } =
-    useAgentSession({ agentId, email, name, mode, token })
+  const { phase, agentState, transcript, streamingAgentText, partialUserText, micEnabled, toggleMic, endSession, error, sessionReport, audioLevelRef } =
+    useAgentSession({ agentId, email, name, mode, token, agentFirstSpeaker })
 
   useEffect(() => {
     if (phase === 'ended') {
@@ -104,13 +106,14 @@ function ActiveSession({
           micEnabled={micEnabled}
           onToggleMic={toggleMic}
           onEndCall={endSession}
+          audioLevelRef={audioLevelRef}
         />
       </div>
 
       {/* Transcript panel */}
       <div className="w-72 border-l border-gray-800 bg-gray-950 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-hidden">
-          <TranscriptPanel transcript={transcript} agentName={agentName} />
+          <TranscriptPanel transcript={transcript} agentName={agentName} streamingAgentText={streamingAgentText} partialUserText={partialUserText} />
         </div>
       </div>
     </div>
@@ -290,6 +293,7 @@ export default function AgentLive() {
         name={joinName}
         mode={mode}
         token={mode === 'test' ? (authSession?.access_token ?? '') : undefined}
+        agentFirstSpeaker={config?.agent_first_speaker ?? 'agent'}
         turnCount={endedTurnCount}
         onEnded={handleEnded}
       />

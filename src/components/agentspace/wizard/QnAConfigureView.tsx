@@ -183,6 +183,9 @@ export default function QnAConfigureView({ agent }: Props) {
   const { session } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('questions')
   const [voiceModalOpen, setVoiceModalOpen] = useState(false)
+  const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
+    (agent.agent_first_speaker as 'agent' | 'user') ?? 'agent'
+  )
 
   const spec = agent.agent_prompt as QnAPromptSpec
 
@@ -300,9 +303,17 @@ export default function QnAConfigureView({ agent }: Props) {
   const isSaved = activeTab === 'questions' ? savedBankOk : activeTab === 'profile' ? savedProfileOk : savedEvalOk
 
   function handleVoiceUpdated(lang: string, voice: string) {
-    // Update agent object locally since QnA doesn't have onAgentUpdated prop
     agent.agent_language = lang
     agent.agent_voice = voice
+  }
+
+  async function handleFirstSpeakerChange(val: 'agent' | 'user') {
+    if (val === firstSpeaker || !session) return
+    setFirstSpeaker(val)
+    try {
+      await updateAgent(session.access_token, agent.id, { agent_first_speaker: val })
+      agent.agent_first_speaker = val
+    } catch { /* silent */ }
   }
 
   async function handleHeaderSave() {
@@ -342,6 +353,17 @@ export default function QnAConfigureView({ agent }: Props) {
               <Settings2 className="w-3.5 h-3.5" />
             </button>
           </div>
+          {/* First speaker toggle */}
+          <div className="hidden md:inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+            {(['agent', 'user'] as const).map(val => (
+              <button key={val} onClick={() => handleFirstSpeakerChange(val)}
+                className={`text-[11px] font-medium px-2.5 py-1 rounded-md capitalize duration-[120ms] ${
+                  firstSpeaker === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {val === 'agent' ? 'Agent first' : 'Participant first'}
+              </button>
+            ))}
+          </div>
         </div>
         <button onClick={handleHeaderSave} disabled={isSaving}
           className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed duration-[120ms]">
@@ -356,12 +378,24 @@ export default function QnAConfigureView({ agent }: Props) {
         <span className="text-xs text-gray-500">
           {agent.agent_voice} · <span className="font-medium text-gray-700">{agent.agent_language.toUpperCase()}</span>
         </span>
-        <button
-          onClick={() => setVoiceModalOpen(true)}
-          className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-3 py-1.5 duration-[120ms]"
-        >
-          <Settings2 className="w-3 h-3" /> Voice
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+            {(['agent', 'user'] as const).map(val => (
+              <button key={val} onClick={() => handleFirstSpeakerChange(val)}
+                className={`text-[10px] font-medium px-2 py-1 rounded-md duration-[120ms] ${
+                  firstSpeaker === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {val === 'agent' ? 'Agent' : 'Participant'}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setVoiceModalOpen(true)}
+            className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-3 py-1.5 duration-[120ms]"
+          >
+            <Settings2 className="w-3 h-3" /> Voice
+          </button>
+        </div>
       </div>
 
       <VoiceSettingsModal

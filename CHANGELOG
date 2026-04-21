@@ -1,5 +1,34 @@
 # Changelog
 
+## [58] agent-first-speaker — 2026-04-22
+
+**Why:** The `agent_first_speaker` backend flag required matching frontend changes: UI toggles to set the value at creation and in config views, correct API typings, and critically, a bug fix in the session hook — on `session_ready` the hook was unconditionally setting `agentState = 'listening'` which enabled `sendAudioRef` immediately. When the backend was streaming the agent's opener, the mic was already sending audio, creating a stale buffer that the STT loop consumed as a phantom first user turn.
+
+**What:** Segmented "Agent first / Participant first" toggles added to all relevant wizard done-steps and configure-view headers. `useAgentSession` gains an `agentFirstSpeaker` option: when `'agent'`, `session_ready` sets `agentState = 'thinking'` and explicitly blocks `sendAudioRef`, so no mic audio is sent until the opener's `audio_done` arrives and the normal listening cycle resumes. `AgentPublicConfig` propagates the flag from the backend through to the hook.
+
+**Changes:**
+- `src/lib/api.ts`: `Agent` interface gains `agent_first_speaker: string`; `saveAgent`, `updateAgent`, `saveQnAAgent` payload types gain `agent_first_speaker?: string`; `AgentPublicConfig` gains `agent_first_speaker: string`
+- `src/components/agentspace/CreateAgentWizard.tsx` (DoneStep): `firstSpeaker` state initialized from `savedAgent.agent_first_speaker`; "Who opens the session" tile with Agent/Participant segmented control inserted between the 2×2 grid and Done button; `handleFirstSpeakerToggle` fires `updateAgent` immediately; `MessageSquare` icon + `updateAgent` added to imports
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: `agentFirstSpeaker?: string` prop; `firstSpeaker` local state; `handleFirstSpeakerChange` fires `updateAgent` and calls `onAgentUpdated` with updated value; desktop "Agent first / Participant first" segmented control added to header after language badge group; compact mobile version added to mobile row
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: `firstSpeaker` state initialized from `agent.agent_first_speaker`; `handleFirstSpeakerChange` fires `updateAgent` and mutates `agent.agent_first_speaker` locally; desktop segmented control added to header after language badge + gear group; compact mobile version added to mobile row alongside Voice button
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx` (DoneStep): same "Who opens the session" tile as general wizard; `firstSpeaker` state + `handleFirstSpeakerToggle`; `MessageSquare` and `updateAgent` added to imports
+- `src/hooks/useAgentSession.ts`: `agentFirstSpeaker?: string` option added; `session_ready` handler branches on value — when `'user'` keeps existing `setAgentState('listening')` behavior; when `'agent'` (default) explicitly sets `sendAudioRef.current = false` and `setAgentState('thinking')` so the `sendAudioRef` effect cannot re-enable sending until `audio_done` transitions back to `'listening'`
+- `src/pages/AgentLive.tsx`: `agentFirstSpeaker: string` prop on `ActiveSession`; threaded from `config.agent_first_speaker ?? 'agent'` to `useAgentSession`
+
+---
+
+## [57] live-session-ux-improvements — 2026-04-22
+
+**Why:** Two UX issues with the live session interface: (1) Incoming agent text appeared all at once with an awkward shadow/opacity transition effect that felt jarring during voice sessions. (2) There was a brief audible silence between consecutive TTS audio chunks due to no inter-chunk scheduling gap.
+
+**What:** Transcript agent bubbles now use a `WordRevealText` component that reveals text one word at a time at 120ms intervals, matching roughly the expected speech rate. All Framer Motion animations and opacity classes removed from transcript bubbles — plain divs throughout. TTS scheduling adds a 250ms buffer after each chunk so consecutive audio plays gaplessly.
+
+**Changes:**
+- `src/components/agentlive/TranscriptPanel.tsx`: removed all `motion.div` / `AnimatePresence` wrappers from transcript entries and bubbles; added `WordRevealText` component — splits text on spaces, uses `wordPosRef` ref + `setInterval` at 120ms to reveal one word at a time, resets on `text` prop change; `WordRevealText` applied to the streaming agent text bubble; removed opacity and shadow conditional classes from partial/streaming bubbles
+- `src/hooks/useAgentSession.ts`: `enqueueAudio` changed `nextPlayTimeRef.current = startAt + audioBuf.duration` to `startAt + audioBuf.duration + 0.25` — adds 250ms scheduling gap between queued audio buffers, eliminating the silent gap artifact
+
+---
+
 ## [56] qna-resource-pdf-extraction-and-image-vision — 2026-04-21
 
 **Why:** The QnA resource upload was base64-encoding raw PDF binaries and sending them as `[PDF_BASE64:...]` strings — useless for the LLM and catastrophic for token limits on scanned PDFs (2.4 MB → 606K tokens → 429 rate limit error). The upload also only supported PDF and .txt, with no way to attach image-based reference material.
