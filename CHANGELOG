@@ -1,5 +1,17 @@
 # Changelog
 
+## [62] records-tab-server-filtering-and-rich-export — 2026-04-23
+
+**Why:** The Records tab had three compounding UX problems: (1) selecting an agent from the dropdown only filtered the current 10-row server page, leaving empty pages and a misleading total page count; (2) the agent dropdown itself was populated from the current page, so agents with no runs on that page were invisible in the selector; (3) the CSV export only output the current page's 6 sparse columns, missing evaluation report details and transcripts.
+
+**What:** All filtering moved to the server. The agent dropdown now sources from the full agents list. CSV export fetches every matching record (with transcripts) across all pages and builds a rich report with per-metric scoring columns, summary sections, and full transcript. Both agent and creator dropdowns capped with scrollbars for usability.
+
+**Changes:**
+- `src/lib/api.ts`: `fetchAgentspaceRuns` signature extended with optional `filters` object (`agentId`, `search`, `isTest`, `includeTranscript`); query params built with `URLSearchParams`; added `exportAgentspaceRuns` which loops pages (100/page) accumulating all `RunRecord[]` with `includeTranscript: true`
+- `src/pages/AgentSpace.tsx`: `RecordsTabProps` gains `agents: Agent[]`; agent dropdown populates from `agents` prop instead of `runs`; `search`/`filterType`/`selectedAgentId` wired into `fetchAgentspaceRuns` as server filters; `useEffect` resets `runsPage` to 1 on any filter change; removed client-side `.filter()` chains; kept client-side `.sort()`; export button calls `exportAgentspaceRuns` then `exportCsv`; `exportCsv` rewritten — collects all unique metric keys across rows, outputs columns: Date, User, Email, Agent, Type, Score, per-metric columns, Summary, Transcript Summary, Highlights, Feedback, Transcript; `escapeCsvCell` and `flattenTranscript` helpers added; dropdown scrollbars: `overflow-hidden` → `overflow-y-auto max-h-[240px]` on agent selector and creator selector
+
+---
+
 ## [61] latency-ux-optimizations — 2026-04-22
 
 **Why:** Four compounding UX problems identified through live session testing: (1) 250ms of silence padded after every TTS audio chunk, multiplying with chunk count; (2) a "Thinking…" flash appeared between the connecting loader dismissing and the agent's opener playing — visible dead state; (3) the general agent creation wizard forced users to watch two sequential full-screen loaders (compile, then metrics) after submitting evaluation criteria; (4) `PlannerFlow` had dead branches for `'compiling'` and `'generating_metrics'` statuses that were never reachable after the wizard was restructured.

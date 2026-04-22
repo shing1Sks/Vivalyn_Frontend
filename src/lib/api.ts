@@ -786,13 +786,56 @@ export async function fetchAgentspaceRuns(
   agentspaceId: string,
   page = 1,
   pageSize = 10,
+  filters?: {
+    agentId?: string;
+    search?: string;
+    isTest?: boolean;
+    includeTranscript?: boolean;
+  },
 ): Promise<{ runs: RunRecord[]; total: number }> {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("page_size", String(pageSize));
+  if (filters?.agentId) params.set("agent_id", filters.agentId);
+  if (filters?.search) params.set("search", filters.search);
+  if (filters?.isTest !== undefined) params.set("is_test", String(filters.isTest));
+  if (filters?.includeTranscript) params.set("include_transcript", "true");
+
   const res = await fetch(
-    `${BASE}/api/v1/agentspaces/${agentspaceId}/runs?page=${page}&page_size=${pageSize}`,
+    `${BASE}/api/v1/agentspaces/${agentspaceId}/runs?${params.toString()}`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
   );
   if (!res.ok) return { runs: [], total: 0 };
   return res.json();
+}
+
+export async function exportAgentspaceRuns(
+  accessToken: string,
+  agentspaceId: string,
+  filters?: {
+    agentId?: string;
+    search?: string;
+    isTest?: boolean;
+  },
+): Promise<RunRecord[]> {
+  const allRuns: RunRecord[] = [];
+  let page = 1;
+  const pageSize = 100;
+
+  while (true) {
+    const { runs, total } = await fetchAgentspaceRuns(
+      accessToken,
+      agentspaceId,
+      page,
+      pageSize,
+      { ...filters, includeTranscript: true },
+    );
+    allRuns.push(...runs);
+    if (allRuns.length >= total || runs.length === 0) break;
+    page += 1;
+  }
+
+  return allRuns;
 }
 
 export async function fetchRunRecordById(

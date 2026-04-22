@@ -38,6 +38,7 @@ import AgentConfigureView from '../components/agentspace/wizard/AgentConfigureVi
 import CreateQnAAgentWizard from '../components/agentspace/wizard/CreateQnAAgentWizard'
 import QnAConfigureView from '../components/agentspace/wizard/QnAConfigureView'
 import {
+  exportAgentspaceRuns,
   fetchAgents,
   fetchAgentspaceRuns,
   fetchAgentspaceSubscription,
@@ -74,25 +75,86 @@ function avgScore(report: EvaluationReport | null): string {
   return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)
 }
 
+function escapeCsvCell(value: unknown): string {
+  const str = String(value ?? '').replace(/"/g, '""')
+  return `"${str}"`
+}
+
+function flattenTranscript(transcript: RunRecord['transcript']): string {
+  if (!transcript) return ''
+  return transcript.map(t => {
+    let content: string
+    if (typeof t.content === 'string') {
+      content = t.content
+    } else if (t.content && typeof t.content === 'object') {
+      if (typeof (t.content as Record<string, unknown>).excerpt === 'string') {
+        content = (t.content as Record<string, unknown>).excerpt as string
+      } else if (typeof (t.content as Record<string, unknown>).text === 'string') {
+        content = (t.content as Record<string, unknown>).text as string
+      } else {
+        content = JSON.stringify(t.content)
+      }
+    } else {
+      content = String(t.content)
+    }
+    return `${t.role}: ${content}`
+  }).join('\n')
+}
+
 function exportCsv(rows: RunRecord[]) {
-  const headers = ['Date', 'User', 'Email', 'Agent', 'Score', 'Type']
+  // Collect all unique scoring metric keys across rows
+  const metricKeys = new Set<string>()
+  for (const r of rows) {
+    if (r.evaluation_report?.scoring) {
+      for (const key of Object.keys(r.evaluation_report.scoring)) {
+        metricKeys.add(key)
+      }
+    }
+  }
+  const sortedMetricKeys = [...metricKeys].sort()
+
+  const headers = [
+    'Date',
+    'User',
+    'Email',
+    'Agent',
+    'Type',
+    'Score',
+    ...sortedMetricKeys,
+    'Summary',
+    'Transcript Summary',
+    'Highlights',
+    'Feedback',
+    'Transcript',
+  ]
+
   const csvRows = rows.map(r => {
-    const score = avgScore(r.evaluation_report)
+    const report = r.evaluation_report
+    const score = avgScore(report)
+    const metrics = sortedMetricKeys.map(k => report?.scoring?.[k] ?? '')
+
     return [
       new Date(r.created_at).toLocaleDateString(),
       r.user_name,
       r.user_email,
       r.agent_name,
-      score,
       r.is_test ? 'Test' : 'Live',
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+      score,
+      ...metrics,
+      report?.summary ?? '',
+      report?.transcript_summary ?? '',
+      (report?.highlights ?? []).join(' | '),
+      (report?.feedback ?? []).join(' | '),
+      flattenTranscript(r.transcript),
+    ].map(escapeCsvCell).join(',')
   })
+
   const csv = [headers.join(','), ...csvRows].join('\n')
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'run-records.csv'
+  a.download = 'run-records-export.csv'
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -264,6 +326,7 @@ type FilterType = 'all' | 'live' | 'test'
 interface RecordsTabProps {
   agentspaceId: string
   token: string
+  agents: Agent[]
 }
 
 function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: 'asc' | 'desc' }) {
@@ -273,7 +336,7 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
     : <ChevronDown className="w-3 h-3 text-gray-500" />
 }
 
-function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
+function RecordsTab({ agentspaceId, token, agents }: RecordsTabProps) {
   const [runs, setRuns] = useState<RunRecord[]>([])
   const [runsTotal, setRunsTotal] = useState(0)
   const [runsPage, setRunsPage] = useState(1)
@@ -289,9 +352,9 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
 
   const agentOptions = useMemo(() => {
     const seen = new Map<string, string>()
-    for (const r of runs) seen.set(r.agent_id, r.agent_name)
+    for (const a of agents) seen.set(a.id, a.agent_name)
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]))
-  }, [runs])
+  }, [agents])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -304,10 +367,24 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
   }, [])
 
   useEffect(() => {
+    setRunsPage(1)
+  }, [search, filterType, selectedAgentId])
+
+  useEffect(() => {
     async function load() {
       setLoading(true)
       try {
-        const { runs: data, total } = await fetchAgentspaceRuns(token, agentspaceId, runsPage)
+        const { runs: data, total } = await fetchAgentspaceRuns(
+          token,
+          agentspaceId,
+          runsPage,
+          10,
+          {
+            agentId: selectedAgentId !== 'all' ? selectedAgentId : undefined,
+            search: search.trim() || undefined,
+            isTest: filterType === 'live' ? false : filterType === 'test' ? true : undefined,
+          },
+        )
         setRuns(data)
         setRunsTotal(total)
       } catch {
@@ -318,7 +395,7 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
       }
     }
     void load()
-  }, [agentspaceId, token, runsPage])
+  }, [agentspaceId, token, runsPage, search, filterType, selectedAgentId])
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -329,22 +406,7 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
     }
   }
 
-  const filtered = runs
-    .filter(r => {
-      if (filterType === 'live') return !r.is_test
-      if (filterType === 'test') return r.is_test
-      return true
-    })
-    .filter(r => selectedAgentId === 'all' || r.agent_id === selectedAgentId)
-    .filter(r => {
-      if (!search.trim()) return true
-      const q = search.toLowerCase()
-      return (
-        r.user_name.toLowerCase().includes(q) ||
-        r.user_email.toLowerCase().includes(q) ||
-        r.agent_name.toLowerCase().includes(q)
-      )
-    })
+  const sortedRuns = [...runs]
     .sort((a, b) => {
       if (sortField === 'score') {
         const an = parseFloat(avgScore(a.evaluation_report))
@@ -418,7 +480,7 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.12 }}
-                  className="absolute left-0 top-full mt-1 z-20 min-w-[160px] bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-hidden"
+                  className="absolute left-0 top-full mt-1 z-20 min-w-[160px] bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-y-auto max-h-[240px]"
                 >
                   {[['all', 'All agents'] as [string, string], ...agentOptions].map(([id, name]) => (
                     <button
@@ -441,8 +503,15 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
 
         {/* Export */}
         <button
-          onClick={() => exportCsv(filtered)}
-          disabled={filtered.length === 0}
+          onClick={async () => {
+            const rows = await exportAgentspaceRuns(token, agentspaceId, {
+              agentId: selectedAgentId !== 'all' ? selectedAgentId : undefined,
+              search: search.trim() || undefined,
+              isTest: filterType === 'live' ? false : filterType === 'test' ? true : undefined,
+            })
+            exportCsv(rows)
+          }}
+          disabled={runs.length === 0}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
         >
           <Download className="w-3.5 h-3.5" />
@@ -455,7 +524,7 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : sortedRuns.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center bg-white border border-dashed border-gray-200 rounded-xl">
           <p className="text-sm text-gray-400">No sessions yet.</p>
           {(search || filterType !== 'all' || selectedAgentId !== 'all') && (
@@ -501,7 +570,7 @@ function RecordsTab({ agentspaceId, token }: RecordsTabProps) {
 
           {/* Rows */}
           <div className="divide-y divide-gray-50">
-            {filtered.map(run => (
+            {sortedRuns.map(run => (
               <RunRow
                 key={run.id}
                 run={run}
@@ -922,7 +991,7 @@ function AgentSpaceContent() {
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: -4 }}
                               transition={{ duration: 0.12 }}
-                              className="absolute left-0 top-full mt-1 z-20 min-w-[160px] bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-hidden"
+                              className="absolute left-0 top-full mt-1 z-20 min-w-[160px] bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-y-auto max-h-[240px]"
                             >
                               {[null, ...uniqueCreators].map(name => (
                                 <button
@@ -1060,6 +1129,7 @@ function AgentSpaceContent() {
                 <RecordsTab
                   agentspaceId={activeSpace.id}
                   token={session?.access_token ?? ''}
+                  agents={agents}
                 />
               )}
             </motion.div>
