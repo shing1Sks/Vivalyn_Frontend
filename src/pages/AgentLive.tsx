@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { Loader2, Lock } from 'lucide-react'
+import { Loader2, Lock, X } from 'lucide-react'
 
 import {
   fetchAgentPublicConfig,
@@ -55,6 +55,8 @@ function ActiveSession({
   const { phase, agentState, transcript, streamingAgentText, partialUserText, micEnabled, toggleMic, endSession, error, sessionReport, audioLevelRef } =
     useAgentSession({ agentId, email, name, mode, token, agentFirstSpeaker })
 
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
   useEffect(() => {
     if (phase === 'ended') {
       onEnded(transcript.filter(e => e.role === 'user').length, sessionReport)
@@ -95,9 +97,9 @@ function ActiveSession({
   }
 
   return (
-    <div className="h-screen bg-gray-900 flex">
+    <div className="h-screen bg-gray-900 flex relative">
       {/* Main call area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <SessionScreen
           agentName={agentName}
           userName={name}
@@ -107,15 +109,47 @@ function ActiveSession({
           onToggleMic={toggleMic}
           onEndCall={endSession}
           audioLevelRef={audioLevelRef}
+          transcript={transcript}
+          streamingAgentText={streamingAgentText}
+          partialUserText={partialUserText}
+          onOpenTranscriptDrawer={() => setDrawerOpen(true)}
         />
       </div>
 
-      {/* Transcript panel */}
-      <div className="w-72 border-l border-gray-800 bg-gray-950 flex flex-col overflow-hidden">
+      {/* Desktop transcript sidebar */}
+      <div className="hidden md:flex w-72 border-l border-gray-800 bg-gray-950 flex-col overflow-hidden">
         <div className="flex-1 overflow-hidden">
           <TranscriptPanel transcript={transcript} agentName={agentName} streamingAgentText={streamingAgentText} partialUserText={partialUserText} />
         </div>
       </div>
+
+      {/* Mobile transcript drawer */}
+      {drawerOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 z-40 md:hidden"
+            onClick={() => setDrawerOpen(false)}
+          />
+          {/* Slide panel */}
+          <div className="fixed inset-y-0 right-0 w-[85vw] max-w-sm bg-gray-950 border-l border-gray-800 z-50 flex flex-col md:hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+                Transcript
+              </h3>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800 duration-[120ms]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <TranscriptPanel transcript={transcript} agentName={agentName} streamingAgentText={streamingAgentText} partialUserText={partialUserText} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

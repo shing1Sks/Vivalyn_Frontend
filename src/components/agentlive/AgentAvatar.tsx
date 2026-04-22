@@ -19,7 +19,7 @@ export default function AgentAvatar({ agentName, agentState }: AgentAvatarProps)
   const initials = getInitials(agentName || 'AG')
 
   return (
-    <div className="relative flex items-center justify-center w-36 h-36">
+    <div className="relative flex items-center justify-center w-28 h-28 md:w-36 md:h-36">
       {/* Outer animated ring */}
       {agentState === 'speaking' && (
         <>
@@ -53,8 +53,8 @@ export default function AgentAvatar({ agentName, agentState }: AgentAvatarProps)
       )}
 
       {/* Avatar circle */}
-      <div className="w-36 h-36 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-lg select-none">
-        <span className="text-4xl font-semibold text-white tracking-wide">
+      <div className="w-28 h-28 md:w-36 md:h-36 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-lg select-none">
+        <span className="text-3xl md:text-4xl font-semibold text-white tracking-wide">
           {initials}
         </span>
       </div>

@@ -51,15 +51,15 @@ export default function TranscriptPanel({ transcript, agentName, streamingAgentT
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-gray-100">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
+      <div className="px-4 py-3 border-b border-gray-800">
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Transcript
         </h3>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {transcript.length === 0 && !streamingAgentText && !partialUserText && (
-          <p className="text-xs text-gray-400 text-center mt-6">
+          <p className="text-xs text-gray-500 text-center mt-6">
             Conversation will appear here…
           </p>
         )}
@@ -77,7 +77,7 @@ export default function TranscriptPanel({ transcript, agentName, streamingAgentT
               className={`max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed ${
                 entry.role === 'user'
                   ? 'bg-indigo-600 text-white rounded-br-sm'
-                  : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm'
+                  : 'bg-gray-800 border border-gray-700 text-gray-100 rounded-bl-sm'
               }`}
             >
               {entry.text}
@@ -88,7 +88,7 @@ export default function TranscriptPanel({ transcript, agentName, streamingAgentT
         {streamingAgentText && (
           <div className="flex flex-col gap-1 items-start">
             <span className="text-[10px] font-medium text-gray-400">{agentName}</span>
-            <div className="max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed bg-white border border-gray-200 text-gray-800 rounded-bl-sm">
+            <div className="max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed bg-gray-800 border border-gray-700 text-gray-100 rounded-bl-sm">
               <WordRevealText text={streamingAgentText} />
             </div>
           </div>
@@ -97,7 +97,7 @@ export default function TranscriptPanel({ transcript, agentName, streamingAgentT
         {partialUserText && (
           <div className="flex flex-col gap-1 items-end">
             <span className="text-[10px] font-medium text-gray-400">You</span>
-            <div className="max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed bg-indigo-500 text-white rounded-br-sm">
+            <div className="max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed bg-indigo-600 text-white rounded-br-sm">
               {partialUserText}
             </div>
           </div>

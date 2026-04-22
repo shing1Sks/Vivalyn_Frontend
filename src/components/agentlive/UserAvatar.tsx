@@ -35,7 +35,7 @@ export default function UserAvatar({ userName, isSpeaking, micEnabled, audioLeve
   const ring2Opacity = useTransform(level, [0, 0.04, 1], [0, 0.4, 0.4])
 
   return (
-    <div className="relative flex items-center justify-center w-36 h-36">
+    <div className="relative flex items-center justify-center w-28 h-28 md:w-36 md:h-36">
       {/* Amplitude-driven ring 1 — same visual as agent speaking ring */}
       <motion.div
         className="absolute inset-0 rounded-full bg-emerald-400/20"
@@ -48,16 +48,16 @@ export default function UserAvatar({ userName, isSpeaking, micEnabled, audioLeve
       />
 
       {/* Avatar circle */}
-      <div className={`w-36 h-36 rounded-full bg-linear-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-lg select-none duration-[120ms] ${!micEnabled ? 'opacity-60' : ''}`}>
-        <span className="text-4xl font-semibold text-white tracking-wide">
+      <div className={`w-28 h-28 md:w-36 md:h-36 rounded-full bg-linear-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-lg select-none duration-[120ms] ${!micEnabled ? 'opacity-60' : ''}`}>
+        <span className="text-3xl md:text-4xl font-semibold text-white tracking-wide">
           {initials}
         </span>
       </div>
 
       {/* Muted badge */}
       {!micEnabled && (
-        <div className="absolute bottom-1 right-1 w-7 h-7 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center">
-          <MicOff className="w-3.5 h-3.5 text-gray-300" />
+        <div className="absolute bottom-1 right-1 w-6 h-6 md:w-7 md:h-7 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center">
+          <MicOff className="w-3 h-3 md:w-3.5 md:h-3.5 text-gray-300" />
         </div>
       )}
     </div>
