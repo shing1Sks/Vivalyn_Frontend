@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, ArrowLeft, Check, Link2, Loader2, Copy, MessageSquare, Rocket, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, CheckCircle, Link2, Loader2, Copy, MessageSquare, Rocket, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
   ApiError,
@@ -13,6 +13,7 @@ import {
   type Agent,
   type AgentPromptSpec,
   type CompileResult,
+  type EvaluationMetrics,
   type PlanQuestion,
 } from '../../lib/api'
 import LanguageVoiceSelector from './wizard/LanguageVoiceSelector'
@@ -20,6 +21,15 @@ import PlannerFlow, { type PlannerStatus } from './wizard/PlannerFlow'
 import AgentConfigureView from './wizard/AgentConfigureView'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+type SavePhase = 'idle' | 'compile' | 'metrics' | 'save' | 'done'
+
+function stepStatus(current: SavePhase, target: 'compile' | 'metrics' | 'save'): 'pending' | 'running' | 'done' {
+  const order: SavePhase[] = ['compile', 'metrics', 'save', 'done']
+  const ci = order.indexOf(current)
+  const ti = order.indexOf(target)
+  return ci > ti ? 'done' : ci === ti ? 'running' : 'pending'
+}
 
 type WizardStep =
   | 'language-voice'
@@ -57,9 +67,14 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   const [configuredSpec, setConfiguredSpec] = useState<AgentPromptSpec | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSubscriptionError, setIsSubscriptionError] = useState(false)
+  const [savePhase, setSavePhase] = useState<SavePhase>('idle')
 
   // Avoid double-trigger in strict mode
   const planningStarted = useRef(false)
+  // Background compile promise — resolves to spec or null on error
+  const bgCompileRef = useRef<Promise<CompileResult | null>>(Promise.resolve(null))
+  // Stored plan for compile retry on error
+  const planResultRef = useRef<Record<string, unknown> | null>(null)
 
   // Reset on open
   useEffect(() => {
@@ -76,33 +91,88 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       setConfiguredSpec(null)
       setError(null)
       setIsSubscriptionError(false)
+      setSavePhase('idle')
       planningStarted.current = false
+      bgCompileRef.current = Promise.resolve(null)
+      planResultRef.current = null
     }
   }, [open])
+
+  // ── Background compiler ─────────────────────────────────────────────────────
+
+  const startBackgroundCompile = useCallback((plan: Record<string, unknown>) => {
+    if (!session) return
+    bgCompileRef.current = (async (): Promise<CompileResult | null> => {
+      try {
+        const spec = await compileAgentPlan(session.access_token, {
+          plan_history: JSON.stringify(plan, null, 2),
+        })
+        setFinalSpec(spec)
+        const { agent_name: _n, ...promptSections } = spec
+        setConfiguredSpec(promptSections as AgentPromptSpec)
+        return spec
+      } catch {
+        return null
+      }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session])
 
   // ── Eval + save ─────────────────────────────────────────────────────────────
 
   const handleEvalSubmit = useCallback(async (criteria: string) => {
-    if (!session || !finalSpec || !configuredSpec) return
-    setPlannerStatus('generating_metrics')
+    if (!session) return
 
+    setStep('done')
+    setSavePhase('compile')
+    setError(null)
+    setIsSubscriptionError(false)
+
+    // Await background compile — likely already done by the time user types criteria
+    let spec = await bgCompileRef.current
+    if (!spec) {
+      // Compile failed — retry once with stored plan
+      if (planResultRef.current) {
+        startBackgroundCompile(planResultRef.current)
+        spec = await bgCompileRef.current
+      }
+      if (!spec) {
+        setError('Agent compilation failed. Please try again.')
+        setStep('planning')
+        setPlannerStatus('awaiting_evaluation')
+        setSavePhase('idle')
+        return
+      }
+    }
+
+    setSavePhase('metrics')
+    let metrics: EvaluationMetrics
     try {
-      const metrics = await generateEvaluationCriteria(session.access_token, {
-        session_brief: finalSpec.session_brief,
+      metrics = await generateEvaluationCriteria(session.access_token, {
+        session_brief: spec.session_brief,
         users_raw_evaluation_criteria: criteria,
       })
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to generate evaluation criteria.')
+      setStep('planning')
+      setPlannerStatus('awaiting_evaluation')
+      setSavePhase('idle')
+      return
+    }
 
-      const { agent_name } = finalSpec
+    setSavePhase('save')
+    try {
+      const { agent_name, ...promptSections } = spec
+      const agentPrompt = (configuredSpec ?? promptSections) as AgentPromptSpec
       const agent = await saveAgent(session.access_token, agentspaceId, {
         agent_name,
-        agent_prompt: configuredSpec,
+        agent_prompt: agentPrompt,
         agent_language: selectedLanguage,
         agent_voice: selectedVoiceName,
         transcript_evaluation_metrics: metrics,
       })
-
       setSavedAgent(agent)
-      setStep('done')
+      setSavePhase('done')
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 403) {
         setIsSubscriptionError(true)
@@ -111,33 +181,12 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
         setIsSubscriptionError(false)
         setError(e instanceof Error ? e.message : 'Failed to save agent. Please try again.')
       }
+      setStep('planning')
       setPlannerStatus('awaiting_evaluation')
+      setSavePhase('idle')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, agentspaceId, finalSpec, configuredSpec, selectedLanguage, selectedVoiceName])
-
-  // ── Compiler ────────────────────────────────────────────────────────────────
-
-  const runCompiler = useCallback(async (plan: Record<string, unknown>) => {
-    if (!session) return
-    setPlannerStatus('compiling')
-
-    try {
-      const spec = await compileAgentPlan(session.access_token, {
-        plan_history: JSON.stringify(plan, null, 2),
-      })
-      setFinalSpec(spec)
-
-      const { agent_name: _name, ...promptSections } = spec
-      setConfiguredSpec(promptSections as AgentPromptSpec)
-
-      setPlannerStatus('awaiting_evaluation')
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : undefined
-      setError(msg ?? 'Compilation failed. Please try again.')
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session])
+  }, [session, agentspaceId, configuredSpec, selectedLanguage, selectedVoiceName, startBackgroundCompile])
 
   // ── First planner call ──────────────────────────────────────────────────────
 
@@ -152,7 +201,9 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
         setPlannerQuestions(result.questions)
         setPlannerStatus('awaiting_answers')
       } else if (result.status === 'ready' && result.plan) {
-        await runCompiler(result.plan)
+        planResultRef.current = result.plan
+        startBackgroundCompile(result.plan)
+        setPlannerStatus('awaiting_evaluation')
       } else {
         setError('Unexpected planner response. Please try again.')
       }
@@ -161,35 +212,41 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       setError(msg ?? 'Planning failed. Please try again.')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, runCompiler])
+  }, [session, startBackgroundCompile])
 
   // ── Second planner call (with Q&A answers) ──────────────────────────────────
 
-  const handleAnswersSubmitted = useCallback(async (answers: string[]) => {
+  const handleAnswersSubmitted = useCallback((answers: string[]) => {
     if (!session) return
-    setPlannerStatus('planning')
+
+    // Show eval input immediately — planner second call + compile run as a background chain
+    setPlannerStatus('awaiting_evaluation')
 
     const planHistory = plannerQuestions
       .map((q, i) => `Q: ${q.query_statement}\nA: ${answers[i] ?? ''}`)
       .join('\n')
 
-    try {
-      const result = await planAgent(session.access_token, {
-        seed_prompt: seedPrompt,
-        plan_history: planHistory,
-      })
-
-      if (result.status === 'ready' && result.plan) {
-        await runCompiler(result.plan)
-      } else {
-        setError('Unexpected planner response. Please try again.')
+    bgCompileRef.current = (async (): Promise<CompileResult | null> => {
+      try {
+        const result = await planAgent(session.access_token, {
+          seed_prompt: seedPrompt,
+          plan_history: planHistory,
+        })
+        if (!result.plan) return null
+        planResultRef.current = result.plan
+        const spec = await compileAgentPlan(session.access_token, {
+          plan_history: JSON.stringify(result.plan, null, 2),
+        })
+        setFinalSpec(spec)
+        const { agent_name: _n, ...promptSections } = spec
+        setConfiguredSpec(promptSections as AgentPromptSpec)
+        return spec
+      } catch {
+        return null
       }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : undefined
-      setError(msg ?? 'Planning failed. Please try again.')
-    }
+    })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, seedPrompt, plannerQuestions, runCompiler])
+  }, [session, seedPrompt, plannerQuestions])
 
   // ── Step handlers ───────────────────────────────────────────────────────────
 
@@ -218,8 +275,10 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
 
   if (!open) return null
 
-  // Dot index logic: configure and done both count as past-all-done
-  const dotStepIdx = (step === 'configure') ? STEP_DOTS.indexOf('done') : STEP_DOTS.indexOf(step)
+  // Dot index: configure + completed done = all past; saving done = last dot active
+  const dotStepIdx = (step === 'configure' || (step === 'done' && savePhase === 'done'))
+    ? STEP_DOTS.length          // beyond all dots → every dot is 'past'
+    : STEP_DOTS.indexOf(step)
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -325,14 +384,17 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
                 seedPrompt={seedPrompt}
                 status={plannerStatus}
                 questions={plannerQuestions}
+                compileReady={finalSpec !== null}
                 onAnswerAll={handleAnswersSubmitted}
                 onEvalSubmit={handleEvalSubmit}
               />
             )}
 
-            {step === 'done' && savedAgent && (
+            {step === 'done' && (
               <DoneStep
                 savedAgent={savedAgent}
+                agentName={finalSpec?.agent_name ?? '…'}
+                savePhase={savePhase}
                 token={session?.access_token ?? ''}
                 onConfigure={() => setStep('configure')}
                 onClose={onClose}
@@ -426,26 +488,37 @@ function PromptInputStep({ value, onChange, onSubmit, language, personaName }: P
 // ── Done step ──────────────────────────────────────────────────────────────────
 
 interface DoneStepProps {
-  savedAgent: Agent
+  savedAgent: Agent | null
+  agentName: string
+  savePhase: SavePhase
   token: string
   onConfigure: () => void
   onClose: () => void
 }
 
-function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
-  const [isLive, setIsLive] = useState(savedAgent.agent_status === 'live')
+function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClose }: DoneStepProps) {
+  const [isLive, setIsLive] = useState(savedAgent?.agent_status === 'live')
   const [toggling, setToggling] = useState(false)
   const [copiedLive, setCopiedLive] = useState(false)
   const [copiedTest, setCopiedTest] = useState(false)
   const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
-    (savedAgent.agent_first_speaker as 'agent' | 'user') ?? 'agent'
+    (savedAgent?.agent_first_speaker as 'agent' | 'user') ?? 'agent'
   )
 
-  const liveUrl = `${window.location.origin}/agent/${savedAgent.id}`
-  const testUrl = `${window.location.origin}/agent/${savedAgent.id}?mode=test`
+  // Sync live state once agent is saved
+  useEffect(() => {
+    if (savedAgent) {
+      setIsLive(savedAgent.agent_status === 'live')
+      setFirstSpeaker((savedAgent.agent_first_speaker as 'agent' | 'user') ?? 'agent')
+    }
+  }, [savedAgent])
+
+  const liveUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}` : ''
+  const testUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}?mode=test` : ''
+  const isReady = savePhase === 'done' && savedAgent !== null
 
   async function handleToggle() {
-    if (toggling) return
+    if (toggling || !savedAgent) return
     const next: 'live' | 'idle' = isLive ? 'idle' : 'live'
     setToggling(true)
     try {
@@ -457,6 +530,7 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
   }
 
   function copyLink(url: string, which: 'live' | 'test') {
+    if (!url) return
     navigator.clipboard.writeText(url).then(() => {
       if (which === 'live') {
         setCopiedLive(true)
@@ -469,14 +543,16 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
   }
 
   async function handleFirstSpeakerToggle(val: 'agent' | 'user') {
-    if (val === firstSpeaker) return
+    if (val === firstSpeaker || !savedAgent) return
     setFirstSpeaker(val)
     try {
       await updateAgent(token, savedAgent.id, { agent_first_speaker: val })
     } catch { /* silent */ }
   }
 
-  const tileClass = 'border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 hover:border-indigo-300 hover:bg-indigo-50/50 duration-[120ms] cursor-pointer w-full text-left'
+  const tileBase = 'border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 duration-[120ms] w-full text-left'
+  const tileActive = 'hover:border-indigo-300 hover:bg-indigo-50/50 cursor-pointer'
+  const tileMuted = 'opacity-40 pointer-events-none'
 
   return (
     <div className="flex items-center justify-center h-full px-6">
@@ -486,16 +562,58 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
         transition={{ duration: 0.3, ease: 'easeOut' }}
         className="w-full max-w-sm"
       >
+        {/* Progress steps — shown while saving */}
+        <AnimatePresence>
+          {!isReady && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden mb-5"
+            >
+              <div className="flex flex-col gap-2.5">
+                {([
+                  ['compile', 'Compiling agent prompt'],
+                  ['metrics', 'Generating evaluation criteria'],
+                  ['save',    'Saving to your space'],
+                ] as const).map(([phase, label]) => {
+                  const s = stepStatus(savePhase, phase)
+                  return (
+                    <div key={phase} className="flex items-center gap-2.5 text-sm">
+                      {s === 'done'    && <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />}
+                      {s === 'running' && <Loader2 className="w-4 h-4 text-indigo-500 animate-spin shrink-0" />}
+                      {s === 'pending' && <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0" />}
+                      <span className={
+                        s === 'done'    ? 'text-gray-500' :
+                        s === 'running' ? 'text-gray-800 font-medium' :
+                        'text-gray-400'
+                      }>
+                        {label}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center mx-auto mb-4">
-            <Check className="w-7 h-7 text-emerald-500" />
+          <div className={`w-14 h-14 rounded-full border-2 flex items-center justify-center mx-auto mb-4 duration-[120ms] ${
+            isReady ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
+          }`}>
+            {isReady
+              ? <Check className="w-7 h-7 text-emerald-500" />
+              : <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+            }
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-1">{savedAgent.agent_name}</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-1">{agentName}</h2>
           <div className="flex items-center justify-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-            <span className={`text-xs font-medium ${isLive ? 'text-emerald-600' : 'text-gray-400'}`}>
-              {isLive ? 'Live' : 'Idle'}
+            <span className={`w-1.5 h-1.5 rounded-full ${isReady && isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+            <span className={`text-xs font-medium ${isReady && isLive ? 'text-emerald-600' : 'text-gray-400'}`}>
+              {isReady ? (isLive ? 'Live' : 'Idle') : 'Creating…'}
             </span>
           </div>
         </div>
@@ -514,7 +632,8 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={() => copyLink(liveUrl, 'live')}
-            className={`${tileClass} hover:border-emerald-300 hover:bg-emerald-50/50`}
+            disabled={!isReady}
+            className={`${tileBase} hover:border-emerald-300 hover:bg-emerald-50/50 ${isReady ? tileActive : tileMuted}`}
           >
             {copiedLive
               ? <Check className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -529,7 +648,8 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={() => copyLink(testUrl, 'test')}
-            className={`${tileClass} hover:border-orange-300 hover:bg-orange-50/50`}
+            disabled={!isReady}
+            className={`${tileBase} hover:border-orange-300 hover:bg-orange-50/50 ${isReady ? tileActive : tileMuted}`}
           >
             {copiedTest
               ? <Check className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -544,8 +664,8 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={handleToggle}
-            disabled={toggling}
-            className={`${tileClass} disabled:opacity-60`}
+            disabled={toggling || !isReady}
+            className={`${tileBase} ${isReady ? `${tileActive} disabled:opacity-60` : tileMuted}`}
           >
             {toggling ? (
               <Loader2 className="w-5 h-5 text-gray-400 animate-spin shrink-0" />
@@ -563,7 +683,8 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={onConfigure}
-            className={tileClass}
+            disabled={!isReady}
+            className={`${tileBase} ${isReady ? tileActive : tileMuted}`}
           >
             <Settings2 className="w-4 h-4 text-gray-400 shrink-0" />
             <span className="text-sm text-gray-700 font-medium truncate">Configure</span>
@@ -571,12 +692,12 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
         </motion.div>
 
         {/* Who opens the session */}
-        <div className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3">
+        <div className={`border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3 ${!isReady ? 'opacity-40' : ''}`}>
           <div className="flex items-center gap-2.5">
             <MessageSquare className="w-4 h-4 text-gray-400 shrink-0" />
             <span className="text-sm text-gray-700 font-medium">Who opens the session</span>
           </div>
-          <div className="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+          <div className={`inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5 ${!isReady ? 'pointer-events-none' : ''}`}>
             {(['agent', 'user'] as const).map(val => (
               <button
                 key={val}
@@ -593,7 +714,8 @@ function DoneStep({ savedAgent, token, onConfigure, onClose }: DoneStepProps) {
 
         <button
           onClick={onClose}
-          className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 duration-[120ms]"
+          disabled={!isReady}
+          className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 duration-[120ms] disabled:opacity-40 disabled:pointer-events-none"
         >
           Done
         </button>

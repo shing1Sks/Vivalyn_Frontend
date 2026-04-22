@@ -66,6 +66,8 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
   const [error, setError] = useState<string | null>(null)
   const [sessionReport, setSessionReport] = useState<SessionReport | null>(null)
 
+  const awaitingOpenerRef = useRef(false)
+
   const wsRef = useRef<WebSocket | null>(null)
   const micCtxRef = useRef<AudioContext | null>(null)
   const playCtxRef = useRef<AudioContext | null>(null)
@@ -113,7 +115,7 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
 
     const startAt = Math.max(nextPlayTimeRef.current, playCtx.currentTime)
     source.start(startAt)
-    nextPlayTimeRef.current = startAt + audioBuf.duration + 0.25
+    nextPlayTimeRef.current = startAt + audioBuf.duration
     lastSourceRef.current = source
   }, [])
 
@@ -173,6 +175,9 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
     let mounted = true
     const mountedCheck = () => mounted
 
+    // Agent-first sessions stay in 'connecting' phase until first audio chunk arrives
+    awaitingOpenerRef.current = agentFirstSpeaker !== 'user'
+
     playCtxRef.current = new AudioContext({ sampleRate: 24000 })
 
     const wsBase = BASE_URL.replace(/^http/, 'ws')
@@ -186,6 +191,10 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
       if (!mounted) return  // Strict Mode guard
 
       if (event.data instanceof ArrayBuffer) {
+        if (awaitingOpenerRef.current) {
+          awaitingOpenerRef.current = false
+          setPhase('active')
+        }
         setAgentState('speaking')
         sendAudioRef.current = false
         if (!audioReceivedThisTurnRef.current) {
@@ -213,13 +222,13 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
             await ctx.resume().catch(() => {})
           }
           if (!mounted) return  // check again after await
-          setPhase('active')
           if (agentFirstSpeaker === 'user') {
+            setPhase('active')
             setAgentState('listening')
           } else {
-            // Agent speaks first — keep sendAudio blocked until audio_done
+            // Agent speaks first — stay in 'connecting' phase until first audio chunk arrives
+            // awaitingOpenerRef gates the transition; sendAudio blocked until audio_done
             sendAudioRef.current = false
-            setAgentState('thinking')
           }
           startMic(ws, mountedCheck)
           break
@@ -250,6 +259,11 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
           break
 
         case 'audio_done': {
+          if (awaitingOpenerRef.current) {
+            // Opener finished with no audio (TTS failure) — transition to active anyway
+            awaitingOpenerRef.current = false
+            setPhase('active')
+          }
           const lastSource = lastSourceRef.current
           const ctx = playCtxRef.current
           if (!lastSource || !ctx || ctx.state === 'closed' || ctx.currentTime >= nextPlayTimeRef.current - 0.05) {

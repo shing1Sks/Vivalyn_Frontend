@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BarChart2, Brain, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from 'lucide-react'
+import { Brain, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from 'lucide-react'
 import type { PlanQuestion } from '../../../lib/api'
 
 // ── BlinkingCursor ─────────────────────────────────────────────────────────────
@@ -65,32 +65,23 @@ function TypewriterMessage({ messages }: { messages: string[] }) {
 export type PlannerStatus =
   | 'planning'
   | 'awaiting_answers'
-  | 'compiling'
   | 'awaiting_evaluation'
-  | 'generating_metrics'
 
 interface Props {
   seedPrompt: string
   status: PlannerStatus
   questions: PlanQuestion[]
+  compileReady: boolean
   onAnswerAll: (answers: string[]) => void
   onEvalSubmit: (criteria: string) => void
 }
 
-type BadgeVariant = 'planner' | 'compiler' | 'metrics'
-
-function AgentLabel({ variant }: { variant: BadgeVariant }) {
-  const config = {
-    planner:  { icon: Brain,     label: 'Planning Agent'   },
-    compiler: { icon: Sparkles,  label: 'Prompt Compiler'  },
-    metrics:  { icon: BarChart2, label: 'Evaluation Agent' },
-  }[variant]
-  const Icon = config.icon
+function AgentLabel() {
   return (
     <div className="flex items-center gap-1.5">
-      <Icon className="w-3.5 h-3.5 text-indigo-400" />
+      <Brain className="w-3.5 h-3.5 text-indigo-400" />
       <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-400">
-        {config.label}
+        Planning Agent
       </span>
     </div>
   )
@@ -106,39 +97,22 @@ const PLANNING_MESSAGES = [
   'Defining guardrails...',
 ]
 
-const COMPILING_MESSAGES = [
-  'Writing your agent\'s identity...',
-  'Shaping behavioral patterns...',
-  'Defining interaction style...',
-  'Compiling prompt sections...',
-  'Finalising your agent...',
-]
-
-const METRICS_MESSAGES = [
-  'Designing evaluation criteria...',
-  'Structuring scoring rubric...',
-  'Calibrating performance metrics...',
-  'Finalising evaluation framework...',
-  'Saving your agent...',
-]
-
 interface ThinkingPanelProps {
-  variant: BadgeVariant
   messages: string[]
   hint?: string
 }
 
-function ThinkingPanel({ variant, messages, hint }: ThinkingPanelProps) {
+function ThinkingPanel({ messages, hint }: ThinkingPanelProps) {
   return (
     <motion.div
-      key={variant}
+      key="thinking"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
       className="flex flex-col items-center gap-8 py-12"
     >
-      <AgentLabel variant={variant} />
+      <AgentLabel />
       <div className="flex flex-col items-center gap-2">
         <TypewriterMessage messages={messages} />
         {hint && <p className="text-xs text-gray-400">{hint}</p>}
@@ -149,7 +123,7 @@ function ThinkingPanel({ variant, messages, hint }: ThinkingPanelProps) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function PlannerFlow({ seedPrompt, status, questions, onAnswerAll, onEvalSubmit }: Props) {
+export default function PlannerFlow({ seedPrompt, status, questions, compileReady, onAnswerAll, onEvalSubmit }: Props) {
   const [revealingQuestions, setRevealingQuestions] = useState(false)
   const revealFired = useRef(false)
 
@@ -183,7 +157,6 @@ export default function PlannerFlow({ seedPrompt, status, questions, onAnswerAll
           {status === 'planning' && (
             <ThinkingPanel
               key="planning"
-              variant="planner"
               messages={PLANNING_MESSAGES}
               hint="Usually takes 10–15 seconds"
             />
@@ -230,11 +203,6 @@ export default function PlannerFlow({ seedPrompt, status, questions, onAnswerAll
             </motion.div>
           )}
 
-          {/* Compiling */}
-          {status === 'compiling' && (
-            <ThinkingPanel key="compiling" variant="compiler" messages={COMPILING_MESSAGES} />
-          )}
-
           {/* Evaluation input */}
           {status === 'awaiting_evaluation' && (
             <motion.div
@@ -244,13 +212,8 @@ export default function PlannerFlow({ seedPrompt, status, questions, onAnswerAll
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
             >
-              <EvaluationForm onSubmit={onEvalSubmit} />
+              <EvaluationForm compileReady={compileReady} onSubmit={onEvalSubmit} />
             </motion.div>
-          )}
-
-          {/* Generating metrics */}
-          {status === 'generating_metrics' && (
-            <ThinkingPanel key="metrics" variant="metrics" messages={METRICS_MESSAGES} />
           )}
 
         </AnimatePresence>
@@ -261,7 +224,7 @@ export default function PlannerFlow({ seedPrompt, status, questions, onAnswerAll
 
 // ── Evaluation form ────────────────────────────────────────────────────────────
 
-function EvaluationForm({ onSubmit }: { onSubmit: (criteria: string) => void }) {
+function EvaluationForm({ compileReady, onSubmit }: { compileReady: boolean; onSubmit: (criteria: string) => void }) {
   const [criteria, setCriteria] = useState('')
 
   function handleSubmit() {
@@ -271,6 +234,24 @@ function EvaluationForm({ onSubmit }: { onSubmit: (criteria: string) => void }) 
 
   return (
     <div className="space-y-5">
+      {/* Background compile indicator — fades out once compile finishes */}
+      <AnimatePresence>
+        {!compileReady && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-lg">
+              <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin shrink-0" />
+              <span className="text-xs text-indigo-500">Preparing agent prompt in background…</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div>
         <h3 className="text-base font-semibold text-gray-900 mb-1">Agent created. One last step.</h3>
         <p className="text-sm text-gray-500">How should sessions be evaluated?</p>

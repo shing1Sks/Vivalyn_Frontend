@@ -66,7 +66,7 @@ function ActiveSession({
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-          <p className="text-sm text-gray-400">Connecting to {agentName}…</p>
+          <p className="text-sm text-gray-400">Starting your session…</p>
         </div>
       </div>
     )
