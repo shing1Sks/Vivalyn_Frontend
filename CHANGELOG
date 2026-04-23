@@ -1,5 +1,20 @@
 # Changelog
 
+## [63] remove-discount-system — 2026-04-23
+
+**Why:** The discount system was admin-only and never wired into the actual payment flow — no customer could enter a code, and discounts had no effect on what Razorpay charged. The feature was untested and the correct future approach is Razorpay's native coupon system.
+
+**What:** Deleted `AdminDiscountsView.tsx` and removed all discount references from the admin dashboard, sidebar, home view, and API layer. The `AdminSection` union type no longer includes `'discounts'`. The admin home KPI grid drops from 4 cards to 3 (removing "Active Discount Codes"). The `activateSubscription` API function drops three stale optional fields that were only used by the now-deleted discount logging flow.
+
+**Changes:**
+- `src/components/admin/AdminDiscountsView.tsx`: deleted entirely
+- `src/components/admin/AdminSidebar.tsx`: removed `'discounts'` from `AdminSection` type; removed Discounts nav item; removed `Tag` import
+- `src/pages/AdminDashboard.tsx`: removed `AdminDiscountsView` import; removed `discounts: false` from `mounted` state; removed discount render block
+- `src/components/admin/AdminHomeView.tsx`: removed `activeDiscountCodes` from `HomeStats` interface; removed `fetchAdminDiscounts` call and destructured result from `Promise.all`; removed `DiscountCode` type import; removed "Active Discount Codes" stat card; removed "New Discount Code" quick action button; removed `Tag` import
+- `src/lib/api.ts`: removed `DiscountCode`, `DiscountUsage`, `DiscountProjection` interfaces; removed `fetchAdminDiscounts`, `createDiscountCode`, `updateDiscountCode`, `fetchDiscountUsage`, `applyDiscount`, `projectDiscount` functions; removed `discount_code_id`, `original_price`, `discounted_price` from `activateSubscription` data type
+
+---
+
 ## [62] records-tab-server-filtering-and-rich-export — 2026-04-23
 
 **Why:** The Records tab had three compounding UX problems: (1) selecting an agent from the dropdown only filtered the current 10-row server page, leaving empty pages and a misleading total page count; (2) the agent dropdown itself was populated from the current page, so agents with no runs on that page were invisible in the selector; (3) the CSV export only output the current page's 6 sparse columns, missing evaluation report details and transcripts.

@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Activity, CreditCard, Loader2, MessageSquare, Tag } from 'lucide-react'
+import { Activity, CreditCard, Loader2, MessageSquare } from 'lucide-react'
 import {
-  fetchAdminDiscounts,
   fetchContactEvents,
   fetchAdminOverview,
   fetchAdminSubscriptions,
   type AdminSubscription,
   type ContactEvent,
-  type DiscountCode,
 } from '../../lib/api'
 import type { AdminSection } from './AdminSidebar'
 
@@ -20,7 +18,6 @@ interface AdminHomeViewProps {
 interface HomeStats {
   activeSubscriptions: number
   openInquiries: number
-  activeDiscountCodes: number
   sessionsLast30d: number
 }
 
@@ -71,14 +68,12 @@ export function AdminHomeView({ token, onNavigate, onActivateSubscription }: Adm
     Promise.all([
       fetchAdminSubscriptions(token),
       fetchContactEvents(token),
-      fetchAdminDiscounts(token),
       fetchAdminOverview(token, formatDate(from), formatDate(to), true),
     ])
-      .then(([subs, inquiries, discounts, overview]) => {
+      .then(([subs, inquiries, overview]) => {
         setStats({
           activeSubscriptions: subs.filter((s) => s.status === 'active').length,
           openInquiries: inquiries.filter((i: ContactEvent) => i.status !== 'closed').length,
-          activeDiscountCodes: discounts.filter((d: DiscountCode) => d.is_active).length,
           sessionsLast30d: overview.total_sessions,
         })
         setRecentInquiries(inquiries.slice(0, 5))
@@ -116,11 +111,6 @@ export function AdminHomeView({ token, onNavigate, onActivateSubscription }: Adm
           value={stats?.openInquiries ?? 0}
         />
         <StatCard
-          icon={<Tag className="w-4 h-4 text-purple-600" />}
-          label="Active Discount Codes"
-          value={stats?.activeDiscountCodes ?? 0}
-        />
-        <StatCard
           icon={<Activity className="w-4 h-4 text-green-600" />}
           label="Sessions (last 30d)"
           value={stats?.sessionsLast30d ?? 0}
@@ -135,13 +125,6 @@ export function AdminHomeView({ token, onNavigate, onActivateSubscription }: Adm
         >
           <CreditCard className="w-4 h-4" />
           Activate Subscription
-        </button>
-        <button
-          onClick={() => onNavigate('discounts')}
-          className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors duration-[120ms]"
-        >
-          <Tag className="w-4 h-4" />
-          New Discount Code
         </button>
         <button
           onClick={() => onNavigate('inquiries')}

@@ -7,7 +7,7 @@ export default function RefundPolicy() {
       <section>
         <h2 className="text-lg font-semibold text-gray-900 mb-3">Billing</h2>
         <p className="text-sm text-gray-600 leading-relaxed">
-          Vivalyn subscriptions are billed monthly in advance. Annual plans will be available in the future. All charges are processed securely by Stripe.
+          Vivalyn subscriptions are billed monthly in advance. Annual plans will be available in the future. All charges are processed securely by Razorpay / Stripe.
         </p>
       </section>
 

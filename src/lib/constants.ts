@@ -310,9 +310,9 @@ export interface FooterLinks {
 
 export const FOOTER_LINKS: FooterLinks = {
   product: [
-    { label: 'General Agents', href: '#products' },
-    { label: 'QnA Assessment Agents', href: '#products' },
-    { label: 'Simulation Agents', href: '#products' },
+    { label: 'General Agents', href: '/#products' },
+    { label: 'QnA Assessment Agents', href: '/#products' },
+    { label: 'Simulation Agents', href: '/#products' },
     // { label: 'Pricing', href: '/pricing' }, // standalone pricing page — build later
   ],
   company: [

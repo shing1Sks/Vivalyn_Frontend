@@ -7,7 +7,6 @@ import { AdminHomeView } from '../components/admin/AdminHomeView'
 import { RunDetailPanel } from '../components/admin/RunDetailPanel'
 import { AdminContactEventsView } from '../components/admin/AdminContactEventsView'
 import { AdminSubscriptionsView } from '../components/admin/AdminSubscriptionsView'
-import { AdminDiscountsView } from '../components/admin/AdminDiscountsView'
 import { AdminRetentionView } from '../components/admin/AdminRetentionView'
 import AdminSidebar, { type AdminSection } from '../components/admin/AdminSidebar'
 import { ArrowLeft, Loader2, Lock } from 'lucide-react'
@@ -51,7 +50,6 @@ export default function AdminDashboard() {
     analytics: false,
     inquiries: false,
     subscriptions: false,
-    discounts: false,
     retention: false,
   })
 
@@ -165,10 +163,6 @@ export default function AdminDashboard() {
           {mounted.retention && <AdminRetentionView token={token} />}
         </div>
 
-        {/* Discounts */}
-        <div className={activeSection !== 'discounts' ? 'hidden' : ''}>
-          {mounted.discounts && <AdminDiscountsView token={token} />}
-        </div>
       </div>
 
       {/* Run detail overlay — global, rendered at dashboard level */}
