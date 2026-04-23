@@ -11,13 +11,16 @@ import {
   toggleAgentStatus,
   updateAgent,
   type Agent,
+  type EvalInputs,
   type EvaluationMetrics,
-  type QnACompileResult,
+  type QnACompileResponse,
   type QnAPromptSpec,
   type QnAQuestionBank,
+  type QnASessionDesignRequest,
 } from '../../../lib/api'
 import LanguageVoiceSelector from './LanguageVoiceSelector'
-import QnAResourceStep from './QnAResourceStep'
+import QnASessionDesignStep from './QnASessionDesignStep'
+import EvaluationStep from './EvaluationStep'
 import QnAQuestionReview from './QnAQuestionReview'
 import QnAConfigureView from './QnAConfigureView'
 
@@ -25,7 +28,7 @@ import QnAConfigureView from './QnAConfigureView'
 
 type QnAWizardStep =
   | 'language-voice'
-  | 'resource-upload'
+  | 'session-design'
   | 'evaluation'
   | 'question-review'
   | 'done'
@@ -40,7 +43,7 @@ function stepStatus(current: SavePhase, target: 'compile' | 'metrics' | 'save'):
   return ci > ti ? 'done' : ci === ti ? 'running' : 'pending'
 }
 
-const STEP_DOTS: QnAWizardStep[] = ['language-voice', 'resource-upload', 'evaluation', 'done']
+const STEP_DOTS: QnAWizardStep[] = ['language-voice', 'session-design', 'evaluation', 'done']
 
 const PLACEHOLDER_BANK: QnAQuestionBank = { fixed: [], randomized_pool: [], randomized_count: 0 }
 
@@ -61,28 +64,27 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
   const [step, setStep] = useState<QnAWizardStep>('language-voice')
   const [selectedLanguage, setSelectedLanguage] = useState('')
   const [selectedVoiceName, setSelectedVoiceName] = useState('')
-  const [selectedPersonaName, setSelectedPersonaName] = useState('')
 
-  const [assessmentContext, setAssessmentContext] = useState('')
+  const [sessionDesign, setSessionDesign] = useState<QnASessionDesignRequest | null>(null)
+  const [compileStatus, setCompileStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+
   const [generatedQuestions, setGeneratedQuestions] = useState<Array<{ text: string; type: 'fixed' | 'randomized'; cross_question_enabled: boolean }>>([])
   const [questionsReady, setQuestionsReady] = useState(false)
   const [questionsError, setQuestionsError] = useState<string | null>(null)
 
-  const [compiledResult, setCompiledResult] = useState<QnACompileResult | null>(null)
-  const [compiledAgentName, setCompiledAgentName] = useState<string | null>(null)
   const [savedAgent, setSavedAgent] = useState<Agent | null>(null)
 
   const [savePhase, setSavePhase] = useState<SavePhase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [isSubscriptionError, setIsSubscriptionError] = useState(false)
 
-  // Background promises — both fire on resource step submit
-  const bgCompileRef = useRef<Promise<QnACompileResult | null>>(Promise.resolve(null))
+  // Background promises — both fire on session design submit
+  const bgCompileRef = useRef<Promise<QnACompileResponse | null>>(Promise.resolve(null))
   const bgQuestionsRef = useRef<Promise<Array<{ text: string; type: 'fixed' | 'randomized'; cross_question_enabled: boolean }> | null>>(Promise.resolve(null))
-  // Stores eval criteria from eval step, used when question review confirms
-  const evalCriteriaRef = useRef<string>('')
-  // Stores the compile context for retry on failure
-  const compileContextRef = useRef<{ tone: string; feedbackMode: 'silent' | 'feedback'; context: string } | null>(null)
+  // Stores eval inputs from eval step, used when question review confirms
+  const evalCriteriaRef = useRef<EvalInputs | null>(null)
+  // Stores design for retry
+  const compileContextRef = useRef<QnASessionDesignRequest | null>(null)
 
   // Reset on open
   useEffect(() => {
@@ -90,55 +92,56 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
       setStep('language-voice')
       setSelectedLanguage('')
       setSelectedVoiceName('')
-      setSelectedPersonaName('')
-      setAssessmentContext('')
+      setSessionDesign(null)
+      setCompileStatus('idle')
       setGeneratedQuestions([])
       setQuestionsReady(false)
       setQuestionsError(null)
-      setCompiledResult(null)
-      setCompiledAgentName(null)
       setSavedAgent(null)
       setSavePhase('idle')
       setError(null)
       setIsSubscriptionError(false)
       bgCompileRef.current = Promise.resolve(null)
       bgQuestionsRef.current = Promise.resolve(null)
-      evalCriteriaRef.current = ''
+      evalCriteriaRef.current = null
       compileContextRef.current = null
     }
   }, [open])
 
   // ── Background helpers ──────────────────────────────────────────────────────
 
-  const startBackgroundCompile = useCallback((tone: string, feedbackMode: 'silent' | 'feedback', context: string) => {
+  const startBackgroundCompile = useCallback((design: QnASessionDesignRequest) => {
     if (!session) return
-    compileContextRef.current = { tone, feedbackMode, context }
-    bgCompileRef.current = (async (): Promise<QnACompileResult | null> => {
+    compileContextRef.current = design
+    setCompileStatus('running')
+    bgCompileRef.current = (async (): Promise<QnACompileResponse | null> => {
       try {
-        const result = await compileQnAAgent(session.access_token, {
-          question_bank: PLACEHOLDER_BANK,
-          tone,
-          feedback_mode: feedbackMode,
-          session_context: context,
-        })
-        setCompiledResult(result)
-        setCompiledAgentName(result.agent_name)
-        return result
+        const result = await compileQnAAgent(session.access_token, { session_design: design })
+        // Attach placeholder bank so spec type matches QnAPromptSpec
+        const spec: QnAPromptSpec = { ...result.spec, question_bank: PLACEHOLDER_BANK }
+        setCompileStatus('done')
+        return { spec, agent_display_label: result.agent_display_label }
       } catch {
+        setCompileStatus('error')
         return null
       }
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
 
-  const startBackgroundQuestions = useCallback((context: string, resourceText: string, resourceImages: string[]) => {
+  function handleRetryCompile() {
+    if (!compileContextRef.current) return
+    startBackgroundCompile(compileContextRef.current)
+  }
+
+  const startBackgroundQuestions = useCallback((design: QnASessionDesignRequest) => {
     if (!session) return
     bgQuestionsRef.current = (async () => {
       try {
         const result = await generateQnAQuestions(session.access_token, {
-          context,
-          resource_text: resourceText || undefined,
-          resource_images: resourceImages.length > 0 ? resourceImages : undefined,
+          context: design.session_objective,
+          resource_text: design.resource_text || undefined,
+          resource_images: (design.resource_images && design.resource_images.length > 0) ? design.resource_images : undefined,
         })
         setGeneratedQuestions(result.questions)
         setQuestionsReady(true)
@@ -153,40 +156,30 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
 
   // ── Step handlers ────────────────────────────────────────────────────────────
 
-  function handleLanguageVoiceContinue(lang: string, _pref: string, voiceName: string, personaName: string) {
+  function handleLanguageVoiceContinue(lang: string, _pref: string, voiceName: string) {
     setSelectedLanguage(lang)
     setSelectedVoiceName(voiceName)
-    setSelectedPersonaName(personaName)
-    setStep('resource-upload')
+    setStep('session-design')
   }
 
-  const handleGenerateAssessment = useCallback((
-    context: string,
-    resourceText: string,
-    resourceImages: string[],
-    tone: string,
-    feedbackMode: 'silent' | 'feedback',
-  ) => {
-    setAssessmentContext(context)
+  const handleSessionDesignContinue = useCallback((design: QnASessionDesignRequest) => {
+    setSessionDesign(design)
     setError(null)
     setQuestionsError(null)
-
-    // Fire both in parallel — no blocking
-    startBackgroundCompile(tone, feedbackMode, context)
-    startBackgroundQuestions(context, resourceText, resourceImages)
-
+    startBackgroundCompile(design)
+    startBackgroundQuestions(design)
     setStep('evaluation')
   }, [startBackgroundCompile, startBackgroundQuestions])
 
-  // Eval step: just store criteria and move to question review
-  const handleEvalSubmit = useCallback((criteria: string) => {
-    evalCriteriaRef.current = criteria
+  // Eval step: store criteria and move to question review
+  const handleEvalSubmit = useCallback((inputs: EvalInputs) => {
+    evalCriteriaRef.current = inputs
     setStep('question-review')
   }, [])
 
   // Question review: confirmed bank → full save pipeline
   const handleQuestionBankReady = useCallback(async (bank: QnAQuestionBank) => {
-    if (!session) return
+    if (!session || !sessionDesign) return
 
     setStep('done')
     setSavePhase('compile')
@@ -194,14 +187,14 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
     setIsSubscriptionError(false)
 
     // Await background compile — should be done by now
-    let spec = await bgCompileRef.current
-    if (!spec) {
+    let compileResult = await bgCompileRef.current
+    if (!compileResult) {
       const ctx = compileContextRef.current
       if (ctx) {
-        startBackgroundCompile(ctx.tone, ctx.feedbackMode, ctx.context)
-        spec = await bgCompileRef.current
+        startBackgroundCompile(ctx)
+        compileResult = await bgCompileRef.current
       }
-      if (!spec) {
+      if (!compileResult) {
         setError('Agent compilation failed. Please try again.')
         setStep('question-review')
         setSavePhase('idle')
@@ -210,14 +203,22 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
     }
 
     // Patch confirmed question bank into compiled spec
-    spec = { ...spec, question_bank: bank }
+    let spec: QnAPromptSpec = { ...compileResult.spec, question_bank: bank }
 
     setSavePhase('metrics')
+    const evalInputs = evalCriteriaRef.current
+    if (!evalInputs) {
+      setError('Evaluation criteria missing. Please go back and fill them in.')
+      setStep('question-review')
+      setSavePhase('idle')
+      return
+    }
+
     let metrics: EvaluationMetrics
     try {
       metrics = await generateEvaluationCriteria(session.access_token, {
-        session_brief: spec.session_brief,
-        users_raw_evaluation_criteria: evalCriteriaRef.current,
+        session_brief: spec.session_context?.session_brief ?? '',
+        ...evalInputs,
       })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to generate evaluation criteria.')
@@ -228,10 +229,10 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
 
     setSavePhase('save')
     try {
-      const { agent_name, ...promptSections } = spec
       const agent = await saveQnAAgent(session.access_token, agentspaceId, {
-        agent_name,
-        agent_prompt: promptSections as QnAPromptSpec,
+        agent_name: sessionDesign.agent_name,
+        agent_display_label: compileResult.agent_display_label || undefined,
+        agent_prompt: spec,
         agent_language: selectedLanguage,
         agent_voice: selectedVoiceName,
         transcript_evaluation_metrics: metrics,
@@ -249,17 +250,16 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
       setStep('question-review')
       setSavePhase('idle')
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, agentspaceId, selectedLanguage, selectedVoiceName, startBackgroundCompile])
+  }, [session, agentspaceId, selectedLanguage, selectedVoiceName, sessionDesign, startBackgroundCompile])
 
   function handleBack() {
-    if (step === 'resource-upload') setStep('language-voice')
-    else if (step === 'evaluation') setStep('resource-upload')
+    if (step === 'session-design') setStep('language-voice')
+    else if (step === 'evaluation') setStep('session-design')
     else if (step === 'question-review') setStep('evaluation')
     else if (step === 'configure') setStep('done')
   }
 
-  const canGoBack = ['resource-upload', 'evaluation', 'question-review', 'configure'].includes(step)
+  const canGoBack = ['session-design', 'evaluation', 'question-review', 'configure'].includes(step)
 
   if (!open) return null
 
@@ -361,17 +361,19 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
               <LanguageVoiceSelector onContinue={handleLanguageVoiceContinue} />
             )}
 
-            {step === 'resource-upload' && (
-              <QnAResourceStep
+            {step === 'session-design' && (
+              <QnASessionDesignStep
                 language={selectedLanguage}
-                personaName={selectedPersonaName}
-                onGenerate={handleGenerateAssessment}
+                onContinue={handleSessionDesignContinue}
               />
             )}
 
             {step === 'evaluation' && (
               <EvaluationStep
-                compileReady={compiledResult !== null}
+                agentName={sessionDesign?.agent_name ?? ''}
+                participantRole={sessionDesign?.participant_role ?? ''}
+                compileStatus={compileStatus === 'idle' ? 'running' : compileStatus}
+                onRetryCompile={handleRetryCompile}
                 onSubmit={handleEvalSubmit}
               />
             )}
@@ -395,8 +397,9 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
                 <p className="text-sm text-gray-700 font-medium text-center">{questionsError}</p>
                 <button
                   onClick={() => {
+                    if (!sessionDesign) return
                     setQuestionsError(null)
-                    startBackgroundQuestions(assessmentContext, '', [])
+                    startBackgroundQuestions(sessionDesign)
                   }}
                   className="text-sm text-indigo-600 hover:text-indigo-800 duration-[120ms]"
                 >
@@ -408,7 +411,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
             {step === 'done' && (
               <DoneStep
                 savedAgent={savedAgent}
-                agentName={compiledAgentName ?? '...'}
+                agentName={sessionDesign?.agent_name ?? '...'}
                 savePhase={savePhase}
                 token={session?.access_token ?? ''}
                 onConfigure={() => setStep('configure')}
@@ -423,69 +426,6 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
         </motion.div>
       )}
     </AnimatePresence>
-  )
-}
-
-// ── Evaluation step ────────────────────────────────────────────────────────────
-
-interface EvaluationStepProps {
-  compileReady: boolean
-  onSubmit: (criteria: string) => void
-}
-
-function EvaluationStep({ compileReady, onSubmit }: EvaluationStepProps) {
-  const [criteria, setCriteria] = useState('')
-
-  return (
-    <div className="flex flex-col h-full overflow-y-auto px-6 py-8">
-      <div className="max-w-2xl mx-auto w-full space-y-5">
-        <div>
-          <h3 className="text-base font-semibold text-gray-900 mb-1">How should sessions be scored?</h3>
-          <p className="text-sm text-gray-500">Define the evaluation criteria while your agent is being prepared in the background.</p>
-        </div>
-
-        <AnimatePresence>
-          {!compileReady && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-lg">
-                <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin shrink-0" />
-                <span className="text-xs text-indigo-500">Preparing agent prompt and questions in background...</span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <textarea
-          autoFocus
-          value={criteria}
-          onChange={e => setCriteria(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && criteria.trim()) onSubmit(criteria.trim())
-          }}
-          rows={4}
-          placeholder="e.g. Focus on accuracy of answers, depth of explanation, clarity of communication, and how well the candidate reasons through unfamiliar scenarios..."
-          className="w-full border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
-        />
-
-        <button
-          onClick={() => { if (criteria.trim()) onSubmit(criteria.trim()) }}
-          disabled={!criteria.trim()}
-          className={`w-full py-3 rounded-xl text-sm font-semibold duration-[120ms] flex items-center justify-center gap-2 ${
-            criteria.trim()
-              ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
-              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-          }`}
-        >
-          Continue
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -565,7 +505,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
         transition={{ duration: 0.3, ease: 'easeOut' }}
         className="w-full max-w-sm"
       >
-        {/* Progress steps — shown while saving */}
         <AnimatePresence>
           {!isReady && (
             <motion.div
@@ -602,7 +541,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
           )}
         </AnimatePresence>
 
-        {/* Header */}
         <div className="text-center mb-6">
           <div className={`w-14 h-14 rounded-full border-2 flex items-center justify-center mx-auto mb-4 duration-[120ms] ${
             isReady ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
@@ -624,7 +562,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
           </div>
         </div>
 
-        {/* Action tiles */}
         <motion.div
           className="grid grid-cols-2 gap-2 mb-3"
           initial="hidden"
@@ -678,7 +615,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
           </motion.button>
         </motion.div>
 
-        {/* Who opens the session */}
         <div className={`border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3 ${!isReady ? 'opacity-40' : ''}`}>
           <div className="flex items-center gap-2.5">
             <MessageSquare className="w-4 h-4 text-gray-400 shrink-0" />

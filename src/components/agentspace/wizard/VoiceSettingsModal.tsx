@@ -193,7 +193,7 @@ export default function VoiceSettingsModal({
                             const isActive = selectedPref === voice.preference
                             const isLoading = loadingPref === voice.preference
                             const isPlaying = playingPref === voice.preference
-                            const personaName = voice.voice_name
+                            const voiceName = voice.voice_name
                             const isFemale = voice.preference.startsWith('female')
                             return (
                               <div
@@ -210,7 +210,7 @@ export default function VoiceSettingsModal({
                               >
                                 <div className="flex items-start justify-between gap-1">
                                   <span className={`text-sm font-semibold leading-tight ${isActive ? 'text-indigo-700' : 'text-gray-800'}`}>
-                                    {personaName}
+                                    {voiceName}
                                   </span>
                                   <span className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
                                     isActive

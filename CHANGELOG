@@ -1,5 +1,69 @@
 # Changelog
 
+## [67] agent-name-pipeline-audit — 2026-04-23
+
+**Why:** Three places in the live session flow were still using the wrong identity value after the v2 redesign: (1) `AgentPublicConfig` had a `persona_name` field that was being populated by the backend with the raw TTS voice ID (e.g. "ashley"), and `AgentLive.tsx` preferred it over `agent_name`, so the active session labelled the agent with the voice ID; (2) `api.ts` declared `persona_name` as part of the public config interface.
+
+**What:** Removed `persona_name` from `AgentPublicConfig`. `agent_name` is now the unambiguous source for the agent's identity in all session UI. The one call site in `AgentLive.tsx` that used `config.persona_name ?? config.agent_name` is updated to use `config.agent_name` directly.
+
+**Changes:**
+- `src/lib/api.ts`: removed `persona_name` from `AgentPublicConfig` interface
+- `src/pages/AgentLive.tsx`: `ActiveSession` render — `config?.persona_name ?? config?.agent_name ?? 'Agent'` → `config?.agent_name ?? 'Agent'`
+
+---
+
+## [66] agent-display-label — 2026-04-23
+
+**Why:** `agent_name` is now the user-set persona name used by the agent in-session (e.g. "Dr. Patel"). Records and lists previously showed this short name, losing the descriptive label (e.g. "Viva Voce Biology Examiner") that gave a clearer at-a-glance summary. These two purposes needed separate fields.
+
+**What:** Added `agent_display_label` — AI-generated at compile time, stored on the agent, shown in records/lists with fallback to `agent_name` when null. Both configure views show it as a freely editable "Display label" input alongside a caution-gated "Persona name" input. Old agents have `agent_display_label = null` and fall back to `agent_name` (which was the old LLM-generated descriptor), so backward compat is seamless.
+
+**Changes:**
+- `src/lib/api.ts`: added `agent_display_label?: string | null` to `Agent`; added `CompileResponse` and `QnACompileResponse` wrapper types (`{ spec, agent_display_label }`) returned by compile endpoints; updated `compileAgent` and `compileQnAAgent` return types; added `agent_display_label?` param to `saveAgent`, `saveQnAAgent`, `updateAgent`
+- `src/pages/AgentSpace.tsx`: `agentLabelMap` built from agents list (`agent_display_label || agent_name`); `agentOptions` and `RunRow` use label map for display; `exportCsv` accepts `agentLabelMap` param
+- `src/components/agentspace/CreateAgentWizard.tsx`: stores `agentDisplayLabel` from compile response; passes it to `saveAgent`
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: same for QnA flow
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: added "Names" card with "Persona name" input (amber caution badge) and "Display label" input (gray badge); `handleSaveSession` writes both on update
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: same "Names" card in profile tab
+
+---
+
+## [65] session-brief-into-session-context — 2026-04-23
+
+**Why:** `session_brief` is the narrative summary of a session — it belongs logically inside the `session_context` group alongside agent role, participant role, objective, duration, and style. Having it as a peer of `identity_and_persona` at the spec root was an inconsistency that made the data model harder to read and edit.
+
+**What:** Moved `session_brief` from top-level fields in `AgentPromptSpec` and `QnAPromptSpec` into `SessionContext`. The configure views' Session Context collapsible section now includes a "Session brief" textarea. Old agents that stored `session_brief` at the top level fall back gracefully. The standalone "Session Brief" card in both configure views is removed.
+
+**Changes:**
+- `src/lib/api.ts`: added `session_brief: string` to `SessionContext`; removed `session_brief` from `AgentPromptSpec` and `QnAPromptSpec`
+- `src/components/agentspace/CreateAgentWizard.tsx`: `generateEvaluationCriteria` call reads `spec.session_context?.session_brief ?? ''` instead of `spec.session_brief`
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: same
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: `editedContext` init includes `session_brief` with top-level fallback for old agents; removed standalone "Session Brief" `StringSection`; added `session_brief` textarea inside `SessionContextSection`
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: removed `editedBrief` state; `editedContext` init includes `session_brief` with top-level fallback; removed standalone "Session Brief" card; added `session_brief` textarea inside `QnASessionContextSection`; `handleSaveProfile` no longer writes `session_brief` separately (it flows through `session_context`)
+
+---
+
+## [64] agent-creation-v2-structured-session-design — 2026-04-23
+
+**Why:** The old agent creation flow had four structural UX and data quality problems: (1) session facts (duration, roles, style) were inferred from free-text rather than collected explicitly, producing hallucinations and role confusion in the compiled prompt; (2) compiled prompts had no "who is who" anchor, leading to agents confusing themselves with the participant; (3) the multi-turn planner Q&A was a friction bottleneck that added latency without improving output; (4) agent name was LLM-generated and conflated with the voice persona, producing naming drift and confusing the configure view.
+
+**What:** Full redesign of both the general and QnA agent creation wizards. The free-text seed prompt and multi-turn planner Q&A are gone. Step 2 is now a structured "Session Design" form with 5 fields (session objective, agent role, participant role, communication style, duration) plus an inline editable agent name. A template browser pre-fills all fields from 15 general or 10 QnA templates. Background compile fires immediately on Step 2 → Step 3 transition; the eval step shows a status banner and a retry button on failure. Evaluation criteria now has three guided fields (competency, strong performance, weak performance) replacing a single blank textarea. The configure views gained a Session Context collapsible section and show the agent name and voice as separate, independent badges.
+
+**Changes:**
+- `src/lib/api.ts`: added `SessionContext`, `SessionDesignRequest`, `QnASessionDesignRequest`, `EvalInputs` types; updated `AgentPromptSpec` and `QnAPromptSpec` to include `session_context?: SessionContext`; removed `PlanQuestion`, `PlanAgentResult`, `planAgent`, `compileAgentPlan`, `CompileResult`, `QnACompileResult`; added `compileAgent(token, SessionDesignRequest)`; updated `compileQnAAgent` to accept `{ session_design: QnASessionDesignRequest }`; updated `generateEvaluationCriteria` payload to structured `EvalInputs`
+- `src/lib/agentTemplates.ts` *(new)*: exports `GENERAL_TEMPLATES` (15 entries: 7 academic, 5 interview, 3 corporate) and `QNA_TEMPLATES` (10 entries: 5 academic, 3 professional, 2 language); each template carries pre-filled session design and eval fields; exports `templateToSessionDesign` and `qnaTemplateToSessionDesign` helpers
+- `src/components/agentspace/wizard/TemplateBrowserModal.tsx` *(new)*: full-screen modal with category tabs and 2-col template card grid; shared by both wizard types
+- `src/components/agentspace/wizard/EvaluationStep.tsx` *(new)*: shared eval step used by both wizards; dynamic header; compile status banner with AnimatePresence (spinner / red retry); three guided textareas with suggestion chips; CTA disabled while compile is in flight
+- `src/components/agentspace/wizard/SessionDesignStep.tsx` *(new)*: general agent Step 2; inline editable agent name; duration pills + 3 text fields + style pills; template browser integration; collapsible additional context; Continue CTA gated on all required fields
+- `src/components/agentspace/wizard/QnASessionDesignStep.tsx` *(new)*: QnA Step 2; same 5 fields as `SessionDesignStep` plus feedback mode toggle and resource upload section (PDF drag-drop, image upload, base64 encoding — preserved verbatim from old `QnAResourceStep`); replaced `QnAResourceStep.tsx` which is now deleted
+- `src/components/agentspace/CreateAgentWizard.tsx`: step enum changed to `language-voice → session-design → evaluation → done → configure`; removed `seedPrompt`, `plannerStatus`, `plannerQuestions`; added `sessionDesign` state, `bgCompileRef`, `compileStatus`; `handleSessionDesignContinue` fires background compile and advances to eval step; `handleEvalSubmit` awaits compile, generates metrics, saves with user-provided `agent_name`; `DoneStep` uses `sessionDesign.agent_name`
+- `src/components/agentspace/wizard/PlannerFlow.tsx`: deleted — all functionality replaced by `SessionDesignStep` and `EvaluationStep`
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: step enum changed to `language-voice → session-design → evaluation → question-review → done → configure`; removed `assessmentContext`, local `EvaluationStep`; added `sessionDesign` state; `handleSessionDesignContinue` fires compile and question generation in parallel; `evalCriteriaRef` type changed from `string` to `EvalInputs | null`; `agent_name` sourced from `sessionDesign.agent_name`
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: added Session Context collapsible section (agent role, participant role, objective, duration, style); header shows agent name badge and voice badge as independent items; `handleSaveSession` writes `session_context` to spec
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: same Session Context section on Profile tab; same header badges; `handleSaveProfile` includes `session_context`
+
+---
+
 ## [63] remove-discount-system — 2026-04-23
 
 **Why:** The discount system was admin-only and never wired into the actual payment flow — no customer could enter a code, and discounts had no effect on what Razorpay charged. The feature was untested and the correct future approach is Razorpay's native coupon system.

@@ -54,10 +54,6 @@ import { fadeInUp, staggerContainer } from '../lib/motion'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function extractPersonaName(agent: Agent): string {
-  return (agent.agent_prompt as unknown as Record<string, unknown>).name as string ?? ''
-}
-
 function formatRelativeDate(iso: string): string {
   const d = new Date(iso)
   const diffDays = Math.floor((Date.now() - d.getTime()) / 86_400_000)
@@ -137,7 +133,7 @@ function exportCsv(rows: RunRecord[]) {
       new Date(r.created_at).toLocaleDateString(),
       r.user_name,
       r.user_email,
-      r.agent_name,
+      r.agent_display_label || r.agent_name,
       r.is_test ? 'Test' : 'Live',
       score,
       ...metrics,
@@ -169,7 +165,6 @@ interface AgentRowProps {
 }
 
 function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) {
-  const personaName = extractPersonaName(agent)
   const isLive = agent.agent_status === 'live'
   const [toggling, setToggling] = useState(false)
   const [copiedLive, setCopiedLive] = useState(false)
@@ -213,8 +208,7 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
               <Bot className="w-3.5 h-3.5 text-indigo-600" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{agent.agent_name}</p>
-              {personaName && <p className="text-xs text-gray-400 truncate">{personaName}</p>}
+              <p className="text-sm font-medium text-gray-900 truncate">{agent.agent_display_label}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -258,10 +252,7 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
             <Bot className="w-3.5 h-3.5 text-indigo-600" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{agent.agent_name}</p>
-            {personaName && (
-              <p className="text-xs text-gray-400 truncate">{personaName}</p>
-            )}
+            <p className="text-sm font-medium text-gray-900 truncate">{agent.agent_display_label || agent.agent_name}</p>
           </div>
         </div>
 
@@ -350,11 +341,15 @@ function RecordsTab({ agentspaceId, token, agents }: RecordsTabProps) {
   const agentDropdownRef = useRef<HTMLDivElement>(null)
   const [selectedRun, setSelectedRun] = useState<RunRecord | null>(null)
 
-  const agentOptions = useMemo(() => {
-    const seen = new Map<string, string>()
-    for (const a of agents) seen.set(a.id, a.agent_name)
-    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  const agentLabelMap = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const a of agents) m.set(a.id, a.agent_display_label || a.agent_name)
+    return m
   }, [agents])
+
+  const agentOptions = useMemo(() => {
+    return [...agentLabelMap.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [agentLabelMap])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -574,6 +569,7 @@ function RecordsTab({ agentspaceId, token, agents }: RecordsTabProps) {
               <RunRow
                 key={run.id}
                 run={run}
+                agentLabel={run.agent_display_label || run.agent_name}
                 selected={selectedRun?.id === run.id}
                 onSelect={() => setSelectedRun(run)}
               />
@@ -638,11 +634,12 @@ function RecordsTab({ agentspaceId, token, agents }: RecordsTabProps) {
 
 interface RunRowProps {
   run: RunRecord
+  agentLabel: string
   selected: boolean
   onSelect: () => void
 }
 
-function RunRow({ run, selected, onSelect }: RunRowProps) {
+function RunRow({ run, agentLabel, selected, onSelect }: RunRowProps) {
   const score = avgScore(run.evaluation_report)
 
   return (
@@ -669,7 +666,7 @@ function RunRow({ run, selected, onSelect }: RunRowProps) {
             <span className="text-xs text-gray-400">{formatRelativeDate(run.created_at)}</span>
           </div>
         </div>
-        <span className="text-xs text-gray-500">{run.agent_name}</span>
+        <span className="text-xs text-gray-500">{agentLabel}</span>
       </button>
 
       {/* ── Desktop row (≥ md) ───────────────────────────────────────────── */}
@@ -681,7 +678,7 @@ function RunRow({ run, selected, onSelect }: RunRowProps) {
       >
         <span className="text-sm text-gray-800 font-medium truncate">{run.user_name}</span>
         <span className="text-sm text-gray-500 truncate">{run.user_email}</span>
-        <span className="text-sm text-gray-600 truncate">{run.agent_name}</span>
+        <span className="text-sm text-gray-600 truncate">{agentLabel}</span>
         <span className={`text-sm font-semibold ${score === '—' ? 'text-gray-300' : 'text-gray-800'}`}>
           {score !== '—' ? `${score}/10` : score}
         </span>
@@ -1284,6 +1281,8 @@ function AgentSpaceContent() {
                 <AgentConfigureView
                   spec={configuringAgent.agent_prompt}
                   agentId={configuringAgent.id}
+                  agentName={configuringAgent.agent_name}
+                  agentDisplayLabel={configuringAgent.agent_display_label}
                   agentLanguage={configuringAgent.agent_language}
                   agentVoice={configuringAgent.agent_voice}
                   evaluationMetrics={configuringAgent.transcript_evaluation_metrics}

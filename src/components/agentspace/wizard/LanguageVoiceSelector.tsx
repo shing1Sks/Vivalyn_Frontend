@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, Loader2, Volume2, VolumeX } from 'lucide-rea
 import { fetchVoices, fetchVoicePreviewBlob, type LanguageVoiceOption } from '../../../lib/api'
 
 interface Props {
-  onContinue: (language: string, voicePreference: string, voiceName: string, personaName: string) => void
+  onContinue: (language: string, voicePreference: string, voiceName: string) => void
 }
 
 export default function LanguageVoiceSelector({ onContinue }: Props) {
@@ -323,7 +323,7 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
             )}
           </p>
           <button
-            onClick={() => canContinue && onContinue(selectedLang!, selectedPref!, selectedVoiceName, selectedVoiceName)}
+            onClick={() => canContinue && onContinue(selectedLang!, selectedPref!, selectedVoiceName)}
             disabled={!canContinue}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium duration-[120ms] ${
               canContinue

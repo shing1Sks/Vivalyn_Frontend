@@ -5,6 +5,7 @@ import {
   updateAgent,
   type AgentPromptSpec,
   type EvaluationMetrics,
+  type SessionContext,
 } from '../../../lib/api'
 import { useAuth } from '../../../context/AuthContext'
 import VoiceSettingsModal from './VoiceSettingsModal'
@@ -12,24 +13,44 @@ import VoiceSettingsModal from './VoiceSettingsModal'
 interface Props {
   spec: AgentPromptSpec
   agentId: string
+  agentName?: string
+  agentDisplayLabel?: string | null
   agentLanguage: string
   agentVoice: string
   agentFirstSpeaker?: string
   evaluationMetrics?: EvaluationMetrics | null
   onSaved: (spec: AgentPromptSpec) => void
-  onAgentUpdated?: (updates: { agent_language: string; agent_voice: string; agent_first_speaker?: string }) => void
+  onAgentUpdated?: (updates: { agent_name?: string; agent_display_label?: string; agent_language?: string; agent_voice?: string; agent_first_speaker?: string }) => void
 }
+
+const COMM_STYLES = ['Conversational', 'Formal', 'Coaching', 'Strict'] as const
 
 type Tab = 'session' | 'evaluation'
 
 // ── Main component ──────────────────────────────────────────────────────────────
 
 export default function AgentConfigureView({
-  spec, agentId, agentLanguage, agentVoice, agentFirstSpeaker, evaluationMetrics, onSaved, onAgentUpdated,
+  spec, agentId, agentName, agentDisplayLabel, agentLanguage, agentVoice, agentFirstSpeaker, evaluationMetrics, onSaved, onAgentUpdated,
 }: Props) {
   const { session } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('session')
   const [edited, setEdited] = useState<AgentPromptSpec>({ ...spec })
+  const [editedContext, setEditedContext] = useState<SessionContext>(() => {
+    const ctx = spec.session_context ?? {
+      agent_role: '',
+      participant_role: '',
+      session_objective: '',
+      session_duration_minutes: 0,
+      communication_style: '',
+      session_brief: '',
+    }
+    return {
+      ...ctx,
+      session_brief: ctx.session_brief || (spec as unknown as Record<string, string>).session_brief || '',
+    }
+  })
+  const [editedAgentName, setEditedAgentName] = useState(agentName ?? '')
+  const [editedDisplayLabel, setEditedDisplayLabel] = useState(agentDisplayLabel ?? '')
   const [voiceModalOpen, setVoiceModalOpen] = useState(false)
   const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
     (agentFirstSpeaker as 'agent' | 'user') ?? 'agent'
@@ -78,9 +99,21 @@ export default function AgentConfigureView({
     setSessionSaving(true)
     setSessionSaved(false)
     try {
-      await updateAgent(session.access_token, agentId, { agent_prompt: edited })
+      const specToSave: AgentPromptSpec = {
+        ...edited,
+        session_context: (editedContext.agent_role || editedContext.participant_role || editedContext.session_objective)
+          ? editedContext
+          : undefined,
+      }
+      const updates: Parameters<typeof updateAgent>[2] = { agent_prompt: specToSave }
+      if (editedAgentName && editedAgentName !== agentName) updates.agent_name = editedAgentName
+      if (editedDisplayLabel !== (agentDisplayLabel ?? '')) updates.agent_display_label = editedDisplayLabel || undefined
+      await updateAgent(session.access_token, agentId, updates)
       setSessionSaved(true)
-      onSaved(edited)
+      onSaved(specToSave)
+      if (updates.agent_name || updates.agent_display_label !== undefined) {
+        onAgentUpdated?.({ agent_name: editedAgentName, agent_display_label: editedDisplayLabel || undefined })
+      }
       setTimeout(() => setSessionSaved(false), 3000)
     } catch { /* silent */ } finally {
       setSessionSaving(false)
@@ -180,10 +213,18 @@ export default function AgentConfigureView({
             )}
           </div>
 
-          {/* Language badge + settings */}
+          {/* Language + voice badges + settings */}
           <div className="hidden md:flex items-center gap-1.5">
+            {agentName && (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-600 bg-gray-100 border border-gray-200 rounded-md px-2 py-1">
+                {agentName}
+              </span>
+            )}
             <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1">
               {agentLanguage}
+            </span>
+            <span className="text-[10px] font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-2 py-1">
+              {agentVoice}
             </span>
             <button
               onClick={() => setVoiceModalOpen(true)}
@@ -282,17 +323,49 @@ export default function AgentConfigureView({
           <div className="flex flex-col md:flex-row md:items-start">
             {/* LHS — string sections */}
             <div className="w-full md:w-[55%] flex flex-col gap-4 px-3 md:px-5 py-4 md:py-5 border-b md:border-b-0 md:border-r border-gray-100">
+              {/* Agent name + display label */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Names</span>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Persona name</span>
+                      <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">Used in prompt — rename carefully</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={editedAgentName}
+                      onChange={e => setEditedAgentName(e.target.value)}
+                      placeholder="e.g. Dr. Patel"
+                      className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Display label</span>
+                      <span className="text-[10px] text-gray-400">Shown in records — freely editable</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={editedDisplayLabel}
+                      onChange={e => setEditedDisplayLabel(e.target.value)}
+                      placeholder="e.g. Viva Voce Biology Examiner"
+                      className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                    />
+                  </div>
+                </div>
+              </div>
+              <SessionContextSection
+                value={editedContext}
+                onChange={setEditedContext}
+              />
               <StringSection
                 label="Identity & Persona"
                 value={edited.identity_and_persona}
-                rows={10}
+                rows={3}
                 onChange={v => updateStringField('identity_and_persona', v)}
-              />
-              <StringSection
-                label="Session Brief"
-                value={edited.session_brief}
-                rows={4}
-                onChange={v => updateStringField('session_brief', v)}
               />
             </div>
 
@@ -458,19 +531,39 @@ interface StringSectionProps {
 }
 
 function StringSection({ label, value, rows, onChange }: StringSectionProps) {
+  const [isOpen, setIsOpen] = useState(false)
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <button
+        onClick={() => setIsOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 duration-[120ms]"
+      >
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</span>
-      </div>
-      <div className="px-5 pb-5">
-        <textarea
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          rows={rows}
-          className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
-        />
-      </div>
+        <ChevronDown className={`w-4 h-4 text-gray-400 duration-[120ms] ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className="px-5 pb-5 pt-1 border-t border-gray-100">
+              <textarea
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                rows={rows}
+                className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -529,6 +622,98 @@ function CollapsibleSection({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  )
+}
+
+// ── Session context section ────────────────────────────────────────────────────
+
+interface SessionContextSectionProps {
+  value: SessionContext
+  onChange: (v: SessionContext) => void
+}
+
+function SessionContextSection({ value, onChange }: SessionContextSectionProps) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Session Context</span>
+      </div>
+      <div className="px-5 pb-5 pt-1 space-y-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Agent role</span>
+                <textarea
+                  value={value.agent_role}
+                  onChange={e => onChange({ ...value, agent_role: e.target.value })}
+                  rows={2}
+                  placeholder="The agent's role in this session"
+                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Participant role</span>
+                <textarea
+                  value={value.participant_role}
+                  onChange={e => onChange({ ...value, participant_role: e.target.value })}
+                  rows={2}
+                  placeholder="Who the participant is in this session"
+                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Session objective</span>
+                <textarea
+                  value={value.session_objective}
+                  onChange={e => onChange({ ...value, session_objective: e.target.value })}
+                  rows={2}
+                  placeholder="What this session is for"
+                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-1 flex-shrink-0">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Duration (min)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={value.session_duration_minutes || ''}
+                    onChange={e => onChange({ ...value, session_duration_minutes: parseInt(e.target.value, 10) || 0 })}
+                    placeholder="15"
+                    className="w-20 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 flex-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Style</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {COMM_STYLES.map(s => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => onChange({ ...value, communication_style: s })}
+                        className={`px-2.5 py-1 text-xs rounded-lg border transition-all duration-[120ms] ${
+                          value.communication_style === s
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Session brief</span>
+                <textarea
+                  value={value.session_brief}
+                  onChange={e => onChange({ ...value, session_brief: e.target.value })}
+                  rows={2}
+                  placeholder="One sentence: what happens in this session and for how long"
+                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+                />
+              </div>
+      </div>
     </div>
   )
 }

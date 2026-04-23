@@ -322,7 +322,7 @@ export default function AgentLive() {
     return (
       <ActiveSession
         agentId={agentId}
-        agentName={config?.persona_name ?? config?.agent_name ?? 'Agent'}
+        agentName={config?.agent_name ?? 'Agent'}
         email={joinEmail}
         name={joinName}
         mode={mode}

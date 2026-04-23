@@ -8,6 +8,7 @@ import {
   type QnAPromptSpec,
   type QnAQuestion,
   type QnAQuestionBank,
+  type SessionContext,
 } from '../../../lib/api'
 import { useAuth } from '../../../context/AuthContext'
 import VoiceSettingsModal from './VoiceSettingsModal'
@@ -177,11 +178,107 @@ function QuestionItem({ question, showCross, onEdit, onDelete, onMove, onToggleC
   )
 }
 
+// ── Session context section (shared UI) ────────────────────────────────────────
+
+const COMM_STYLES_QNA = ['Conversational', 'Formal', 'Coaching', 'Strict'] as const
+
+interface QnASessionContextSectionProps {
+  value: SessionContext
+  onChange: (v: SessionContext) => void
+}
+
+function QnASessionContextSection({ value, onChange }: QnASessionContextSectionProps) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Session Context</span>
+      </div>
+      <div className="px-5 pb-5 pt-1 space-y-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Agent role</span>
+                <textarea
+                  value={value.agent_role}
+                  onChange={e => onChange({ ...value, agent_role: e.target.value })}
+                  rows={2}
+                  placeholder="The agent's role in this session"
+                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Participant role</span>
+                <textarea
+                  value={value.participant_role}
+                  onChange={e => onChange({ ...value, participant_role: e.target.value })}
+                  rows={2}
+                  placeholder="Who the participant is in this session"
+                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Session objective</span>
+                <textarea
+                  value={value.session_objective}
+                  onChange={e => onChange({ ...value, session_objective: e.target.value })}
+                  rows={2}
+                  placeholder="What this session is for"
+                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-1 shrink-0">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Duration (min)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={value.session_duration_minutes || ''}
+                    onChange={e => onChange({ ...value, session_duration_minutes: parseInt(e.target.value, 10) || 0 })}
+                    placeholder="15"
+                    className="w-20 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 flex-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Style</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {COMM_STYLES_QNA.map(s => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => onChange({ ...value, communication_style: s })}
+                        className={`px-2.5 py-1 text-xs rounded-lg border transition-all duration-[120ms] ${
+                          value.communication_style === s
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Session brief</span>
+                <textarea
+                  value={value.session_brief}
+                  onChange={e => onChange({ ...value, session_brief: e.target.value })}
+                  rows={2}
+                  placeholder="One sentence: what happens in this session and for how long"
+                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
+                />
+              </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function QnAConfigureView({ agent }: Props) {
   const { session } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('questions')
+  const [editedAgentName, setEditedAgentName] = useState(agent.agent_name)
+  const [editedDisplayLabel, setEditedDisplayLabel] = useState(agent.agent_display_label ?? '')
   const [voiceModalOpen, setVoiceModalOpen] = useState(false)
   const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
     (agent.agent_first_speaker as 'agent' | 'user') ?? 'agent'
@@ -201,6 +298,22 @@ export default function QnAConfigureView({ agent }: Props) {
 
   const spec = agent.agent_prompt as QnAPromptSpec
 
+  // Session context state
+  const [editedContext, setEditedContext] = useState<SessionContext>(() => {
+    const ctx = spec.session_context ?? {
+      agent_role: '',
+      participant_role: '',
+      session_objective: '',
+      session_duration_minutes: 0,
+      communication_style: '',
+      session_brief: '',
+    }
+    return {
+      ...ctx,
+      session_brief: ctx.session_brief || (spec as unknown as Record<string, string>).session_brief || '',
+    }
+  })
+
   // Question bank state
   const [bank, setBank] = useState<QnAQuestionBank>(spec.question_bank)
   const [savingBank, setSavingBank] = useState(false)
@@ -208,13 +321,13 @@ export default function QnAConfigureView({ agent }: Props) {
 
   // Profile state
   const [editedIdentity, setEditedIdentity] = useState(spec.identity_and_persona)
-  const [editedBrief, setEditedBrief] = useState(spec.session_brief)
-  const [editedRules, setEditedRules] = useState<Record<string, string>>({ ...spec.behavior_rules })
+const [editedRules, setEditedRules] = useState<Record<string, string>>({ ...spec.behavior_rules })
   const [editedGuardrails, setEditedGuardrails] = useState<string[]>([...spec.guardrails])
   const [savingProfile, setSavingProfile] = useState(false)
   const [savedProfileOk, setSavedProfileOk] = useState(false)
   const [behaviorOpen, setBehaviorOpen] = useState(true)
   const [guardrailsOpen, setGuardrailsOpen] = useState(false)
+  const [identityOpen, setIdentityOpen] = useState(false)
 
   // Evaluation state
   const [curatorPrompt, setCuratorPrompt] = useState(agent.transcript_evaluation_metrics?.report_curator_prompt ?? '')
@@ -272,14 +385,19 @@ export default function QnAConfigureView({ agent }: Props) {
     setSavedProfileOk(false)
     const updatedSpec: QnAPromptSpec = {
       ...spec,
+      session_context: (editedContext.agent_role || editedContext.participant_role || editedContext.session_objective)
+        ? editedContext
+        : undefined,
       identity_and_persona: editedIdentity,
-      session_brief: editedBrief,
       behavior_rules: editedRules,
       guardrails: editedGuardrails,
       question_bank: bank,
     }
     try {
-      await updateAgent(session.access_token, agent.id, { agent_prompt: updatedSpec as unknown as Parameters<typeof updateAgent>[2]['agent_prompt'] })
+      const updates: Parameters<typeof updateAgent>[2] = { agent_prompt: updatedSpec as unknown as Parameters<typeof updateAgent>[2]['agent_prompt'] }
+      if (editedAgentName && editedAgentName !== agent.agent_name) updates.agent_name = editedAgentName
+      if (editedDisplayLabel !== (agent.agent_display_label ?? '')) updates.agent_display_label = editedDisplayLabel || undefined
+      await updateAgent(session.access_token, agent.id, updates)
       setSavedProfileOk(true)
       setTimeout(() => setSavedProfileOk(false), 3000)
     } catch { /* silent */ } finally {
@@ -380,10 +498,16 @@ export default function QnAConfigureView({ agent }: Props) {
             )}
           </div>
 
-          {/* Language badge + settings */}
+          {/* Language + voice badges + settings */}
           <div className="hidden md:flex items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-600 bg-gray-100 border border-gray-200 rounded-md px-2 py-1">
+              {agent.agent_name}
+            </span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-1">
               {agent.agent_language}
+            </span>
+            <span className="text-[10px] font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-2 py-1">
+              {agent.agent_voice}
             </span>
             <button
               onClick={() => setVoiceModalOpen(true)}
@@ -478,23 +602,66 @@ export default function QnAConfigureView({ agent }: Props) {
           <div className="flex flex-col md:flex-row md:items-start">
             {/* LHS — string sections */}
             <div className="w-full md:w-[55%] flex flex-col gap-4 px-3 md:px-5 py-4 md:py-5 border-b md:border-b-0 md:border-r border-gray-100">
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Identity & Persona</span>
+              {/* Agent name + display label */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Names</span>
                 </div>
-                <div className="px-5 pb-5 pt-4">
-                  <textarea value={editedIdentity} onChange={e => setEditedIdentity(e.target.value)} rows={10}
-                    className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] leading-relaxed" />
+                <div className="px-5 py-4 space-y-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Persona name</span>
+                      <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">Used in prompt — rename carefully</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={editedAgentName}
+                      onChange={e => setEditedAgentName(e.target.value)}
+                      placeholder="e.g. Prof. Chen"
+                      className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Display label</span>
+                      <span className="text-[10px] text-gray-400">Shown in records — freely editable</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={editedDisplayLabel}
+                      onChange={e => setEditedDisplayLabel(e.target.value)}
+                      placeholder="e.g. Biology Knowledge Assessment"
+                      className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                    />
+                  </div>
                 </div>
               </div>
+              <QnASessionContextSection value={editedContext} onChange={setEditedContext} />
               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Session Brief</span>
-                </div>
-                <div className="px-5 pb-5 pt-4">
-                  <textarea value={editedBrief} onChange={e => setEditedBrief(e.target.value)} rows={4}
-                    className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] leading-relaxed" />
-                </div>
+                <button
+                  onClick={() => setIdentityOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 duration-[120ms]"
+                >
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Identity & Persona</span>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 duration-[120ms] ${identityOpen ? 'rotate-180' : ''}`} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {identityOpen && (
+                    <motion.div
+                      key="identity"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-5 pb-5 pt-1 border-t border-gray-100">
+                        <textarea value={editedIdentity} onChange={e => setEditedIdentity(e.target.value)} rows={3}
+                          className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms] leading-relaxed" />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 

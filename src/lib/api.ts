@@ -337,9 +337,41 @@ export async function fetchVoicePreviewBlob(
 
 // ── Agent Prompt Spec ─────────────────────────────────────────────────────────
 
-export interface AgentPromptSpec {
-  identity_and_persona: string;
+export interface SessionContext {
+  agent_role: string;
+  participant_role: string;
+  session_objective: string;
+  session_duration_minutes: number;
+  communication_style: string;
   session_brief: string;
+}
+
+export interface SessionDesignRequest {
+  agent_name: string;
+  session_objective: string;
+  agent_role: string;
+  participant_role: string;
+  communication_style: string;
+  session_duration_minutes: number;
+  additional_context?: string;
+}
+
+export interface QnASessionDesignRequest extends SessionDesignRequest {
+  feedback_mode: "silent" | "feedback";
+  resource_text?: string;
+  resource_images?: string[];
+}
+
+export interface EvalInputs {
+  competency: string;
+  strong_performance: string;
+  weak_performance: string;
+  additional?: string;
+}
+
+export interface AgentPromptSpec {
+  session_context?: SessionContext;
+  identity_and_persona: string;
   behavior_rules: Record<string, string>;  // { opening, probing, adaptation, feedback, closing }
   guardrails: string[];
 }
@@ -361,7 +393,7 @@ export interface EvaluationReport {
 
 export async function generateEvaluationCriteria(
   accessToken: string,
-  payload: { session_brief: string; users_raw_evaluation_criteria: string },
+  payload: { session_brief: string } & EvalInputs,
 ): Promise<EvaluationMetrics> {
   const res = await fetch(
     `${BASE}/api/v1/agents/generate-evaluation-criteria`,
@@ -385,58 +417,29 @@ export async function generateEvaluationCriteria(
   return res.json();
 }
 
-// ── Agent Planning ────────────────────────────────────────────────────────────
+// ── Agent Compilation ─────────────────────────────────────────────────────────
 
-export interface PlanQuestion {
-  query_statement: string;
-  suggestion1: { statement: string };
-  suggestion2: { statement: string };
+export interface CompileResponse {
+  spec: AgentPromptSpec;
+  agent_display_label: string;
 }
 
-export interface PlanAgentResult {
-  status: string; // "need_inputs" | "ready"
-  questions?: PlanQuestion[];
-  plan?: Record<string, unknown>;
+export interface QnACompileResponse {
+  spec: QnAPromptSpec;
+  agent_display_label: string;
 }
 
-export async function planAgent(
+export async function compileAgent(
   accessToken: string,
-  payload: { seed_prompt: string; plan_history?: string },
-): Promise<PlanAgentResult> {
-  const res = await fetch(`${BASE}/api/v1/agents/plan`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new ApiError(
-      (err as { detail?: string }).detail ?? "Failed to plan agent",
-      res.status,
-    );
-  }
-  return res.json();
-}
-
-// CompileResult includes agent_name plus the 4 spec sections
-export interface CompileResult extends AgentPromptSpec {
-  agent_name: string;
-}
-
-export async function compileAgentPlan(
-  accessToken: string,
-  payload: { plan_history: string },
-): Promise<CompileResult> {
+  payload: SessionDesignRequest,
+): Promise<CompileResponse> {
   const res = await fetch(`${BASE}/api/v1/agents/compile`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ session_design: payload }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -481,6 +484,7 @@ export interface Agent {
   created_at: string;
   agentspace_id: string;
   agent_name: string;
+  agent_display_label?: string | null;
   agent_prompt: AgentPromptSpec | QnAPromptSpec;
   agent_language: string;
   agent_voice: string;
@@ -507,15 +511,10 @@ export interface QnAQuestionBank {
 }
 
 export interface QnAPromptSpec {
+  session_context?: SessionContext;
   identity_and_persona: string;
-  session_brief: string;
   behavior_rules: Record<string, string>; // opening, transition, closing
   guardrails: string[];
-  question_bank: QnAQuestionBank;
-}
-
-export interface QnACompileResult extends Omit<QnAPromptSpec, "question_bank"> {
-  agent_name: string;
   question_bank: QnAQuestionBank;
 }
 
@@ -524,6 +523,7 @@ export async function saveAgent(
   agentspaceId: string,
   payload: {
     agent_name: string;
+    agent_display_label?: string;
     agent_prompt: AgentPromptSpec;
     agent_language: string;
     agent_voice: string;
@@ -571,6 +571,8 @@ export async function updateAgent(
   accessToken: string,
   agentId: string,
   updates: {
+    agent_name?: string;
+    agent_display_label?: string;
     agent_prompt?: AgentPromptSpec;
     agent_language?: string;
     agent_voice?: string;
@@ -653,13 +655,8 @@ export async function generateQnAQuestions(
 
 export async function compileQnAAgent(
   accessToken: string,
-  payload: {
-    question_bank: QnAQuestionBank;
-    tone: string;
-    feedback_mode: "silent" | "feedback";
-    session_context: string;
-  },
-): Promise<QnACompileResult> {
+  payload: { session_design: QnASessionDesignRequest },
+): Promise<QnACompileResponse> {
   const res = await fetch(`${BASE}/api/v1/agents/qna/compile`, {
     method: "POST",
     headers: {
@@ -683,6 +680,7 @@ export async function saveQnAAgent(
   agentspaceId: string,
   payload: {
     agent_name: string;
+    agent_display_label?: string;
     agent_prompt: QnAPromptSpec;
     agent_language: string;
     agent_voice: string;
@@ -734,11 +732,10 @@ export async function updateAgentQuestionBank(
 // ── Live Sessions ─────────────────────────────────────────────────────────────
 
 export interface AgentPublicConfig {
-  agent_name: string;
+  agent_name: string;           // user-set persona name — use this everywhere in session UI
   agent_language: string;
   agent_status: string;
-  persona_name?: string | null; // voice_character.name from prompt, if set
-  agent_first_speaker: string; // "agent" | "user"
+  agent_first_speaker: string;  // "agent" | "user"
 }
 
 export async function fetchAgentPublicConfig(
@@ -761,7 +758,8 @@ export interface RunRecord {
   id: string;
   created_at: string;
   agent_id: string;
-  agent_name: string;
+  agent_name: string;           // persona name (e.g. "Dr. Patel")
+  agent_display_label?: string; // resolved display label — backend provides agent_display_label || agent_name
   user_email: string;
   user_name: string;
   transcript?: Array<{ role: string; content: string | Record<string, unknown>; timestamp: string }>;

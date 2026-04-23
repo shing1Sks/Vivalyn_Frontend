@@ -1,23 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, ArrowLeft, Check, CheckCircle, Link2, Loader2, Copy, MessageSquare, Rocket, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, CheckCircle, Link2, Loader2, Copy, MessageSquare, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
   ApiError,
-  compileAgentPlan,
+  compileAgent,
   generateEvaluationCriteria,
-  planAgent,
   saveAgent,
   toggleAgentStatus,
   updateAgent,
   type Agent,
   type AgentPromptSpec,
-  type CompileResult,
+  type CompileResponse,
+  type EvalInputs,
   type EvaluationMetrics,
-  type PlanQuestion,
+  type SessionDesignRequest,
 } from '../../lib/api'
 import LanguageVoiceSelector from './wizard/LanguageVoiceSelector'
-import PlannerFlow, { type PlannerStatus } from './wizard/PlannerFlow'
+import SessionDesignStep from './wizard/SessionDesignStep'
+import EvaluationStep from './wizard/EvaluationStep'
 import AgentConfigureView from './wizard/AgentConfigureView'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -33,12 +34,12 @@ function stepStatus(current: SavePhase, target: 'compile' | 'metrics' | 'save'):
 
 type WizardStep =
   | 'language-voice'
-  | 'prompt-input'
-  | 'planning'
+  | 'session-design'
+  | 'evaluation'
   | 'done'
   | 'configure'
 
-const STEP_DOTS: WizardStep[] = ['language-voice', 'prompt-input', 'planning', 'done']
+const STEP_DOTS: WizardStep[] = ['language-voice', 'session-design', 'evaluation', 'done']
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -55,26 +56,18 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   const [step, setStep] = useState<WizardStep>('language-voice')
   const [selectedLanguage, setSelectedLanguage] = useState('')
   const [selectedVoiceName, setSelectedVoiceName] = useState('')
-  const [selectedPersonaName, setSelectedPersonaName] = useState('')
-  const [seedPrompt, setSeedPrompt] = useState('')
 
-  // Planner state
-  const [plannerStatus, setPlannerStatus] = useState<PlannerStatus>('planning')
-  const [plannerQuestions, setPlannerQuestions] = useState<PlanQuestion[]>([])
+  const [sessionDesign, setSessionDesign] = useState<SessionDesignRequest | null>(null)
+  const [compileStatus, setCompileStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
 
-  const [finalSpec, setFinalSpec] = useState<CompileResult | null>(null)
   const [savedAgent, setSavedAgent] = useState<Agent | null>(null)
   const [configuredSpec, setConfiguredSpec] = useState<AgentPromptSpec | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSubscriptionError, setIsSubscriptionError] = useState(false)
   const [savePhase, setSavePhase] = useState<SavePhase>('idle')
 
-  // Avoid double-trigger in strict mode
-  const planningStarted = useRef(false)
-  // Background compile promise — resolves to spec or null on error
-  const bgCompileRef = useRef<Promise<CompileResult | null>>(Promise.resolve(null))
-  // Stored plan for compile retry on error
-  const planResultRef = useRef<Record<string, unknown> | null>(null)
+  // Background compile promise — resolves to { spec, agent_display_label } or null on error
+  const bgCompileRef = useRef<Promise<CompileResponse | null>>(Promise.resolve(null))
 
   // Reset on open
   useEffect(() => {
@@ -82,90 +75,93 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       setStep('language-voice')
       setSelectedLanguage('')
       setSelectedVoiceName('')
-      setSelectedPersonaName('')
-      setSeedPrompt('')
-      setPlannerStatus('planning')
-      setPlannerQuestions([])
-      setFinalSpec(null)
+      setSessionDesign(null)
+      setCompileStatus('idle')
       setSavedAgent(null)
       setConfiguredSpec(null)
       setError(null)
       setIsSubscriptionError(false)
       setSavePhase('idle')
-      planningStarted.current = false
       bgCompileRef.current = Promise.resolve(null)
-      planResultRef.current = null
     }
   }, [open])
 
   // ── Background compiler ─────────────────────────────────────────────────────
 
-  const startBackgroundCompile = useCallback((plan: Record<string, unknown>) => {
+  const startBackgroundCompile = useCallback((design: SessionDesignRequest) => {
     if (!session) return
-    bgCompileRef.current = (async (): Promise<CompileResult | null> => {
+    setCompileStatus('running')
+    bgCompileRef.current = (async (): Promise<CompileResponse | null> => {
       try {
-        const spec = await compileAgentPlan(session.access_token, {
-          plan_history: JSON.stringify(plan, null, 2),
-        })
-        setFinalSpec(spec)
-        const { agent_name: _n, ...promptSections } = spec
-        setConfiguredSpec(promptSections as AgentPromptSpec)
-        return spec
+        const result = await compileAgent(session.access_token, design)
+        setCompileStatus('done')
+        setConfiguredSpec(result.spec)
+        return result
       } catch {
+        setCompileStatus('error')
         return null
       }
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
 
-  // ── Eval + save ─────────────────────────────────────────────────────────────
+  function handleRetryCompile() {
+    if (!sessionDesign) return
+    startBackgroundCompile(sessionDesign)
+  }
 
-  const handleEvalSubmit = useCallback(async (criteria: string) => {
-    if (!session) return
+  // ── Step handlers ───────────────────────────────────────────────────────────
+
+  function handleLanguageVoiceContinue(lang: string, _pref: string, voiceName: string) {
+    setSelectedLanguage(lang)
+    setSelectedVoiceName(voiceName)
+    setStep('session-design')
+  }
+
+  function handleSessionDesignContinue(design: SessionDesignRequest) {
+    setSessionDesign(design)
+    startBackgroundCompile(design)
+    setStep('evaluation')
+  }
+
+  const handleEvalSubmit = useCallback(async (evalInputs: EvalInputs) => {
+    if (!session || !sessionDesign) return
 
     setStep('done')
     setSavePhase('compile')
     setError(null)
     setIsSubscriptionError(false)
 
-    // Await background compile — likely already done by the time user types criteria
-    let spec = await bgCompileRef.current
-    if (!spec) {
-      // Compile failed — retry once with stored plan
-      if (planResultRef.current) {
-        startBackgroundCompile(planResultRef.current)
-        spec = await bgCompileRef.current
-      }
-      if (!spec) {
-        setError('Agent compilation failed. Please try again.')
-        setStep('planning')
-        setPlannerStatus('awaiting_evaluation')
-        setSavePhase('idle')
-        return
-      }
+    // Await background compile — likely already done by the time user fills eval
+    let compileResult = await bgCompileRef.current
+    if (!compileResult) {
+      setError('Agent compilation failed. Please try again.')
+      setStep('evaluation')
+      setSavePhase('idle')
+      return
     }
 
+    const spec = compileResult.spec
     setSavePhase('metrics')
     let metrics: EvaluationMetrics
     try {
       metrics = await generateEvaluationCriteria(session.access_token, {
-        session_brief: spec.session_brief,
-        users_raw_evaluation_criteria: criteria,
+        session_brief: spec.session_context?.session_brief ?? '',
+        ...evalInputs,
       })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to generate evaluation criteria.')
-      setStep('planning')
-      setPlannerStatus('awaiting_evaluation')
+      setStep('evaluation')
       setSavePhase('idle')
       return
     }
 
     setSavePhase('save')
     try {
-      const { agent_name, ...promptSections } = spec
-      const agentPrompt = (configuredSpec ?? promptSections) as AgentPromptSpec
+      const agentPrompt = configuredSpec ?? spec
       const agent = await saveAgent(session.access_token, agentspaceId, {
-        agent_name,
+        agent_name: sessionDesign.agent_name,
+        agent_display_label: compileResult.agent_display_label || undefined,
         agent_prompt: agentPrompt,
         agent_language: selectedLanguage,
         agent_voice: selectedVoiceName,
@@ -181,103 +177,23 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
         setIsSubscriptionError(false)
         setError(e instanceof Error ? e.message : 'Failed to save agent. Please try again.')
       }
-      setStep('planning')
-      setPlannerStatus('awaiting_evaluation')
+      setStep('evaluation')
       setSavePhase('idle')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, agentspaceId, configuredSpec, selectedLanguage, selectedVoiceName, startBackgroundCompile])
-
-  // ── First planner call ──────────────────────────────────────────────────────
-
-  const runPlanner = useCallback(async (seed: string) => {
-    if (!session) return
-    setPlannerStatus('planning')
-
-    try {
-      const result = await planAgent(session.access_token, { seed_prompt: seed })
-
-      if (result.status === 'need_inputs' && result.questions?.length) {
-        setPlannerQuestions(result.questions)
-        setPlannerStatus('awaiting_answers')
-      } else if (result.status === 'ready' && result.plan) {
-        planResultRef.current = result.plan
-        startBackgroundCompile(result.plan)
-        setPlannerStatus('awaiting_evaluation')
-      } else {
-        setError('Unexpected planner response. Please try again.')
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : undefined
-      setError(msg ?? 'Planning failed. Please try again.')
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, startBackgroundCompile])
-
-  // ── Second planner call (with Q&A answers) ──────────────────────────────────
-
-  const handleAnswersSubmitted = useCallback((answers: string[]) => {
-    if (!session) return
-
-    // Show eval input immediately — planner second call + compile run as a background chain
-    setPlannerStatus('awaiting_evaluation')
-
-    const planHistory = plannerQuestions
-      .map((q, i) => `Q: ${q.query_statement}\nA: ${answers[i] ?? ''}`)
-      .join('\n')
-
-    bgCompileRef.current = (async (): Promise<CompileResult | null> => {
-      try {
-        const result = await planAgent(session.access_token, {
-          seed_prompt: seedPrompt,
-          plan_history: planHistory,
-        })
-        if (!result.plan) return null
-        planResultRef.current = result.plan
-        const spec = await compileAgentPlan(session.access_token, {
-          plan_history: JSON.stringify(result.plan, null, 2),
-        })
-        setFinalSpec(spec)
-        const { agent_name: _n, ...promptSections } = spec
-        setConfiguredSpec(promptSections as AgentPromptSpec)
-        return spec
-      } catch {
-        return null
-      }
-    })()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, seedPrompt, plannerQuestions])
-
-  // ── Step handlers ───────────────────────────────────────────────────────────
-
-  function handleLanguageVoiceContinue(lang: string, _pref: string, voiceName: string, personaName: string) {
-    setSelectedLanguage(lang)
-    setSelectedVoiceName(voiceName)
-    setSelectedPersonaName(personaName)
-    setStep('prompt-input')
-  }
-
-  function handlePromptSubmit() {
-    if (!seedPrompt.trim()) return
-    setStep('planning')
-    if (!planningStarted.current) {
-      planningStarted.current = true
-      runPlanner(seedPrompt.trim())
-    }
-  }
+  }, [session, agentspaceId, configuredSpec, selectedLanguage, selectedVoiceName, sessionDesign])
 
   function handleBack() {
-    if (step === 'prompt-input') setStep('language-voice')
+    if (step === 'session-design') setStep('language-voice')
     else if (step === 'configure') setStep('done')
   }
 
-  const canGoBack = step === 'prompt-input' || step === 'configure'
+  const canGoBack = step === 'session-design' || step === 'configure'
 
   if (!open) return null
 
-  // Dot index: configure + completed done = all past; saving done = last dot active
   const dotStepIdx = (step === 'configure' || (step === 'done' && savePhase === 'done'))
-    ? STEP_DOTS.length          // beyond all dots → every dot is 'past'
+    ? STEP_DOTS.length
     : STEP_DOTS.indexOf(step)
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -294,7 +210,6 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
         >
           {/* Header bar */}
           <div className="h-14 border-b border-gray-100 flex items-center px-6 gap-4 flex-shrink-0">
-            {/* Back */}
             <div className="w-24 flex-shrink-0">
               {canGoBack && (
                 <button
@@ -307,7 +222,6 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
               )}
             </div>
 
-            {/* Step dots */}
             <div className="flex-1 flex justify-center gap-2">
               {STEP_DOTS.map((s, i) => {
                 const isPast = dotStepIdx > i
@@ -325,7 +239,6 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
               })}
             </div>
 
-            {/* Close */}
             <div className="w-24 flex-shrink-0 flex justify-end">
               <button
                 onClick={onClose}
@@ -369,31 +282,27 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
               <LanguageVoiceSelector onContinue={handleLanguageVoiceContinue} />
             )}
 
-            {step === 'prompt-input' && (
-              <PromptInputStep
-                value={seedPrompt}
-                onChange={setSeedPrompt}
-                onSubmit={handlePromptSubmit}
+            {step === 'session-design' && (
+              <SessionDesignStep
                 language={selectedLanguage}
-                personaName={selectedPersonaName}
+                onContinue={handleSessionDesignContinue}
               />
             )}
 
-            {step === 'planning' && (
-              <PlannerFlow
-                seedPrompt={seedPrompt}
-                status={plannerStatus}
-                questions={plannerQuestions}
-                compileReady={finalSpec !== null}
-                onAnswerAll={handleAnswersSubmitted}
-                onEvalSubmit={handleEvalSubmit}
+            {step === 'evaluation' && (
+              <EvaluationStep
+                agentName={sessionDesign?.agent_name ?? ''}
+                participantRole={sessionDesign?.participant_role ?? ''}
+                compileStatus={compileStatus === 'idle' ? 'running' : compileStatus}
+                onRetryCompile={handleRetryCompile}
+                onSubmit={handleEvalSubmit}
               />
             )}
 
             {step === 'done' && (
               <DoneStep
                 savedAgent={savedAgent}
-                agentName={finalSpec?.agent_name ?? '…'}
+                agentName={sessionDesign?.agent_name ?? '…'}
                 savePhase={savePhase}
                 token={session?.access_token ?? ''}
                 onConfigure={() => setStep('configure')}
@@ -411,8 +320,8 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
                 evaluationMetrics={savedAgent.transcript_evaluation_metrics}
                 onSaved={spec => setConfiguredSpec(spec)}
                 onAgentUpdated={updates => {
-                  savedAgent.agent_language = updates.agent_language
-                  savedAgent.agent_voice = updates.agent_voice
+                  if (updates.agent_language) savedAgent.agent_language = updates.agent_language
+                  if (updates.agent_voice) savedAgent.agent_voice = updates.agent_voice
                   if (updates.agent_first_speaker) savedAgent.agent_first_speaker = updates.agent_first_speaker
                 }}
               />
@@ -421,67 +330,6 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
         </motion.div>
       )}
     </AnimatePresence>
-  )
-}
-
-// ── Prompt input step ──────────────────────────────────────────────────────────
-
-interface PromptInputStepProps {
-  value: string
-  onChange: (v: string) => void
-  onSubmit: () => void
-  language: string
-  personaName: string
-}
-
-function PromptInputStep({ value, onChange, onSubmit, language, personaName }: PromptInputStepProps) {
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 flex items-center justify-center px-6 py-8">
-        <div className="w-full max-w-xl">
-          {/* Meta chips */}
-          <div className="flex items-center gap-2 mb-6">
-            <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-3 py-1">
-              {language.toUpperCase()}
-            </span>
-            <span className="text-xs font-medium text-indigo-600 bg-indigo-50 rounded-full px-3 py-1">
-              {personaName}
-            </span>
-          </div>
-
-          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Describe your training agent</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            Tell us what kind of voice agent you want to create. Be as specific or broad as you like — our planner will ask follow-up questions.
-          </p>
-
-          <textarea
-            autoFocus
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && value.trim()) onSubmit()
-            }}
-            rows={6}
-            placeholder="e.g. A sales coaching agent for B2B SaaS reps that helps them practice cold calls and objection handling…"
-            className="w-full border border-gray-200 rounded-xl px-4 py-3.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
-          />
-          <p className="text-xs text-gray-400 mt-1.5">Press Cmd+Enter or click Launch to start</p>
-
-          <button
-            onClick={onSubmit}
-            disabled={!value.trim()}
-            className={`mt-5 w-full py-3 rounded-xl text-sm font-semibold duration-[120ms] flex items-center justify-center gap-2 ${
-              value.trim()
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            <Rocket className="w-4 h-4" />
-            Launch Planning Agent
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -505,7 +353,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
     (savedAgent?.agent_first_speaker as 'agent' | 'user') ?? 'agent'
   )
 
-  // Sync live state once agent is saved
   useEffect(() => {
     if (savedAgent) {
       setIsLive(savedAgent.agent_status === 'live')
@@ -628,7 +475,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
             visible: { transition: { staggerChildren: 0.06 } },
           }}
         >
-          {/* Copy live link */}
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={() => copyLink(liveUrl, 'live')}
@@ -644,7 +490,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
             </span>
           </motion.button>
 
-          {/* Copy test link */}
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={() => copyLink(testUrl, 'test')}
@@ -660,7 +505,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
             </span>
           </motion.button>
 
-          {/* Toggle live/idle */}
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={handleToggle}
@@ -679,7 +523,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
             </span>
           </motion.button>
 
-          {/* Configure */}
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={onConfigure}
@@ -691,7 +534,6 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
           </motion.button>
         </motion.div>
 
-        {/* Who opens the session */}
         <div className={`border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3 ${!isReady ? 'opacity-40' : ''}`}>
           <div className="flex items-center gap-2.5">
             <MessageSquare className="w-4 h-4 text-gray-400 shrink-0" />
