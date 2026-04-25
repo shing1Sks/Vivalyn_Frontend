@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronDown, ChevronRight, Loader2, Volume2, VolumeX } from 'lucide-react'
+import { ChevronDown, Loader2, Volume2, VolumeX } from 'lucide-react'
 import { fetchVoices, fetchVoicePreviewBlob, type LanguageVoiceOption } from '../../../lib/api'
 
 interface Props {
