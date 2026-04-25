@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { ArrowLeftRight, ChevronDown, ChevronUp, Plus, Trash2, Zap } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeftRight, ChevronDown, ChevronUp, GripVertical, Plus, Trash2, Zap } from 'lucide-react'
 import type { QnAQuestion, QnAQuestionBank } from '../../../lib/api'
 
 // ── Question row ───────────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ function QuestionRow({ question, showCrossToggle, onEdit, onDelete, onMove, onTo
   }
 
   return (
-    <div className="flex items-start gap-2 group bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:border-gray-300 duration-[120ms]">
+    <div className="flex items-start gap-2 group bg-white border border-gray-200 rounded-lg px-3 py-2 hover:border-gray-300 duration-[120ms]">
       {editing ? (
         <textarea
           autoFocus
@@ -44,7 +44,7 @@ function QuestionRow({ question, showCrossToggle, onEdit, onDelete, onMove, onTo
         </p>
       )}
 
-      <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 duration-[120ms]">
+      <div className="flex items-center gap-1 flex-shrink-0 opacity-100 duration-[120ms]">
         {showCrossToggle && onToggleCross && (
           <button
             onClick={onToggleCross}
@@ -77,12 +77,12 @@ function QuestionRow({ question, showCrossToggle, onEdit, onDelete, onMove, onTo
 
 interface Props {
   initialQuestions: Array<{ text: string; type: 'fixed' | 'randomized'; cross_question_enabled: boolean }>
-  onContinue: (bank: QnAQuestionBank) => void
+  onBankChange: (bank: QnAQuestionBank | null) => void
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function QnAQuestionReview({ initialQuestions, onContinue }: Props) {
+export default function QnAQuestionReview({ initialQuestions, onBankChange }: Props) {
   const [fixed, setFixed] = useState<QnAQuestion[]>(() =>
     initialQuestions
       .filter(q => q.type === 'fixed')
@@ -94,6 +94,37 @@ export default function QnAQuestionReview({ initialQuestions, onContinue }: Prop
       .map(q => ({ id: crypto.randomUUID(), text: q.text, cross_question_enabled: q.cross_question_enabled }))
   )
   const [randomizedCount, setRandomizedCount] = useState(Math.min(5, initialQuestions.filter(q => q.type === 'randomized').length))
+
+  // ── Drag-to-reorder for fixed questions ──────────────────────────────────────
+  const dragIdRef = useRef<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+
+  function handleDragStart(id: string) {
+    dragIdRef.current = id
+  }
+  function handleDragOver(e: React.DragEvent, id: string) {
+    e.preventDefault()
+    if (dragIdRef.current !== id) setDragOverId(id)
+  }
+  function handleDrop(targetId: string) {
+    const fromId = dragIdRef.current
+    dragIdRef.current = null
+    setDragOverId(null)
+    if (!fromId || fromId === targetId) return
+    setFixed(prev => {
+      const arr = [...prev]
+      const fromIdx = arr.findIndex(q => q.id === fromId)
+      const toIdx = arr.findIndex(q => q.id === targetId)
+      if (fromIdx === -1 || toIdx === -1) return prev
+      const [removed] = arr.splice(fromIdx, 1)
+      arr.splice(toIdx, 0, removed)
+      return arr
+    })
+  }
+  function handleDragEnd() {
+    dragIdRef.current = null
+    setDragOverId(null)
+  }
 
   // ── Fixed mutations ──────────────────────────────────────────────────────────
 
@@ -134,15 +165,15 @@ export default function QnAQuestionReview({ initialQuestions, onContinue }: Prop
     setRandomized(prev => [...prev, { id: crypto.randomUUID(), text: 'New question', cross_question_enabled: false }])
   }
 
-  // ── Validation ───────────────────────────────────────────────────────────────
+  // ── Validation + propagation ─────────────────────────────────────────────────
 
   const validCount = Math.min(randomizedCount, randomized.length)
   const canContinue = fixed.length >= 1 && randomized.length >= 1 && validCount >= 1
 
-  function handleContinue() {
-    if (!canContinue) return
-    onContinue({ fixed, randomized_pool: randomized, randomized_count: validCount })
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    onBankChange(canContinue ? { fixed, randomized_pool: randomized, randomized_count: validCount } : null)
+  }, [fixed, randomized, randomizedCount])
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -161,23 +192,35 @@ export default function QnAQuestionReview({ initialQuestions, onContinue }: Prop
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900">Fixed Questions</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Asked every session, in this order</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Asked every session, in order — drag to reorder</p>
                 </div>
                 <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">
                   {fixed.length}
                 </span>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
                 {fixed.map(q => (
-                  <QuestionRow
+                  <div
                     key={q.id}
-                    question={q}
-                    showCrossToggle={false}
-                    onEdit={text => editFixed(q.id, text)}
-                    onDelete={() => deleteFixed(q.id)}
-                    onMove={() => moveToRandomized(q.id)}
-                  />
+                    draggable
+                    onDragStart={() => handleDragStart(q.id)}
+                    onDragOver={e => handleDragOver(e, q.id)}
+                    onDrop={() => handleDrop(q.id)}
+                    onDragEnd={handleDragEnd}
+                    className={`flex items-center gap-1 transition-opacity duration-[120ms] ${dragOverId === q.id ? 'opacity-40' : ''}`}
+                  >
+                    <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <QuestionRow
+                        question={q}
+                        showCrossToggle={false}
+                        onEdit={text => editFixed(q.id, text)}
+                        onDelete={() => deleteFixed(q.id)}
+                        onMove={() => moveToRandomized(q.id)}
+                      />
+                    </div>
+                  </div>
                 ))}
                 <button
                   onClick={addFixed}
@@ -201,7 +244,7 @@ export default function QnAQuestionReview({ initialQuestions, onContinue }: Prop
                 </span>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
                 {randomized.map(q => (
                   <QuestionRow
                     key={q.id}
@@ -258,17 +301,6 @@ export default function QnAQuestionReview({ initialQuestions, onContinue }: Prop
             </div>
           </div>
 
-          <button
-            onClick={handleContinue}
-            disabled={!canContinue}
-            className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold duration-[120ms] ${
-              canContinue
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-200'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            Continue
-          </button>
         </div>
       </div>
     </div>

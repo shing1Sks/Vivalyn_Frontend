@@ -1,246 +1,204 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertCircle, Loader, RefreshCw } from 'lucide-react'
-import type { EvalInputs } from '../../../lib/api'
+import { Loader2, RefreshCw } from 'lucide-react'
+import type { EvalMetric, EvaluationMetrics } from '../../../lib/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface Props {
-  agentName: string
-  participantRole: string
-  compileStatus: 'running' | 'done' | 'error'
-  onRetryCompile: () => void
-  onSubmit: (inputs: EvalInputs) => void
-  initialValues?: EvalInputs
+  evalResult: EvaluationMetrics | null
+  regenerating: boolean
+  onResultChange: (metrics: EvaluationMetrics | null) => void
+  onRegenerate: () => void
 }
 
-// ── Suggestion chips ───────────────────────────────────────────────────────────
-
-const COMPETENCY_CHIPS = [
-  'Communication clarity and structure',
-  'Subject knowledge and accuracy',
-  'Critical thinking and reasoning',
-  'Confidence and professional presence',
-  'Problem-solving approach',
+const EVAL_PHASES = [
+  'Generating evaluation criteria…',
+  'Building scoring rubric…',
+  'Creating report curator…',
+  'Finalizing metrics…',
 ]
 
-const STRONG_CHIPS = [
-  'Gives structured, well-reasoned answers with supporting evidence',
-  'Demonstrates in-depth subject knowledge without prompting',
-  'Responds confidently under pressure and handles follow-up questions',
-  'Communicates clearly and adapts language to the context',
-  'Shows initiative and asks insightful clarifying questions',
-]
+// ── MorphingText ───────────────────────────────────────────────────────────────
 
-const WEAK_CHIPS = [
-  'Gives vague or unsupported answers without reasoning',
-  'Struggles to apply knowledge to the specific context',
-  'Becomes hesitant or loses composure under probing',
-  'Uses filler words frequently and lacks structured delivery',
-  'Cannot engage with follow-up questions or unexpected scenarios',
-]
+function MorphingText({ phases, active }: { phases: string[]; active: boolean }) {
+  const [idx, setIdx] = useState(0)
+
+  useEffect(() => {
+    if (!active) return
+    const interval = setInterval(() => {
+      setIdx(i => (i + 1) % phases.length)
+    }, 1900)
+    return () => clearInterval(interval)
+  }, [active, phases.length])
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.span
+        key={idx}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.25 }}
+        className="text-sm text-gray-500"
+      >
+        {phases[idx]}
+      </motion.span>
+    </AnimatePresence>
+  )
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function isLegacyMetrics(metrics: EvaluationMetrics['metrics']): boolean {
+  return metrics.length > 0 && typeof (metrics[0] as unknown as string) === 'string'
+}
+
+function toEvalMetrics(raw: EvaluationMetrics['metrics']): EvalMetric[] {
+  if (isLegacyMetrics(raw)) return []
+  return raw as EvalMetric[]
+}
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function EvaluationStep({
-  agentName,
-  participantRole,
-  compileStatus,
-  onRetryCompile,
-  onSubmit,
-  initialValues,
-}: Props) {
-  const [competency, setCompetency] = useState(initialValues?.competency ?? '')
-  const [strong, setStrong] = useState(initialValues?.strong_performance ?? '')
-  const [weak, setWeak] = useState(initialValues?.weak_performance ?? '')
-  const [additional, setAdditional] = useState(initialValues?.additional ?? '')
+export default function EvaluationStep({ evalResult, regenerating, onResultChange, onRegenerate }: Props) {
+  const [editedMetrics, setEditedMetrics] = useState<EvalMetric[]>(() =>
+    evalResult ? toEvalMetrics(evalResult.metrics) : []
+  )
+  const [editedCuratorPrompt, setEditedCuratorPrompt] = useState(() => evalResult?.report_curator_prompt ?? '')
 
-  const canSubmit =
-    compileStatus !== 'running' && competency.trim() && strong.trim() && weak.trim()
-
-  function handleSubmit() {
-    if (!canSubmit) return
-    onSubmit({
-      competency: competency.trim(),
-      strong_performance: strong.trim(),
-      weak_performance: weak.trim(),
-      additional: additional.trim() || undefined,
-    })
+  // Sync when result first arrives or replaced by regeneration
+  const [lastResult, setLastResult] = useState(evalResult)
+  if (evalResult !== lastResult) {
+    setLastResult(evalResult)
+    if (evalResult) {
+      setEditedMetrics(toEvalMetrics(evalResult.metrics))
+      setEditedCuratorPrompt(evalResult.report_curator_prompt)
+    }
   }
 
-  const displayName = agentName || 'the agent'
-  const displayRole = participantRole || 'the participant'
+  // Propagate edits to parent reactively
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!evalResult || editedMetrics.length !== 4 || !editedMetrics.every(m => m.name.trim())) {
+      onResultChange(null)
+      return
+    }
+    onResultChange({ report_curator_prompt: editedCuratorPrompt.trim(), metrics: editedMetrics })
+  }, [editedMetrics, editedCuratorPrompt, evalResult])
+
+  function updateMetric(i: number, field: keyof EvalMetric, value: string) {
+    setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, [field]: value } : m))
+  }
+
+  const isLegacy = evalResult ? isLegacyMetrics(evalResult.metrics) : false
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-8 pt-8 pb-6">
-        <h2 className="text-2xl font-semibold text-gray-900">
-          How should {displayName} evaluate {displayRole}?
-        </h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Define what good and weak performance look like so {displayName} can generate meaningful feedback.
-        </p>
-      </div>
-
-      {/* Compile status banner */}
-      <div className="px-8">
-        <AnimatePresence>
-          {compileStatus === 'running' && (
-            <motion.div
-              key="running"
-              className="flex items-center gap-3 px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-sm text-indigo-700"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.12 }}
-            >
-              <Loader size={15} className="animate-spin flex-shrink-0" />
-              <span>Preparing agent in the background&hellip;</span>
-            </motion.div>
-          )}
-          {compileStatus === 'error' && (
-            <motion.div
-              key="error"
-              className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.12 }}
-            >
-              <AlertCircle size={15} className="flex-shrink-0" />
-              <span>Could not prepare agent.</span>
-              <button
-                onClick={onRetryCompile}
-                className="ml-auto flex items-center gap-1.5 text-red-600 font-medium hover:text-red-800 transition-colors duration-[120ms]"
-              >
-                <RefreshCw size={13} />
-                Retry
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Fields */}
-      <div className="flex-1 overflow-y-auto px-8 py-4 space-y-6">
-        {/* Competency */}
+    <div className="max-w-2xl mx-auto px-8 py-8">
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <label className="block text-sm font-medium text-gray-800 mb-1">
-            What is being evaluated?
-          </label>
-          <p className="text-xs text-gray-400 mb-2">
-            Name the core skill or competency this session is assessing
+          <h2 className="text-2xl font-semibold text-gray-900">Evaluation criteria</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Review and adjust the metrics used to score each session.
           </p>
-          <textarea
-            value={competency}
-            onChange={e => setCompetency(e.target.value)}
-            placeholder="e.g. Oral defence of research methodology and academic argument"
-            rows={2}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
-          />
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {COMPETENCY_CHIPS.map(chip => (
-              <button
-                key={chip}
-                type="button"
-                onClick={() => setCompetency(chip)}
-                className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms]"
-              >
-                {chip}
-              </button>
-            ))}
+        </div>
+        {evalResult && (
+          <button
+            onClick={onRegenerate}
+            disabled={regenerating}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 duration-[120ms] disabled:opacity-40 disabled:pointer-events-none mt-1"
+          >
+            <RefreshCw className={`w-3 h-3 ${regenerating ? 'animate-spin' : ''}`} />
+            Regenerate
+          </button>
+        )}
+      </div>
+
+      {/* Loading / regenerating overlay */}
+      {regenerating && (
+        <div className="border border-gray-200 rounded-xl p-8 flex flex-col items-center gap-4 mb-6">
+          <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+          <MorphingText phases={EVAL_PHASES} active={regenerating} />
+        </div>
+      )}
+
+      {/* Legacy notice */}
+      {evalResult && !regenerating && isLegacy && (
+        <div className="mb-5 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
+          Generated before structured metrics were available. Regenerate to upgrade.
+        </div>
+      )}
+
+      {/* Metric cards */}
+      {evalResult && !regenerating && !isLegacy && (
+        <div className="space-y-4">
+          {editedMetrics.map((metric, i) => (
+            <div key={i} className="border border-gray-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Metric {i + 1}</span>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-500">Name</label>
+                <input
+                  type="text"
+                  value={metric.name}
+                  onChange={e => updateMetric(i, 'name', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-500">Definition</label>
+                <textarea
+                  value={metric.definition}
+                  onChange={e => updateMetric(i, 'definition', e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-emerald-600">Strong (5/5)</label>
+                  <textarea
+                    value={metric.strong}
+                    onChange={e => updateMetric(i, 'strong', e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-red-500">Weak (1/5)</label>
+                  <textarea
+                    value={metric.weak}
+                    onChange={e => updateMetric(i, 'weak', e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+              Report curator prompt
+            </label>
+            <textarea
+              value={editedCuratorPrompt}
+              onChange={e => setEditedCuratorPrompt(e.target.value)}
+              rows={5}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+            />
           </div>
         </div>
+      )}
 
-        {/* Strong performance */}
-        <div>
-          <label className="block text-sm font-medium text-gray-800 mb-1">
-            What does strong performance look like?
-          </label>
-          <p className="text-xs text-gray-400 mb-2">
-            Describe what an excellent response or outcome looks like in this session
-          </p>
-          <textarea
-            value={strong}
-            onChange={e => setStrong(e.target.value)}
-            placeholder="e.g. Gives structured, well-reasoned answers and defends their position confidently under follow-up"
-            rows={3}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
-          />
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {STRONG_CHIPS.map(chip => (
-              <button
-                key={chip}
-                type="button"
-                onClick={() => setStrong(chip)}
-                className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-green-50 hover:text-green-700 text-gray-600 rounded-full border border-gray-200 hover:border-green-200 transition-colors duration-[120ms]"
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
+      {/* Empty state */}
+      {!evalResult && !regenerating && (
+        <div className="border border-dashed border-gray-200 rounded-xl p-12 flex flex-col items-center gap-3">
+          <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+          <p className="text-sm text-gray-400">Preparing evaluation criteria…</p>
         </div>
-
-        {/* Weak performance */}
-        <div>
-          <label className="block text-sm font-medium text-gray-800 mb-1">
-            What does weak performance look like?
-          </label>
-          <p className="text-xs text-gray-400 mb-2">
-            Describe what a poor or insufficient response looks like
-          </p>
-          <textarea
-            value={weak}
-            onChange={e => setWeak(e.target.value)}
-            placeholder="e.g. Gives vague answers without reasoning, struggles with follow-up questions, or loses composure under pressure"
-            rows={3}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
-          />
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {WEAK_CHIPS.map(chip => (
-              <button
-                key={chip}
-                type="button"
-                onClick={() => setWeak(chip)}
-                className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-600 rounded-full border border-gray-200 hover:border-red-200 transition-colors duration-[120ms]"
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Additional */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Additional criteria{' '}
-            <span className="text-gray-400 font-normal">(optional)</span>
-          </label>
-          <textarea
-            value={additional}
-            onChange={e => setAdditional(e.target.value)}
-            placeholder="Any other specific things to assess or penalise..."
-            rows={2}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
-          />
-        </div>
-      </div>
-
-      {/* CTA */}
-      <div className="px-8 pb-8 pt-4 border-t border-gray-100">
-        <button
-          onClick={handleSubmit}
-          disabled={!canSubmit}
-          className={`w-full py-3 text-sm font-medium rounded-xl transition-all duration-[120ms] ${
-            canSubmit
-              ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-          }`}
-        >
-          {compileStatus === 'running' ? 'Preparing agent...' : 'Generate metrics'}
-        </button>
-      </div>
+      )}
     </div>
   )
 }

@@ -1,5 +1,54 @@
 # Changelog
 
+## [70] eval-metric-schema-v2 — 2026-04-25
+
+**Why:** Two compounding issues with evaluation quality (GROUP_D): (1) **Context starvation (D1)** — `generateEvaluationCriteria` was only passing `session_brief` to the LLM; structured session facts (agent role, participant role, objective, communication style, duration) were discarded, so generated metrics were generic rather than domain-specific. (2) **Sparse metric schema (D2)** — metrics were stored and displayed as plain strings, giving no structure for what "good" or "bad" looked like per criterion; each metric needed to expand into a named object with a definition and strong/weak performance descriptors.
+
+**What:** All four `generateEvaluationCriteria` calls (compile chain + regenerate handler in both general and QnA wizards) now build an `additionalContext` string from the `session_context` in the compile result and pass it as the `additional` parameter. `EvalMetric` interface added to `api.ts`; `EvaluationMetrics.metrics` changed from `string[]` to `EvalMetric[]`. `EvaluationStep` fully rewritten with 4-field metric cards. Both configure views migrated from string arrays to `EvalMetric[]` with an `isLegacyMetrics` backward-compat helper for agents created before this change.
+
+**Changes:**
+- `src/lib/api.ts`: added `EvalMetric` interface (`name`, `definition`, `strong`, `weak`); changed `EvaluationMetrics.metrics` from `string[]` to `EvalMetric[]`
+- `src/components/agentspace/CreateAgentWizard.tsx`: `runCompileChain` and `handleEvalRegenerate` build `additionalContext` from `compileResult.spec.session_context` (agent_role, participant_role, session_objective, communication_style, session_duration_minutes) and pass it as `additional` to `generateEvaluationCriteria`
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: same `additionalContext` enrichment in `handleQuestionsContinue` and `handleEvalRegenerate`
+- `src/components/agentspace/wizard/EvaluationStep.tsx`: full rewrite — `editedMetrics` state is now `EvalMetric[]`; added `isLegacyMetrics` and `toEvalMetrics` helpers for backward compat; removed synchronous `setIdx(0)` from `MorphingText` useEffect; 4-field metric cards per metric (name input + definition textarea + strong/weak side-by-side textareas); legacy notice shown when old string[] format detected; `canContinue` requires all 4 metrics to have non-empty `name`
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: added `EvalMetric` import; `editedMetrics` state changed to `EvalMetric[]` with `isLegacyMetrics` backward-compat init; `handleRecompileEval` casts result to `EvalMetric[]`; `handleSaveMetrics` filters on `m.name.trim()`; metrics display section replaced with 4-field card layout
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: full `EvalMetric` migration — `editedMetrics` state, `handleRecompileEval`, `handleSaveMetrics`, and metrics display section all updated to 4-field cards; fixed 422 error caused by mismatched `string[]` state type sending `[object Object]` strings to the API
+
+---
+
+## [69] wizard-test-step-and-bug-fixes — 2026-04-25
+
+**Why:** Three dead-code TypeScript errors in `CreateAgentWizard.tsx` — unused `COMPILE_PHASES` constant, unused `MorphingStepText` function, and unreferenced `saveDone` state — caused `noUnusedLocals` compile failures. An ESLint `react-hooks/set-state-in-effect` violation in `CreateQnAAgentWizard.tsx` from a synchronous `setIdx(0)` call inside a `useEffect`. Additionally, the test step "Continue" button allowed skipping to deploy even when a voice session was actively running, so users could bypass the session without naturally concluding it.
+
+**What:** Removed the three unused identifiers from the general wizard. Removed the `setIdx(0)` call from `MorphingStepText`'s useEffect in the QnA wizard (idx already initializes to 0 from `useState(0)`). Wired session phase state into the test step: `MiniTestSession` now lifts phase via `onPhaseChange` and accepts a `shouldEnd` prop for imperative termination; the wizard tracks `testPhase`; clicking Continue when the session is active triggers `shouldEnd` and shows "End & continue" instead of navigating immediately; `canContinue` blocks during `reporting` and `connecting` phases.
+
+**Changes:**
+- `src/components/agentspace/CreateAgentWizard.tsx`: removed `COMPILE_PHASES`, `MorphingStepText`, `saveDone` state and all `setSaveDone` references; added `testPhase`/`shouldEndTest` states; added `handleTestPhaseChange` (resets `shouldEndTest` on idle/ended/error); updated `handleTestContinue` to set `shouldEndTest(true)` and return early when phase is active or connecting; updated `canContinue` to block during reporting/connecting; button label shows "End & continue" when session is active; added `onPhaseChange`/`shouldEnd` to `TestStepContent` props interface
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: removed synchronous `setIdx(0)` from `MorphingStepText` useEffect; added same `testPhase`/`shouldEndTest` pattern as general wizard; updated `QnATestStepContent` with `onPhaseChange`/`shouldEnd` props
+- `src/components/agentspace/wizard/MiniTestSession.tsx`: added `SessionPhase` import from `useAgentSession`; added `onPhaseChange?: (phase: SessionPhase | 'idle') => void` and `shouldEnd?: boolean` to `MiniTestSessionProps`; two new `useEffect`s in `MiniTestSessionActive` — one fires `onPhaseChange(phase)` on phase change, one calls `endSession()` when `shouldEnd && phase === 'active'`; parent `MiniTestSession` fires `onPhaseChange('idle')` while session not yet started
+
+---
+
+## [68] agent-creation-v3-config-first — 2026-04-24
+
+**Why:** Three compounding problems with the v2 wizard: (1) the 8-step cramped modal had 4 progress dots that hid complexity, tiny suggestion chips, and inconsistent layout density — poor UX for a creation flow users spend real time in; (2) the DB only stored compiled outputs (`agent_prompt`, `transcript_evaluation_metrics`) and discarded the original user inputs, so post-creation editing exposed raw AI-generated JSONB rather than the user's intent; (3) there was no way to update session design and re-run just the agent compile, or update eval inputs and re-run just the metrics independently.
+
+**What:** Full redesign of the agent creation wizard and configure views. The wizard is now a full-screen sidebar-nav layout (6 steps for general, 7 for QnA) with inline loading (no separate loading/review steps). Original user inputs are now persisted in two new DB-backed fields (`session_design_config`, `eval_config`) and the configure views let users edit those inputs and regenerate each section independently via dedicated backend endpoints. Two new API functions (`recompileSession`, `recompileEval`) back the regenerate buttons. Four obsolete wizard step files deleted.
+
+**Changes:**
+- `src/lib/api.ts`: added `EvalConfig` interface; added `session_design_config` and `eval_config` to `Agent` interface; added both fields to `saveAgent`, `saveQnAAgent`, `updateAgent` payload types; added `recompileSession(token, agentId, sessionDesign)` and `recompileEval(token, agentId, { session_brief, eval_config })` functions
+- `src/components/agentspace/CreateAgentWizard.tsx`: full rewrite — fixed-inset full-screen overlay with `w-56` left sidebar nav, step status tracking (`upcoming | current | done | loading`), `MorphingStepText` component (AnimatePresence crossfade at 1900ms), 6-step flow (`templates → session-design → voice-language → review-compile → evaluation → deploy`), compile fires immediately on session-design → voice-language transition, deploy step saves with all four fields, `session_design_config` and `eval_config` forwarded to `AgentConfigureView`
+- `src/components/agentspace/wizard/SessionDesignStep.tsx`: full rewrite — two-column layout (`grid-cols-1 md:grid-cols-[1fr_360px]`), labels `text-sm font-medium text-gray-700`, textareas `text-base`, suggestion chips `text-sm px-3 py-1.5 rounded-full`, right column shows sticky live preview card + completion checklist, `initialValues` prop replaces `defaultAgentName`, `useEffect` re-applies initialValues when prop changes (template selection)
+- `src/components/agentspace/wizard/EvaluationStep.tsx`: full rewrite — two-column layout (`grid-cols-1 md:grid-cols-2`), left column has mode selector + custom fields + Generate button (spinner while loading), right column shows empty/loading/populated states inline, local `MorphingText` component cycles eval phases, `synced` flag prevents overwriting user edits after result arrives
+- `src/components/agentspace/wizard/LanguageVoiceSelector.tsx`: minor update — content padding `px-6` → `px-8`, language grid `grid-cols-2 sm:grid-cols-3 md:grid-cols-4` with `gap-3`, card padding `p-3` → `p-4`, language key badge `text-[10px]` → `text-xs`, display name `text-xs` → `text-sm`
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: full rewrite — removed all raw prompt editing sub-components; session tab now shows Names card + session config form (7 fields) + dismissible amber stale strip + Regenerate Agent button; eval tab shows eval config form + Regenerate Eval button + editable current metrics; `recompileSession` and `recompileEval` backed by new API functions; falls back to `spec.session_context` for old agents without stored config
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: full rewrite mirroring general wizard structure — 7-step sidebar nav (`templates → session-design → voice-language → review-compile → evaluation → questions → deploy`), inline `QnATemplatesContent`, `QnAReviewCompileContent`, `QnADeployContent` sub-components, compile + question generation fire in parallel after session design, saves `session_design_config` and `eval_config` on deploy
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: full rewrite — profile tab replaces raw editing with QnA session config form (includes `feedback_mode` selector) + Regenerate Agent button + stale strip; eval tab matches general configure view; questions tab unchanged; `buildSessionDesignRequest()` constructs full `QnASessionDesignRequest` including `feedback_mode`, `resource_text`, `resource_images`
+- `src/pages/AgentSpace.tsx`: passes `sessionDesignConfig` and `evalConfig` from agent row to `AgentConfigureView`
+- Deleted: `src/components/agentspace/wizard/AgentReviewStep.tsx`, `CompileLoadingStep.tsx`, `EvalLoadingStep.tsx`, `EvalReviewStep.tsx`
+
+---
+
 ## [67] agent-name-pipeline-audit — 2026-04-23
 
 **Why:** Three places in the live session flow were still using the wrong identity value after the v2 redesign: (1) `AgentPublicConfig` had a `persona_name` field that was being populated by the backend with the raw TTS voice ID (e.g. "ashley"), and `AgentLive.tsx` preferred it over `agent_name`, so the active session labelled the agent with the voice ID; (2) `api.ts` declared `persona_name` as part of the public config interface.

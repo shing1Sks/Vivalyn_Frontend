@@ -369,6 +369,14 @@ export interface EvalInputs {
   additional?: string;
 }
 
+export interface EvalConfig {
+  mode: 'auto' | 'custom';
+  competency?: string | null;
+  strong_performance?: string | null;
+  weak_performance?: string | null;
+  additional?: string | null;
+}
+
 export interface AgentPromptSpec {
   session_context?: SessionContext;
   identity_and_persona: string;
@@ -378,9 +386,16 @@ export interface AgentPromptSpec {
 
 // ── Evaluation ────────────────────────────────────────────────────────────────
 
+export interface EvalMetric {
+  name: string;
+  definition: string;
+  strong: string;
+  weak: string;
+}
+
 export interface EvaluationMetrics {
   report_curator_prompt: string;
-  metrics: string[]; // exactly 4
+  metrics: EvalMetric[]; // exactly 4
 }
 
 export interface EvaluationReport {
@@ -494,6 +509,8 @@ export interface Agent {
   agent_first_speaker: string;
   transcript_evaluation_metrics?: EvaluationMetrics | null;
   agent_type: "general" | "qna";
+  session_design_config?: SessionDesignRequest | null;
+  eval_config?: EvalConfig | null;
 }
 
 // ── QnA Types ─────────────────────────────────────────────────────────────────
@@ -529,6 +546,8 @@ export async function saveAgent(
     agent_voice: string;
     agent_first_speaker?: string;
     transcript_evaluation_metrics?: EvaluationMetrics;
+    session_design_config?: SessionDesignRequest;
+    eval_config?: EvalConfig;
   },
 ): Promise<Agent> {
   const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/agents`, {
@@ -578,6 +597,8 @@ export async function updateAgent(
     agent_voice?: string;
     agent_first_speaker?: string;
     transcript_evaluation_metrics?: EvaluationMetrics | null;
+    session_design_config?: SessionDesignRequest | null;
+    eval_config?: EvalConfig | null;
   },
 ): Promise<Agent> {
   const res = await fetch(`${BASE}/api/v1/agents/${agentId}`, {
@@ -623,6 +644,52 @@ export async function toggleAgentStatus(
     const err = await res.json().catch(() => ({}));
     throw new ApiError(
       (err as { detail?: string }).detail ?? "Failed to update status",
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export async function recompileSession(
+  accessToken: string,
+  agentId: string,
+  sessionDesign: SessionDesignRequest,
+): Promise<Agent> {
+  const res = await fetch(`${BASE}/api/v1/agents/${agentId}/recompile-session`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ session_design: sessionDesign }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (err as { detail?: string }).detail ?? "Failed to recompile agent",
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export async function recompileEval(
+  accessToken: string,
+  agentId: string,
+  payload: { session_brief: string; eval_config: EvalConfig },
+): Promise<Agent> {
+  const res = await fetch(`${BASE}/api/v1/agents/${agentId}/recompile-eval`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (err as { detail?: string }).detail ?? "Failed to recompile eval",
       res.status,
     );
   }
@@ -686,6 +753,8 @@ export async function saveQnAAgent(
     agent_voice: string;
     agent_first_speaker?: string;
     transcript_evaluation_metrics?: EvaluationMetrics;
+    session_design_config?: QnASessionDesignRequest;
+    eval_config?: EvalConfig;
   },
 ): Promise<Agent> {
   const res = await fetch(`${BASE}/api/v1/agentspaces/${agentspaceId}/qna-agents`, {

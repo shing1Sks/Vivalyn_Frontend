@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, ArrowLeft, Check, CheckCircle, Copy, Link2, Loader2, MessageSquare, Settings2, ToggleLeft, ToggleRight, X } from 'lucide-react'
+import {
+  AlertTriangle, Check, ChevronRight, Clock, Copy,
+  Link2, Loader2, MessageSquare, Settings2, ToggleLeft, ToggleRight, X,
+} from 'lucide-react'
 import { useAuth } from '../../../context/AuthContext'
 import {
   ApiError,
@@ -11,41 +14,78 @@ import {
   toggleAgentStatus,
   updateAgent,
   type Agent,
-  type EvalInputs,
   type EvaluationMetrics,
   type QnACompileResponse,
   type QnAPromptSpec,
   type QnAQuestionBank,
   type QnASessionDesignRequest,
 } from '../../../lib/api'
+import { QNA_TEMPLATES, type QnAAgentTemplate } from '../../../lib/agentTemplates'
 import LanguageVoiceSelector from './LanguageVoiceSelector'
 import QnASessionDesignStep from './QnASessionDesignStep'
 import EvaluationStep from './EvaluationStep'
 import QnAQuestionReview from './QnAQuestionReview'
 import QnAConfigureView from './QnAConfigureView'
+import MiniTestSession from './MiniTestSession'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type QnAWizardStep =
-  | 'language-voice'
+  | 'templates'
+  | 'voice-language'
   | 'session-design'
+  | 'questions'
   | 'evaluation'
-  | 'question-review'
-  | 'done'
+  | 'test'
+  | 'deploy'
   | 'configure'
 
-type SavePhase = 'idle' | 'compile' | 'metrics' | 'save' | 'done'
+const NAV_STEPS: { key: QnAWizardStep; label: string }[] = [
+  { key: 'templates',      label: 'Templates' },
+  { key: 'voice-language', label: 'Voice & Language' },
+  { key: 'session-design', label: 'Session Design' },
+  { key: 'questions',      label: 'Questions' },
+  { key: 'evaluation',     label: 'Evaluation' },
+  { key: 'test',           label: 'Test' },
+  { key: 'deploy',         label: 'Deploy' },
+]
 
-function stepStatus(current: SavePhase, target: 'compile' | 'metrics' | 'save'): 'pending' | 'running' | 'done' {
-  const order: SavePhase[] = ['compile', 'metrics', 'save', 'done']
-  const ci = order.indexOf(current)
-  const ti = order.indexOf(target)
-  return ci > ti ? 'done' : ci === ti ? 'running' : 'pending'
+const COMPILE_PHASES = [
+  'Analyzing your session design…',
+  'Building agent persona…',
+  'Writing behavior rules…',
+  'Generating questions…',
+  'Finalizing agent prompt…',
+]
+
+// ── MorphingStepText ──────────────────────────────────────────────────────────
+
+function MorphingStepText({ phases, active }: { phases: string[]; active: boolean }) {
+  const [idx, setIdx] = useState(0)
+
+  useEffect(() => {
+    if (!active) return
+    const interval = setInterval(() => {
+      setIdx(i => (i + 1) % phases.length)
+    }, 1900)
+    return () => clearInterval(interval)
+  }, [active, phases.length])
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.span
+        key={idx}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.25 }}
+        className="text-sm text-gray-500"
+      >
+        {phases[idx]}
+      </motion.span>
+    </AnimatePresence>
+  )
 }
-
-const STEP_DOTS: QnAWizardStep[] = ['language-voice', 'session-design', 'evaluation', 'done']
-
-const PLACEHOLDER_BANK: QnAQuestionBank = { fixed: [], randomized_pool: [], randomized_count: 0 }
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 
@@ -60,217 +100,250 @@ interface Props {
 export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Props) {
   const { session } = useAuth()
 
-  // ── Wizard state ────────────────────────────────────────────────────────────
-  const [step, setStep] = useState<QnAWizardStep>('language-voice')
-  const [selectedLanguage, setSelectedLanguage] = useState('')
-  const [selectedVoiceName, setSelectedVoiceName] = useState('')
+  const [step, setStep] = useState<QnAWizardStep>('templates')
+  const [completedSteps, setCompletedSteps] = useState<Set<QnAWizardStep>>(new Set())
 
+  const [selectedTemplate, setSelectedTemplate] = useState<QnAAgentTemplate | null>(null)
   const [sessionDesign, setSessionDesign] = useState<QnASessionDesignRequest | null>(null)
-  const [compileStatus, setCompileStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-
+  const [compileResult, setCompileResult] = useState<QnACompileResponse | null>(null)
   const [generatedQuestions, setGeneratedQuestions] = useState<Array<{ text: string; type: 'fixed' | 'randomized'; cross_question_enabled: boolean }>>([])
-  const [questionsReady, setQuestionsReady] = useState(false)
-  const [questionsError, setQuestionsError] = useState<string | null>(null)
-
+  const [evalResult, setEvalResult] = useState<EvaluationMetrics | null>(null)
   const [savedAgent, setSavedAgent] = useState<Agent | null>(null)
 
-  const [savePhase, setSavePhase] = useState<SavePhase>('idle')
+  const [pendingSessionDesign, setPendingSessionDesign] = useState<QnASessionDesignRequest | null>(null)
+  const [pendingLangVoice, setPendingLangVoice] = useState<{ lang: string; pref: string; voiceName: string } | null>(null)
+  const [pendingEvalResult, setPendingEvalResult] = useState<EvaluationMetrics | null>(null)
+  const [pendingBank, setPendingBank] = useState<QnAQuestionBank | null>(null)
+
+  const [compileLoading, setCompileLoading] = useState(false)
+  const [compileError, setCompileError] = useState<string | null>(null)
+  const [evalLoading, setEvalLoading] = useState(false)
+  const [saveLoading, setSaveLoading] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
+  const [testPhase, setTestPhase] = useState<string>('idle')
+  const [shouldEndTest, setShouldEndTest] = useState(false)
+
   const [error, setError] = useState<string | null>(null)
   const [isSubscriptionError, setIsSubscriptionError] = useState(false)
 
-  // Background promises — both fire on session design submit
-  const bgCompileRef = useRef<Promise<QnACompileResponse | null>>(Promise.resolve(null))
-  const bgQuestionsRef = useRef<Promise<Array<{ text: string; type: 'fixed' | 'randomized'; cross_question_enabled: boolean }> | null>>(Promise.resolve(null))
-  // Stores eval inputs from eval step, used when question review confirms
-  const evalCriteriaRef = useRef<EvalInputs | null>(null)
-  // Stores design for retry
-  const compileContextRef = useRef<QnASessionDesignRequest | null>(null)
-
-  // Reset on open
   useEffect(() => {
     if (open) {
-      setStep('language-voice')
-      setSelectedLanguage('')
-      setSelectedVoiceName('')
+      setStep('templates')
+      setCompletedSteps(new Set())
+      setSelectedTemplate(null)
       setSessionDesign(null)
-      setCompileStatus('idle')
+      setCompileResult(null)
       setGeneratedQuestions([])
-      setQuestionsReady(false)
-      setQuestionsError(null)
+      setEvalResult(null)
       setSavedAgent(null)
-      setSavePhase('idle')
+      setPendingSessionDesign(null)
+      setPendingLangVoice(null)
+      setPendingEvalResult(null)
+      setPendingBank(null)
+      setCompileLoading(false)
+      setCompileError(null)
+      setEvalLoading(false)
+      setSaveLoading(false)
+      setRegenerating(false)
+      setTestPhase('idle')
+      setShouldEndTest(false)
       setError(null)
       setIsSubscriptionError(false)
-      bgCompileRef.current = Promise.resolve(null)
-      bgQuestionsRef.current = Promise.resolve(null)
-      evalCriteriaRef.current = null
-      compileContextRef.current = null
     }
   }, [open])
 
-  // ── Background helpers ──────────────────────────────────────────────────────
-
-  const startBackgroundCompile = useCallback((design: QnASessionDesignRequest) => {
-    if (!session) return
-    compileContextRef.current = design
-    setCompileStatus('running')
-    bgCompileRef.current = (async (): Promise<QnACompileResponse | null> => {
-      try {
-        const result = await compileQnAAgent(session.access_token, { session_design: design })
-        // Attach placeholder bank so spec type matches QnAPromptSpec
-        const spec: QnAPromptSpec = { ...result.spec, question_bank: PLACEHOLDER_BANK }
-        setCompileStatus('done')
-        return { spec, agent_display_label: result.agent_display_label }
-      } catch {
-        setCompileStatus('error')
-        return null
-      }
-    })()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session])
-
-  function handleRetryCompile() {
-    if (!compileContextRef.current) return
-    startBackgroundCompile(compileContextRef.current)
+  function markDone(s: QnAWizardStep) {
+    setCompletedSteps(prev => new Set([...prev, s]))
   }
 
-  const startBackgroundQuestions = useCallback((design: QnASessionDesignRequest) => {
-    if (!session) return
-    bgQuestionsRef.current = (async () => {
-      try {
-        const result = await generateQnAQuestions(session.access_token, {
-          context: design.session_objective,
-          resource_text: design.resource_text || undefined,
-          resource_images: (design.resource_images && design.resource_images.length > 0) ? design.resource_images : undefined,
-        })
-        setGeneratedQuestions(result.questions)
-        setQuestionsReady(true)
-        return result.questions
-      } catch (e: unknown) {
-        setQuestionsError(e instanceof Error ? e.message : 'Failed to generate questions.')
-        return null
-      }
-    })()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session])
+  function getStepStatus(s: QnAWizardStep): 'upcoming' | 'current' | 'done' | 'loading' {
+    if (step === s) {
+      if (s === 'evaluation' && (evalLoading || regenerating)) return 'loading'
+      if (s === 'test' && saveLoading) return 'loading'
+      return 'current'
+    }
+    if (completedSteps.has(s)) return 'done'
+    return 'upcoming'
+  }
 
-  // ── Step handlers ────────────────────────────────────────────────────────────
+  // ── Step handlers ───────────────────────────────────────────────────────────
 
-  function handleLanguageVoiceContinue(lang: string, _pref: string, voiceName: string) {
-    setSelectedLanguage(lang)
-    setSelectedVoiceName(voiceName)
+  function handleTemplateSelect(t: QnAAgentTemplate) {
+    setSelectedTemplate(t)
+    markDone('templates')
+    setStep('voice-language')
+  }
+
+  function handleStartBlank() {
+    setSelectedTemplate(null)
+    markDone('templates')
+    setStep('voice-language')
+  }
+
+  function handleLanguageVoiceContinue() {
+    if (!pendingLangVoice) return
+    markDone('voice-language')
     setStep('session-design')
   }
 
-  const handleSessionDesignContinue = useCallback((design: QnASessionDesignRequest) => {
-    setSessionDesign(design)
-    setError(null)
-    setQuestionsError(null)
-    startBackgroundCompile(design)
-    startBackgroundQuestions(design)
-    setStep('evaluation')
-  }, [startBackgroundCompile, startBackgroundQuestions])
-
-  // Eval step: store criteria and move to question review
-  const handleEvalSubmit = useCallback((inputs: EvalInputs) => {
-    evalCriteriaRef.current = inputs
-    setStep('question-review')
-  }, [])
-
-  // Question review: confirmed bank → full save pipeline
-  const handleQuestionBankReady = useCallback(async (bank: QnAQuestionBank) => {
-    if (!session || !sessionDesign) return
-
-    setStep('done')
-    setSavePhase('compile')
-    setError(null)
-    setIsSubscriptionError(false)
-
-    // Await background compile — should be done by now
-    let compileResult = await bgCompileRef.current
-    if (!compileResult) {
-      const ctx = compileContextRef.current
-      if (ctx) {
-        startBackgroundCompile(ctx)
-        compileResult = await bgCompileRef.current
-      }
-      if (!compileResult) {
-        setError('Agent compilation failed. Please try again.')
-        setStep('question-review')
-        setSavePhase('idle')
-        return
-      }
-    }
-
-    // Patch confirmed question bank into compiled spec
-    let spec: QnAPromptSpec = { ...compileResult.spec, question_bank: bank }
-
-    setSavePhase('metrics')
-    const evalInputs = evalCriteriaRef.current
-    if (!evalInputs) {
-      setError('Evaluation criteria missing. Please go back and fill them in.')
-      setStep('question-review')
-      setSavePhase('idle')
-      return
-    }
-
-    let metrics: EvaluationMetrics
-    try {
-      metrics = await generateEvaluationCriteria(session.access_token, {
-        session_brief: spec.session_context?.session_brief ?? '',
-        ...evalInputs,
+  function runCompileAndQuestions(design: QnASessionDesignRequest) {
+    setCompileLoading(true)
+    setCompileError(null)
+    setCompileResult(null)
+    setGeneratedQuestions([])
+    setPendingBank(null)
+    Promise.all([
+      compileQnAAgent(session!.access_token, { session_design: design }),
+      generateQnAQuestions(session!.access_token, {
+        context: design.session_objective,
+        resource_text: design.resource_text || undefined,
+        resource_images: design.resource_images?.length ? design.resource_images : undefined,
+      }).then(r => r.questions),
+    ])
+      .then(([compileRes, questions]) => {
+        setCompileResult(compileRes)
+        setGeneratedQuestions(questions)
+        setCompileLoading(false)
       })
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to generate evaluation criteria.')
-      setStep('question-review')
-      setSavePhase('idle')
-      return
-    }
-
-    setSavePhase('save')
-    try {
-      const agent = await saveQnAAgent(session.access_token, agentspaceId, {
-        agent_name: sessionDesign.agent_name,
-        agent_display_label: compileResult.agent_display_label || undefined,
-        agent_prompt: spec,
-        agent_language: selectedLanguage,
-        agent_voice: selectedVoiceName,
-        transcript_evaluation_metrics: metrics,
+      .catch(() => {
+        setCompileError('Compilation failed. Please try again.')
+        setCompileLoading(false)
       })
-      setSavedAgent(agent)
-      setSavePhase('done')
-    } catch (e: unknown) {
-      if (e instanceof ApiError && e.status === 403) {
-        setIsSubscriptionError(true)
-        setError('Your plan has expired. Renew to continue creating agents.')
-      } else {
-        setIsSubscriptionError(false)
-        setError(e instanceof Error ? e.message : 'Failed to save agent. Please try again.')
-      }
-      setStep('question-review')
-      setSavePhase('idle')
-    }
-  }, [session, agentspaceId, selectedLanguage, selectedVoiceName, sessionDesign, startBackgroundCompile])
-
-  function handleBack() {
-    if (step === 'session-design') setStep('language-voice')
-    else if (step === 'evaluation') setStep('session-design')
-    else if (step === 'question-review') setStep('evaluation')
-    else if (step === 'configure') setStep('done')
   }
 
-  const canGoBack = ['session-design', 'evaluation', 'question-review', 'configure'].includes(step)
+  function handleSessionDesignContinue() {
+    if (!pendingSessionDesign || !session) return
+    const design = pendingSessionDesign
+
+    // Non-regressive: skip recompile if session design hasn't changed
+    const designUnchanged =
+      sessionDesign !== null &&
+      JSON.stringify(design) === JSON.stringify(sessionDesign) &&
+      compileResult !== null
+
+    setSessionDesign(design)
+    markDone('session-design')
+    setStep('questions')
+
+    if (designUnchanged) return
+
+    // New or changed design — reset downstream and recompile
+    setEvalResult(null)
+    setPendingEvalResult(null)
+    setSavedAgent(null)
+    runCompileAndQuestions(design)
+  }
+
+  function handleRetryCompile() {
+    if (!session || !sessionDesign) return
+    runCompileAndQuestions(sessionDesign)
+  }
+
+  function handleQuestionsContinue() {
+    if (!pendingBank || !compileResult || !session || !sessionDesign) return
+
+    const bank = pendingBank
+    markDone('questions')
+    setStep('evaluation')
+
+    // If already saved (user went back and changed questions), just update the bank
+    if (savedAgent) {
+      const spec: QnAPromptSpec = { ...compileResult.spec, question_bank: bank }
+      updateAgent(session.access_token, savedAgent.id, { agent_prompt: spec }).catch(() => {})
+      return
+    }
+
+    // First time — trigger eval → save chain
+    setEvalLoading(true)
+    const ctx = compileResult.spec.session_context
+    const sessionBrief = ctx?.session_brief ?? ''
+    const additionalContext = ctx
+      ? [`Agent role: ${ctx.agent_role}`, `Participant: ${ctx.participant_role}`, `Objective: ${ctx.session_objective}`, `Style: ${ctx.communication_style}`, `Duration: ${ctx.session_duration_minutes} min`].join('\n')
+      : ''
+    generateEvaluationCriteria(session.access_token, {
+      session_brief: sessionBrief,
+      competency: '', strong_performance: '', weak_performance: '', additional: additionalContext,
+    })
+      .then(async metrics => {
+        setEvalResult(metrics)
+        setPendingEvalResult(metrics)
+        setEvalLoading(false)
+        setSaveLoading(true)
+        const spec: QnAPromptSpec = { ...compileResult.spec, question_bank: bank }
+        try {
+          const agent = await saveQnAAgent(session.access_token, agentspaceId, {
+            agent_name: sessionDesign.agent_name,
+            agent_display_label: compileResult.agent_display_label || undefined,
+            agent_prompt: spec,
+            agent_language: pendingLangVoice?.lang ?? '',
+            agent_voice: pendingLangVoice?.voiceName ?? '',
+            transcript_evaluation_metrics: metrics,
+            session_design_config: sessionDesign,
+            eval_config: { mode: 'auto' },
+          })
+          setSavedAgent(agent)
+        } catch (e: unknown) {
+          if (e instanceof ApiError && e.status === 403) {
+            setIsSubscriptionError(true)
+            setError('Your plan has expired. Renew to continue creating agents.')
+          } else {
+            setError(e instanceof Error ? e.message : 'Failed to save agent. Please try again.')
+          }
+        } finally {
+          setSaveLoading(false)
+        }
+      })
+      .catch(() => setEvalLoading(false))
+  }
+
+  async function handleEvalContinue() {
+    if (!pendingEvalResult || !session) return
+    markDone('evaluation')
+    setStep('test')
+    if (savedAgent) {
+      try {
+        await updateAgent(session.access_token, savedAgent.id, {
+          transcript_evaluation_metrics: pendingEvalResult,
+          eval_config: { mode: 'auto' },
+        })
+      } catch { /* silent */ }
+    }
+  }
+
+  async function handleEvalRegenerate() {
+    if (!compileResult || !session) return
+    setRegenerating(true)
+    const ctx = compileResult.spec.session_context
+    const sessionBrief = ctx?.session_brief ?? ''
+    const additionalContext = ctx
+      ? [`Agent role: ${ctx.agent_role}`, `Participant: ${ctx.participant_role}`, `Objective: ${ctx.session_objective}`, `Style: ${ctx.communication_style}`, `Duration: ${ctx.session_duration_minutes} min`].join('\n')
+      : ''
+    try {
+      const metrics = await generateEvaluationCriteria(session.access_token, {
+        session_brief: sessionBrief,
+        competency: '', strong_performance: '', weak_performance: '', additional: additionalContext,
+      })
+      setEvalResult(metrics)
+      setPendingEvalResult(metrics)
+    } catch { /* silent */ }
+    finally { setRegenerating(false) }
+  }
+
+  function handleTestPhaseChange(phase: string) {
+    setTestPhase(phase)
+    if (phase === 'idle' || phase === 'ended' || phase === 'error') setShouldEndTest(false)
+  }
+
+  function handleTestContinue() {
+    if (testPhase === 'active' || testPhase === 'connecting') {
+      setShouldEndTest(true)
+      return
+    }
+    markDone('test')
+    setStep('deploy')
+  }
 
   if (!open) return null
-
-  const dotStepIdx =
-    step === 'configure' || (step === 'done' && savePhase === 'done')
-      ? STEP_DOTS.length
-      : step === 'question-review' || step === 'done'
-        ? STEP_DOTS.length - 1
-        : STEP_DOTS.indexOf(step as typeof STEP_DOTS[number])
-
-  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <AnimatePresence>
@@ -280,148 +353,231 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-50 bg-white flex flex-col"
+          className="fixed inset-0 z-50 bg-white flex"
         >
-          {/* Header bar */}
-          <div className="h-14 border-b border-gray-100 flex items-center px-6 gap-4 flex-shrink-0">
-            <div className="w-24 flex-shrink-0">
-              {canGoBack && (
-                <button
-                  onClick={handleBack}
-                  className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 duration-[120ms]"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  Back
-                </button>
-              )}
+          {/* ── Sidebar nav ─────────────────────────────────────────────── */}
+          <aside className="hidden md:flex w-56 shrink-0 border-r border-gray-100 bg-gray-50 flex-col">
+            <div className="px-5 py-5 border-b border-gray-100">
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">New QnA Agent</span>
             </div>
-
-            <div className="flex-1 flex justify-center items-center gap-3">
-              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-indigo-500 bg-indigo-50 rounded-full px-2.5 py-1">
-                QnA Agent
-              </span>
-              <div className="flex gap-2">
-                {STEP_DOTS.map((s, i) => {
-                  const isPast = dotStepIdx > i
-                  const isActive = dotStepIdx === i
-                  return (
-                    <div
-                      key={s}
-                      className={`w-2 h-2 rounded-full duration-[120ms] ${
-                        isPast ? 'bg-indigo-600' :
-                        isActive ? 'bg-indigo-400' :
-                        'bg-gray-200'
-                      }`}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="w-24 flex-shrink-0 flex justify-end">
+            <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
+              {NAV_STEPS.map((s, i) => {
+                const status = getStepStatus(s.key)
+                const isClickable = status === 'done' && !compileLoading && !evalLoading && !saveLoading
+                return (
+                  <button
+                    key={s.key}
+                    onClick={() => { if (isClickable) setStep(s.key) }}
+                    disabled={status === 'upcoming'}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left duration-[120ms] border ${
+                      status === 'current'
+                        ? 'bg-white border-gray-200 shadow-sm'
+                        : isClickable
+                        ? 'border-transparent hover:bg-white hover:border-gray-200 cursor-pointer'
+                        : 'border-transparent cursor-default'
+                    }`}
+                  >
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                      status === 'done'     ? 'bg-indigo-600'
+                      : status === 'loading'  ? 'bg-indigo-50 border border-indigo-200'
+                      : status === 'current'  ? 'bg-indigo-50 border-2 border-indigo-600'
+                      : 'bg-gray-100'
+                    }`}>
+                      {status === 'done'    && <Check className="w-2.5 h-2.5 text-white" />}
+                      {status === 'loading' && <Loader2 className="w-2.5 h-2.5 text-indigo-600 animate-spin" />}
+                      {(status === 'current' || status === 'upcoming') && (
+                        <span className={`text-[9px] font-bold ${status === 'current' ? 'text-indigo-600' : 'text-gray-400'}`}>
+                          {i + 1}
+                        </span>
+                      )}
+                    </span>
+                    <span className={`text-xs font-medium ${
+                      status === 'current'   ? 'text-gray-900'
+                      : status === 'done'    ? 'text-gray-600'
+                      : status === 'loading' ? 'text-gray-700'
+                      : 'text-gray-400'
+                    }`}>
+                      {s.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </nav>
+            <div className="px-4 py-4 border-t border-gray-100">
               <button
                 onClick={onClose}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 duration-[120ms]"
+                className="w-full flex items-center gap-2 text-xs text-gray-400 hover:text-gray-700 duration-[120ms] px-2 py-1.5 rounded-lg hover:bg-white"
               >
+                <X className="w-3.5 h-3.5" />
+                Cancel
+              </button>
+            </div>
+          </aside>
+
+          {/* ── Main content ─────────────────────────────────────────────── */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Mobile header */}
+            <div className="md:hidden h-12 border-b border-gray-100 flex items-center justify-between px-4 shrink-0">
+              <span className="text-sm font-medium text-gray-700">
+                {NAV_STEPS.find(s => s.key === step)?.label ?? 'New QnA Agent'}
+              </span>
+              <button onClick={onClose} className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 duration-[120ms]">
                 <X className="w-4 h-4" />
               </button>
             </div>
-          </div>
 
-          {/* Error banner */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ height: 0 }}
-                animate={{ height: 'auto' }}
-                exit={{ height: 0 }}
-                className={`overflow-hidden border-b ${isSubscriptionError ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}
-              >
-                <div className="px-6 py-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {isSubscriptionError && <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
-                    <p className={`text-sm ${isSubscriptionError ? 'text-amber-800' : 'text-red-700'}`}>
-                      {error}
-                      {isSubscriptionError && (
-                        <> <a href="mailto:hello@vivalyn.in?subject=Renew%20plan" className="font-medium underline">Contact us to renew.</a></>
-                      )}
-                    </p>
-                  </div>
-                  <button onClick={() => { setError(null); setIsSubscriptionError(false) }} className={isSubscriptionError ? 'text-amber-400 hover:text-amber-700' : 'text-red-400 hover:text-red-700'}>
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Main content */}
-          <div className="flex-1 overflow-hidden">
-            {step === 'language-voice' && (
-              <LanguageVoiceSelector onContinue={handleLanguageVoiceContinue} />
-            )}
-
-            {step === 'session-design' && (
-              <QnASessionDesignStep
-                language={selectedLanguage}
-                onContinue={handleSessionDesignContinue}
-              />
-            )}
-
-            {step === 'evaluation' && (
-              <EvaluationStep
-                agentName={sessionDesign?.agent_name ?? ''}
-                participantRole={sessionDesign?.participant_role ?? ''}
-                compileStatus={compileStatus === 'idle' ? 'running' : compileStatus}
-                onRetryCompile={handleRetryCompile}
-                onSubmit={handleEvalSubmit}
-              />
-            )}
-
-            {step === 'question-review' && !questionsError && questionsReady && (
-              <QnAQuestionReview
-                initialQuestions={generatedQuestions}
-                onContinue={handleQuestionBankReady}
-              />
-            )}
-
-            {step === 'question-review' && !questionsError && !questionsReady && (
-              <div className="flex flex-col items-center justify-center h-full gap-3">
-                <Loader2 className="w-7 h-7 text-indigo-400 animate-spin" />
-                <p className="text-sm text-gray-500">Generating your question bank...</p>
-              </div>
-            )}
-
-            {step === 'question-review' && questionsError && (
-              <div className="flex flex-col items-center justify-center h-full gap-3 px-6">
-                <p className="text-sm text-gray-700 font-medium text-center">{questionsError}</p>
-                <button
-                  onClick={() => {
-                    if (!sessionDesign) return
-                    setQuestionsError(null)
-                    startBackgroundQuestions(sessionDesign)
-                  }}
-                  className="text-sm text-indigo-600 hover:text-indigo-800 duration-[120ms]"
+            {/* Error banner */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ height: 0 }}
+                  animate={{ height: 'auto' }}
+                  exit={{ height: 0 }}
+                  className={`overflow-hidden border-b shrink-0 ${isSubscriptionError ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}
                 >
-                  Try again
-                </button>
+                  <div className="px-6 py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {isSubscriptionError && <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
+                      <p className={`text-sm ${isSubscriptionError ? 'text-amber-800' : 'text-red-700'}`}>
+                        {error}
+                        {isSubscriptionError && (
+                          <> <a href="mailto:hello@vivalyn.in?subject=Renew%20plan" className="font-medium underline">Contact us to renew.</a></>
+                        )}
+                      </p>
+                    </div>
+                    <button onClick={() => { setError(null); setIsSubscriptionError(false) }} className={isSubscriptionError ? 'text-amber-400 hover:text-amber-700' : 'text-red-400 hover:text-red-700'}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Step content */}
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="flex-1 overflow-y-auto">
+                {step === 'templates' && (
+                  <QnATemplatesContent onSelect={handleTemplateSelect} onStartBlank={handleStartBlank} />
+                )}
+
+                {step === 'voice-language' && (
+                  <LanguageVoiceSelector
+                    onSelectionChange={(l, p, v) => setPendingLangVoice({ lang: l, pref: p, voiceName: v })}
+                  />
+                )}
+
+                {step === 'session-design' && (
+                  <QnASessionDesignStep
+                    language={pendingLangVoice?.lang ?? ''}
+                    initialValues={selectedTemplate ? {
+                      agent_name: selectedTemplate.suggested_name,
+                      session_objective: selectedTemplate.session_objective,
+                      agent_role: selectedTemplate.agent_role,
+                      participant_role: selectedTemplate.participant_role,
+                      communication_style: selectedTemplate.style,
+                      session_duration_minutes: selectedTemplate.duration,
+                      feedback_mode: selectedTemplate.feedback_mode,
+                    } : undefined}
+                    onChange={setPendingSessionDesign}
+                  />
+                )}
+
+                {step === 'questions' && (
+                  <QnAQuestionsContent
+                    compileLoading={compileLoading}
+                    compileError={compileError}
+                    generatedQuestions={generatedQuestions}
+                    onBankChange={setPendingBank}
+                    onRetry={handleRetryCompile}
+                  />
+                )}
+
+                {step === 'evaluation' && (
+                  <EvaluationStep
+                    evalResult={evalResult}
+                    regenerating={regenerating}
+                    onResultChange={setPendingEvalResult}
+                    onRegenerate={handleEvalRegenerate}
+                  />
+                )}
+
+                {step === 'test' && (
+                  <QnATestStepContent
+                    evalLoading={evalLoading}
+                    saveLoading={saveLoading}
+                    savedAgent={savedAgent}
+                    agentName={sessionDesign?.agent_name ?? ''}
+                    token={session?.access_token ?? ''}
+                    email={session?.user.email ?? ''}
+                    name={session?.user.user_metadata?.full_name ?? session?.user.email ?? 'Test user'}
+                    onPhaseChange={handleTestPhaseChange}
+                    shouldEnd={shouldEndTest}
+                  />
+                )}
+
+                {step === 'deploy' && (
+                  <QnADeployContent
+                    savedAgent={savedAgent}
+                    agentName={sessionDesign?.agent_name ?? '…'}
+                    token={session?.access_token ?? ''}
+                    onConfigure={() => setStep('configure')}
+                    onClose={onClose}
+                  />
+                )}
+
+                {step === 'configure' && savedAgent && (
+                  <QnAConfigureView agent={savedAgent} />
+                )}
               </div>
-            )}
 
-            {step === 'done' && (
-              <DoneStep
-                savedAgent={savedAgent}
-                agentName={sessionDesign?.agent_name ?? '...'}
-                savePhase={savePhase}
-                token={session?.access_token ?? ''}
-                onConfigure={() => setStep('configure')}
-                onClose={onClose}
-              />
-            )}
-
-            {step === 'configure' && savedAgent && (
-              <QnAConfigureView agent={savedAgent} />
-            )}
+              {/* Sticky footer */}
+              {step !== 'templates' && step !== 'deploy' && step !== 'configure' && (() => {
+                const backStep: Partial<Record<QnAWizardStep, QnAWizardStep>> = {
+                  'voice-language': 'templates',
+                  'session-design': 'voice-language',
+                  'questions':      'session-design',
+                  'evaluation':     'questions',
+                  'test':           'evaluation',
+                }
+                const canContinue =
+                  step === 'voice-language'  ? pendingLangVoice !== null :
+                  step === 'session-design'  ? pendingSessionDesign !== null :
+                  step === 'questions'       ? (pendingBank !== null && !compileLoading && compileError === null) :
+                  step === 'evaluation'      ? (pendingEvalResult !== null && !evalLoading) :
+                  step === 'test'            ? (savedAgent !== null && testPhase !== 'reporting' && testPhase !== 'connecting') :
+                  false
+                function handleContinue() {
+                  if (step === 'voice-language') handleLanguageVoiceContinue()
+                  else if (step === 'session-design') handleSessionDesignContinue()
+                  else if (step === 'questions') handleQuestionsContinue()
+                  else if (step === 'evaluation') handleEvalContinue()
+                  else if (step === 'test') handleTestContinue()
+                }
+                return (
+                  <div className="shrink-0 border-t border-gray-100 bg-white px-6 py-4 flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => { const back = backStep[step]; if (back) setStep(back) }}
+                      className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:border-gray-300 duration-[120ms]"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleContinue}
+                      disabled={!canContinue || regenerating}
+                      className={`px-6 py-2 text-sm font-semibold rounded-lg duration-[120ms] ${
+                        canContinue && !regenerating
+                          ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {step === 'evaluation' ? 'Save & continue' :
+                       step === 'test' && testPhase === 'active' ? 'End & continue' :
+                       'Continue'}
+                    </button>
+                  </div>
+                )
+              })()}
+            </div>
           </div>
         </motion.div>
       )}
@@ -429,36 +585,228 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
   )
 }
 
-// ── Done step ──────────────────────────────────────────────────────────────────
+// ── Templates step ────────────────────────────────────────────────────────────
 
-interface DoneStepProps {
+const FEATURED_QNA = QNA_TEMPLATES.slice(0, 3)
+
+const QNA_CATEGORY_COLORS: Record<string, string> = {
+  academic: 'bg-violet-50 text-violet-700 border-violet-100',
+  professional: 'bg-sky-50 text-sky-700 border-sky-100',
+  language: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+}
+
+function QnATemplatesContent({
+  onSelect,
+  onStartBlank,
+}: {
+  onSelect: (t: QnAAgentTemplate) => void
+  onStartBlank: () => void
+}) {
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-12">
+      <div className="mb-8">
+        <span className="text-xs font-semibold uppercase tracking-wider text-indigo-500 bg-indigo-50 rounded-full px-2.5 py-1">
+          QnA Agent
+        </span>
+        <h1 className="text-2xl font-semibold text-gray-900 mt-3 mb-2">Start with a template</h1>
+        <p className="text-sm text-gray-500">Choose a template to pre-fill your session design, or start from scratch.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        {FEATURED_QNA.map(t => (
+          <button
+            key={t.id}
+            onClick={() => onSelect(t)}
+            className="text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 duration-[120ms] group"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <span className={`text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 ${QNA_CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                {t.category}
+              </span>
+              <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
+            </div>
+            <p className="text-base font-semibold text-gray-900 mb-1">{t.name}</p>
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <Clock className="w-3 h-3" />
+              <span>{t.duration} min · {t.style}</span>
+            </div>
+          </button>
+        ))}
+
+        <button
+          onClick={onStartBlank}
+          className="text-left border border-dashed border-gray-300 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/20 duration-[120ms] group flex flex-col justify-between"
+        >
+          <div className="flex items-start justify-between mb-3">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Custom</span>
+            <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-700 mb-1">Start from scratch</p>
+            <p className="text-xs text-gray-400">Fill in all session details manually.</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Questions step ────────────────────────────────────────────────────────────
+
+function QnAQuestionsContent({
+  compileLoading,
+  compileError,
+  generatedQuestions,
+  onBankChange,
+  onRetry,
+}: {
+  compileLoading: boolean
+  compileError: string | null
+  generatedQuestions: Array<{ text: string; type: 'fixed' | 'randomized'; cross_question_enabled: boolean }>
+  onBankChange: (bank: QnAQuestionBank | null) => void
+  onRetry: () => void
+}) {
+  if (compileLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 px-6 py-12">
+        <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+        <MorphingStepText phases={COMPILE_PHASES} active={compileLoading} />
+        <div className="w-64 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+          <motion.div
+            className="h-full bg-indigo-400 rounded-full"
+            initial={{ width: '5%' }}
+            animate={{ width: '85%' }}
+            transition={{ duration: 8, ease: 'easeInOut' }}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (compileError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 px-6 py-12">
+        <div className="w-full max-w-sm border border-red-200 bg-red-50 rounded-xl p-6 flex flex-col items-center gap-3 text-center">
+          <p className="text-sm text-red-700">{compileError}</p>
+          <button
+            onClick={onRetry}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms]"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <QnAQuestionReview
+      initialQuestions={generatedQuestions}
+      onBankChange={onBankChange}
+    />
+  )
+}
+
+// ── Test step ─────────────────────────────────────────────────────────────────
+
+function QnATestStepContent({
+  evalLoading,
+  saveLoading,
+  savedAgent,
+  agentName,
+  token,
+  email,
+  name,
+  onPhaseChange,
+  shouldEnd,
+}: {
+  evalLoading: boolean
+  saveLoading: boolean
   savedAgent: Agent | null
   agentName: string
-  savePhase: SavePhase
+  token: string
+  email: string
+  name: string
+  onPhaseChange: (phase: string) => void
+  shouldEnd: boolean
+}) {
+  const isLoading = evalLoading || saveLoading
+
+  return (
+    <div className="flex flex-col h-full">
+      <AnimatePresence>
+        {isLoading && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="shrink-0 overflow-hidden border-b border-gray-100 bg-gray-50"
+          >
+            <div className="px-6 py-2.5 flex items-center gap-3">
+              <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin shrink-0" />
+              <div className="flex items-center gap-2 text-xs">
+                <span className={evalLoading ? 'text-indigo-600 font-medium' : 'text-gray-400'}>
+                  Generating evaluation
+                </span>
+                <ChevronRight className="w-3 h-3 text-gray-300" />
+                <span className={saveLoading ? 'text-indigo-600 font-medium' : evalLoading ? 'text-gray-300' : 'text-gray-400'}>
+                  Saving
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="flex-1 min-h-0">
+        {!savedAgent ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+            <p className="text-sm text-gray-400">Preparing agent…</p>
+            {agentName && <p className="text-xs text-gray-300">{agentName}</p>}
+          </div>
+        ) : (
+          <MiniTestSession
+            agentId={savedAgent.id}
+            token={token}
+            email={email}
+            name={name}
+            agentFirstSpeaker={savedAgent.agent_first_speaker}
+            onPhaseChange={onPhaseChange}
+            shouldEnd={shouldEnd}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Deploy step ───────────────────────────────────────────────────────────────
+
+function QnADeployContent({
+  savedAgent,
+  agentName,
+  token,
+  onConfigure,
+  onClose,
+}: {
+  savedAgent: Agent | null
+  agentName: string
   token: string
   onConfigure: () => void
   onClose: () => void
-}
-
-function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClose }: DoneStepProps) {
+}) {
   const [isLive, setIsLive] = useState(savedAgent?.agent_status === 'live')
   const [toggling, setToggling] = useState(false)
   const [copiedLive, setCopiedLive] = useState(false)
   const [copiedTest, setCopiedTest] = useState(false)
   const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
-    (savedAgent?.agent_first_speaker as 'agent' | 'user') ?? 'agent'
+    (savedAgent?.agent_first_speaker as 'agent' | 'user') ?? 'agent',
   )
-
-  useEffect(() => {
-    if (savedAgent) {
-      setIsLive(savedAgent.agent_status === 'live')
-      setFirstSpeaker((savedAgent.agent_first_speaker as 'agent' | 'user') ?? 'agent')
-    }
-  }, [savedAgent])
 
   const liveUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}` : ''
   const testUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}?mode=test` : ''
-  const isReady = savePhase === 'done' && savedAgent !== null
 
   async function handleToggle() {
     if (toggling || !savedAgent) return
@@ -475,13 +823,8 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
   function copyLink(url: string, which: 'live' | 'test') {
     if (!url) return
     navigator.clipboard.writeText(url).then(() => {
-      if (which === 'live') {
-        setCopiedLive(true)
-        setTimeout(() => setCopiedLive(false), 2000)
-      } else {
-        setCopiedTest(true)
-        setTimeout(() => setCopiedTest(false), 2000)
-      }
+      if (which === 'live') { setCopiedLive(true); setTimeout(() => setCopiedLive(false), 2000) }
+      else { setCopiedTest(true); setTimeout(() => setCopiedTest(false), 2000) }
     })
   }
 
@@ -494,69 +837,27 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
   }
 
   const tileBase = 'border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 duration-[120ms] w-full text-left'
-  const tileActive = 'hover:border-indigo-300 hover:bg-indigo-50/50 cursor-pointer'
   const tileMuted = 'opacity-40 pointer-events-none'
 
   return (
     <div className="flex items-center justify-center h-full px-6">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        initial={{ opacity: 0, scale: 0.97, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
         className="w-full max-w-sm"
       >
-        <AnimatePresence>
-          {!isReady && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden mb-5"
-            >
-              <div className="flex flex-col gap-2.5">
-                {([
-                  ['compile', 'Compiling agent prompt'],
-                  ['metrics', 'Generating evaluation criteria'],
-                  ['save',    'Saving to your space'],
-                ] as const).map(([phase, label]) => {
-                  const s = stepStatus(savePhase, phase)
-                  return (
-                    <div key={phase} className="flex items-center gap-2.5 text-sm">
-                      {s === 'done'    && <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />}
-                      {s === 'running' && <Loader2 className="w-4 h-4 text-indigo-500 animate-spin shrink-0" />}
-                      {s === 'pending' && <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0" />}
-                      <span className={
-                        s === 'done'    ? 'text-gray-500' :
-                        s === 'running' ? 'text-gray-800 font-medium' :
-                        'text-gray-400'
-                      }>
-                        {label}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <div className="text-center mb-6">
-          <div className={`w-14 h-14 rounded-full border-2 flex items-center justify-center mx-auto mb-4 duration-[120ms] ${
-            isReady ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
-          }`}>
-            {isReady
-              ? <Check className="w-7 h-7 text-emerald-500" />
-              : <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
-            }
+          <div className="w-14 h-14 rounded-full border-2 bg-emerald-50 border-emerald-200 flex items-center justify-center mx-auto mb-4">
+            <Check className="w-7 h-7 text-emerald-500" />
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-1">{agentName}</h2>
           <div className="flex items-center justify-center gap-2">
             <span className="text-xs font-medium text-indigo-600 bg-indigo-50 rounded-full px-2.5 py-0.5">QnA</span>
             <div className="flex items-center gap-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${isReady && isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-              <span className={`text-xs font-medium ${isReady && isLive ? 'text-emerald-600' : 'text-gray-400'}`}>
-                {isReady ? (isLive ? 'Live' : 'Idle') : 'Creating...'}
+              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+              <span className={`text-xs font-medium ${isLive ? 'text-emerald-600' : 'text-gray-400'}`}>
+                {isLive ? 'Live' : 'Idle'}
               </span>
             </div>
           </div>
@@ -571,8 +872,8 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={() => copyLink(liveUrl, 'live')}
-            disabled={!isReady}
-            className={`${tileBase} hover:border-emerald-300 hover:bg-emerald-50/50 ${isReady ? tileActive : tileMuted}`}
+            disabled={!savedAgent}
+            className={`${tileBase} hover:border-emerald-300 hover:bg-emerald-50/50 ${!savedAgent ? tileMuted : ''}`}
           >
             {copiedLive ? <Check className="w-4 h-4 text-emerald-500 shrink-0" /> : <Link2 className="w-4 h-4 text-emerald-500 shrink-0" />}
             <span className="text-sm text-gray-700 font-medium truncate">{copiedLive ? 'Copied!' : 'Live link'}</span>
@@ -581,46 +882,52 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={() => copyLink(testUrl, 'test')}
-            disabled={!isReady}
-            className={`${tileBase} hover:border-orange-300 hover:bg-orange-50/50 ${isReady ? tileActive : tileMuted}`}
+            disabled={!savedAgent}
+            className={`${tileBase} hover:border-orange-300 hover:bg-orange-50/50 ${!savedAgent ? tileMuted : ''}`}
           >
             {copiedTest ? <Check className="w-4 h-4 text-emerald-500 shrink-0" /> : <Copy className="w-4 h-4 text-orange-400 shrink-0" />}
             <span className="text-sm text-gray-700 font-medium truncate">{copiedTest ? 'Copied!' : 'Test link'}</span>
           </motion.button>
 
-          <motion.button
-            variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
-            onClick={handleToggle}
-            disabled={toggling || !isReady}
-            className={`${tileBase} ${isReady ? `${tileActive} disabled:opacity-60` : tileMuted}`}
-          >
-            {toggling ? (
-              <Loader2 className="w-5 h-5 text-gray-400 animate-spin shrink-0" />
-            ) : isLive ? (
+          {isLive ? (
+            <motion.div
+              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
+              className={`${tileBase} bg-emerald-50 border-emerald-200`}
+            >
               <ToggleRight className="w-5 h-5 text-emerald-500 shrink-0" />
-            ) : (
-              <ToggleLeft className="w-5 h-5 text-gray-300 shrink-0" />
-            )}
-            <span className="text-sm text-gray-700 font-medium truncate">{isLive ? 'Set idle' : 'Set live'}</span>
-          </motion.button>
+              <span className="text-sm text-emerald-700 font-medium">Live</span>
+            </motion.div>
+          ) : (
+            <motion.button
+              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
+              onClick={handleToggle}
+              disabled={toggling || !savedAgent}
+              className={`${tileBase} hover:border-indigo-300 hover:bg-indigo-50/40 disabled:opacity-60 ${!savedAgent ? tileMuted : ''}`}
+            >
+              {toggling
+                ? <Loader2 className="w-5 h-5 text-gray-400 animate-spin shrink-0" />
+                : <ToggleLeft className="w-5 h-5 text-gray-300 shrink-0" />}
+              <span className="text-sm text-gray-700 font-medium">Go live</span>
+            </motion.button>
+          )}
 
           <motion.button
             variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } } }}
             onClick={onConfigure}
-            disabled={!isReady}
-            className={`${tileBase} ${isReady ? tileActive : tileMuted}`}
+            disabled={!savedAgent}
+            className={`${tileBase} hover:border-gray-300 hover:bg-gray-50 ${!savedAgent ? tileMuted : ''}`}
           >
             <Settings2 className="w-4 h-4 text-gray-400 shrink-0" />
-            <span className="text-sm text-gray-700 font-medium truncate">Configure</span>
+            <span className="text-sm text-gray-700 font-medium">Configure</span>
           </motion.button>
         </motion.div>
 
-        <div className={`border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3 ${!isReady ? 'opacity-40' : ''}`}>
+        <div className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">
             <MessageSquare className="w-4 h-4 text-gray-400 shrink-0" />
             <span className="text-sm text-gray-700 font-medium">Who opens the session</span>
           </div>
-          <div className={`inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5 ${!isReady ? 'pointer-events-none' : ''}`}>
+          <div className="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
             {(['agent', 'user'] as const).map(val => (
               <button
                 key={val}
@@ -637,8 +944,7 @@ function DoneStep({ savedAgent, agentName, savePhase, token, onConfigure, onClos
 
         <button
           onClick={onClose}
-          disabled={!isReady}
-          className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 duration-[120ms] disabled:opacity-40 disabled:pointer-events-none"
+          className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 duration-[120ms]"
         >
           Done
         </button>

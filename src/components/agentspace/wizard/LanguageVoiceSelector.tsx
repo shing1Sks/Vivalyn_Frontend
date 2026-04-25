@@ -4,16 +4,16 @@ import { ChevronDown, ChevronRight, Loader2, Volume2, VolumeX } from 'lucide-rea
 import { fetchVoices, fetchVoicePreviewBlob, type LanguageVoiceOption } from '../../../lib/api'
 
 interface Props {
-  onContinue: (language: string, voicePreference: string, voiceName: string) => void
+  onSelectionChange: (language: string, voicePreference: string, voiceName: string) => void
 }
 
-export default function LanguageVoiceSelector({ onContinue }: Props) {
+export default function LanguageVoiceSelector({ onSelectionChange }: Props) {
   const [languages, setLanguages] = useState<LanguageVoiceOption[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedLang, setSelectedLang] = useState<string | null>(null)
   const [selectedPref, setSelectedPref] = useState<string | null>(null)
-  const [langGridOpen, setLangGridOpen] = useState(true)
+  const [langGridOpen, setLangGridOpen] = useState(false)
 
   // Audio states: loadingPref = fetching blob, playingPref = actively playing
   const [loadingPref, setLoadingPref] = useState<string | null>(null)
@@ -27,7 +27,18 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
 
   useEffect(() => {
     fetchVoices()
-      .then(data => setLanguages(data.languages))
+      .then(data => {
+        const list = data.languages
+        setLanguages(list)
+        // Pre-select English + first voice
+        if (list.length > 0) {
+          const english = list.find(l => l.key === 'en') || list[0]
+          setSelectedLang(english.key)
+          // Default to male1 (Brian for English)
+          const male1 = english.voices.find(v => v.preference === 'male1')
+          setSelectedPref(male1?.preference ?? english.voices[0]?.preference ?? null)
+        }
+      })
       .catch(() => {/* silently fail, show empty */})
       .finally(() => setLoading(false))
   }, [])
@@ -47,8 +58,9 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
   const activeLang = languages.find(l => l.key === selectedLang) ?? null
 
   function handleLangSelect(key: string) {
+    const lang = languages.find(l => l.key === key)
     setSelectedLang(key)
-    setSelectedPref(null)
+    setSelectedPref(lang?.voices[0]?.preference ?? null)
     setPreviewError(null)
     stopAudio()
     setLangGridOpen(false)  // collapse grid
@@ -57,7 +69,6 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
 
   function handleChangeLang() {
     setLangGridOpen(true)
-    setSelectedPref(null)
     stopAudio()
   }
 
@@ -133,11 +144,18 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
   }
 
   const selectedVoiceName = activeLang?.voices.find(v => v.preference === selectedPref)?.voice_name ?? ''
-  const canContinue = !!selectedLang && !!selectedPref
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (selectedLang && selectedPref && languages.length > 0) {
+      const voiceName = activeLang?.voices.find(v => v.preference === selectedPref)?.voice_name ?? ''
+      onSelectionChange(selectedLang, selectedPref, voiceName)
+    }
+  }, [selectedLang, selectedPref, languages.length])
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto px-6 py-8">
+      <div className="flex-1 overflow-y-auto px-8 py-8">
         <div className="max-w-2xl mx-auto">
           <h2 className="text-2xl font-semibold text-gray-900 mb-1">Choose Language & Voice</h2>
           <p className="text-sm text-gray-500 mb-6">
@@ -194,25 +212,25 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
                       onChange={e => setSearch(e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 mb-4 duration-[120ms]"
                     />
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-4">
                       {filtered.map(lang => {
                         const isActive = selectedLang === lang.key
                         return (
                           <button
                             key={lang.key}
                             onClick={() => handleLangSelect(lang.key)}
-                            className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center duration-[120ms] ${
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border text-center duration-[120ms] ${
                               isActive
                                 ? 'border-indigo-600 bg-indigo-50'
                                 : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
                             }`}
                           >
-                            <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded-md ${
+                            <span className={`text-xs font-bold tracking-widest px-2 py-0.5 rounded-md ${
                               isActive ? 'bg-indigo-100 text-indigo-500' : 'bg-gray-100 text-gray-400'
                             }`}>
                               {lang.key.toUpperCase()}
                             </span>
-                            <span className={`text-xs font-medium leading-tight ${isActive ? 'text-indigo-700' : 'text-gray-700'}`}>
+                            <span className={`text-sm font-medium leading-tight ${isActive ? 'text-indigo-700' : 'text-gray-700'}`}>
                               {lang.display_name}
                             </span>
                           </button>
@@ -308,33 +326,15 @@ export default function LanguageVoiceSelector({ onContinue }: Props) {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="px-6 py-4 border-t border-gray-100 bg-white">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            {canContinue ? (
-              <span className="text-gray-700">
-                <span className="font-medium">{activeLang?.display_name}</span>
-                {' · '}
-                <span>{selectedVoiceName}</span>
-              </span>
-            ) : (
-              'Select a language and voice to continue'
-            )}
+      {/* Status strip */}
+      {selectedLang && selectedPref && (
+        <div className="px-8 py-3 border-t border-gray-100 bg-white shrink-0">
+          <p className="text-sm text-gray-600 max-w-2xl mx-auto">
+            <span className="font-medium">{activeLang?.display_name}</span>
+            {selectedVoiceName && <span className="text-gray-400"> · {selectedVoiceName}</span>}
           </p>
-          <button
-            onClick={() => canContinue && onContinue(selectedLang!, selectedPref!, selectedVoiceName)}
-            disabled={!canContinue}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium duration-[120ms] ${
-              canContinue
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            Continue <ChevronRight className="w-4 h-4" />
-          </button>
         </div>
-      </div>
+      )}
     </div>
   )
 }

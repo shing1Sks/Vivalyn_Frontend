@@ -1,219 +1,365 @@
-import { useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { Bot, CheckCircle2, ChevronDown, Loader2, Save, Settings2, User, X } from 'lucide-react'
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
+  AlertTriangle,
+  Bot,
+  Brain,
+  CheckCircle2,
+  ChevronDown,
+  Loader2,
+  RefreshCw,
+  Save,
+  Settings2,
+  Sparkles,
+  User,
+  X,
+} from "lucide-react";
+import {
+  recompileEval,
+  recompileSession,
   updateAgent,
   type AgentPromptSpec,
+  type EvalConfig,
+  type EvalMetric,
   type EvaluationMetrics,
-  type SessionContext,
-} from '../../../lib/api'
-import { useAuth } from '../../../context/AuthContext'
-import VoiceSettingsModal from './VoiceSettingsModal'
+  type SessionDesignRequest,
+} from "../../../lib/api";
+import { useAuth } from "../../../context/AuthContext";
+import VoiceSettingsModal from "./VoiceSettingsModal";
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface Props {
-  spec: AgentPromptSpec
-  agentId: string
-  agentName?: string
-  agentDisplayLabel?: string | null
-  agentLanguage: string
-  agentVoice: string
-  agentFirstSpeaker?: string
-  evaluationMetrics?: EvaluationMetrics | null
-  onSaved: (spec: AgentPromptSpec) => void
-  onAgentUpdated?: (updates: { agent_name?: string; agent_display_label?: string; agent_language?: string; agent_voice?: string; agent_first_speaker?: string }) => void
+  spec: AgentPromptSpec;
+  agentId: string;
+  agentName?: string;
+  agentDisplayLabel?: string | null;
+  agentLanguage: string;
+  agentVoice: string;
+  agentFirstSpeaker?: string;
+  evaluationMetrics?: EvaluationMetrics | null;
+  sessionDesignConfig?: SessionDesignRequest | null;
+  evalConfig?: EvalConfig | null;
+  onSaved: (spec: AgentPromptSpec) => void;
+  onAgentUpdated?: (updates: {
+    agent_name?: string;
+    agent_display_label?: string;
+    agent_language?: string;
+    agent_voice?: string;
+    agent_first_speaker?: string;
+  }) => void;
 }
 
-const COMM_STYLES = ['Conversational', 'Formal', 'Coaching', 'Strict'] as const
+const COMM_STYLES = ["Conversational", "Formal", "Coaching", "Strict"] as const;
+const DURATION_PILLS = [10, 15, 30] as const;
 
-type Tab = 'session' | 'evaluation'
+type Tab = "session" | "evaluation";
 
-// ── Main component ──────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────
 
 export default function AgentConfigureView({
-  spec, agentId, agentName, agentDisplayLabel, agentLanguage, agentVoice, agentFirstSpeaker, evaluationMetrics, onSaved, onAgentUpdated,
+  spec,
+  agentId,
+  agentName,
+  agentDisplayLabel,
+  agentLanguage,
+  agentVoice,
+  agentFirstSpeaker,
+  evaluationMetrics,
+  sessionDesignConfig,
+  evalConfig,
+  onSaved,
+  onAgentUpdated,
 }: Props) {
-  const { session } = useAuth()
-  const [activeTab, setActiveTab] = useState<Tab>('session')
-  const [edited, setEdited] = useState<AgentPromptSpec>({ ...spec })
-  const [editedContext, setEditedContext] = useState<SessionContext>(() => {
-    const ctx = spec.session_context ?? {
-      agent_role: '',
-      participant_role: '',
-      session_objective: '',
-      session_duration_minutes: 0,
-      communication_style: '',
-      session_brief: '',
-    }
-    return {
-      ...ctx,
-      session_brief: ctx.session_brief || (spec as unknown as Record<string, string>).session_brief || '',
-    }
-  })
-  const [editedAgentName, setEditedAgentName] = useState(agentName ?? '')
-  const [editedDisplayLabel, setEditedDisplayLabel] = useState(agentDisplayLabel ?? '')
-  const [voiceModalOpen, setVoiceModalOpen] = useState(false)
-  const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
-    (agentFirstSpeaker as 'agent' | 'user') ?? 'agent'
-  )
-  const [tabMenuOpen, setTabMenuOpen] = useState(false)
-  const tabMenuRef = useRef<HTMLDivElement>(null)
+  const { session } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>("session");
+  const [tabMenuOpen, setTabMenuOpen] = useState(false);
+  const tabMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (tabMenuRef.current && !tabMenuRef.current.contains(e.target as Node)) {
-        setTabMenuOpen(false)
+      if (
+        tabMenuRef.current &&
+        !tabMenuRef.current.contains(e.target as Node)
+      ) {
+        setTabMenuOpen(false);
       }
     }
-    if (tabMenuOpen) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [tabMenuOpen])
+    if (tabMenuOpen) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [tabMenuOpen]);
 
-  // Save states per tab
-  const [sessionSaving, setSessionSaving] = useState(false)
-  const [sessionSaved, setSessionSaved] = useState(false)
-  const [evalSaving, setEvalSaving] = useState(false)
-  const [evalSaved, setEvalSaved] = useState(false)
-  const evalTabRef = useRef<{ save: () => Promise<void> }>(null)
+  // ── Names ──────────────────────────────────────────────────────────────────
+  const [editedAgentName, setEditedAgentName] = useState(agentName ?? "");
+  const [editedDisplayLabel, setEditedDisplayLabel] = useState(
+    agentDisplayLabel ?? "",
+  );
 
-  function updateStringField(key: keyof AgentPromptSpec, value: string) {
-    setEdited(prev => ({ ...prev, [key]: value }))
+  // ── Session config ─────────────────────────────────────────────────────────
+  const [sessionConfig, setSessionConfig] = useState<
+    Partial<SessionDesignRequest>
+  >(() => {
+    if (sessionDesignConfig) return { ...sessionDesignConfig };
+    // Fall back to session_context from the compiled spec
+    const ctx = spec.session_context;
+    if (ctx) {
+      return {
+        agent_name: agentName ?? "",
+        session_objective: ctx.session_objective,
+        agent_role: ctx.agent_role,
+        participant_role: ctx.participant_role,
+        communication_style: ctx.communication_style,
+        session_duration_minutes: ctx.session_duration_minutes,
+      };
+    }
+    return {};
+  });
+  const [customDuration, setCustomDuration] = useState(() => {
+    const d =
+      sessionDesignConfig?.session_duration_minutes ??
+      spec.session_context?.session_duration_minutes;
+    if (!d) return "";
+    return DURATION_PILLS.includes(d as (typeof DURATION_PILLS)[number])
+      ? ""
+      : String(d);
+  });
+  const [isCustomDuration, setIsCustomDuration] = useState(() => {
+    const d =
+      sessionDesignConfig?.session_duration_minutes ??
+      spec.session_context?.session_duration_minutes;
+    return (
+      !!d && !DURATION_PILLS.includes(d as (typeof DURATION_PILLS)[number])
+    );
+  });
+
+  const [sessionSaving, setSessionSaving] = useState(false);
+  const [sessionSaved, setSessionSaved] = useState(false);
+  const [sessionStale, setSessionStale] = useState(false);
+  const [sessionStaleDismissed, setSessionStaleDismissed] = useState(false);
+  const [recompileSessionLoading, setRecompileSessionLoading] = useState(false);
+
+  // ── Eval config ────────────────────────────────────────────────────────────
+  const [currentEvalConfig, setCurrentEvalConfig] = useState<EvalConfig>(
+    evalConfig ?? { mode: "auto" },
+  );
+  const isLegacyMetrics = (m: EvaluationMetrics['metrics']): boolean =>
+    m.length > 0 && typeof (m[0] as unknown as string) === 'string'
+  const [editedMetrics, setEditedMetrics] = useState<EvalMetric[]>(() => {
+    const m = evaluationMetrics?.metrics ?? []
+    if (isLegacyMetrics(m)) return []
+    const slots = [...(m as EvalMetric[]).slice(0, 4)]
+    while (slots.length < 4) slots.push({ name: '', definition: '', strong: '', weak: '' })
+    return slots
+  });
+  const [editedCuratorPrompt, setEditedCuratorPrompt] = useState(
+    evaluationMetrics?.report_curator_prompt ?? "",
+  );
+  const [evalSaving, setEvalSaving] = useState(false);
+  const [evalSaved, setEvalSaved] = useState(false);
+  const [evalStale, setEvalStale] = useState(false);
+  const [evalStaleDismissed, setEvalStaleDismissed] = useState(false);
+  const [recompileEvalLoading, setRecompileEvalLoading] = useState(false);
+
+  // ── Voice / first-speaker ──────────────────────────────────────────────────
+  const [voiceModalOpen, setVoiceModalOpen] = useState(false);
+  const [firstSpeaker, setFirstSpeaker] = useState<"agent" | "user">(
+    (agentFirstSpeaker as "agent" | "user") ?? "agent",
+  );
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function buildSessionDesignRequest(): SessionDesignRequest {
+    const effectiveDuration = isCustomDuration
+      ? parseInt(customDuration, 10) || 0
+      : (sessionConfig.session_duration_minutes ?? 0);
+    return {
+      agent_name: editedAgentName.trim(),
+      session_objective: sessionConfig.session_objective?.trim() ?? "",
+      agent_role: sessionConfig.agent_role?.trim() ?? "",
+      participant_role: sessionConfig.participant_role?.trim() ?? "",
+      communication_style: sessionConfig.communication_style ?? "",
+      session_duration_minutes: effectiveDuration,
+      additional_context: sessionConfig.additional_context?.trim() || undefined,
+    };
   }
 
-  function updateListItem(key: keyof AgentPromptSpec, idx: number, value: string) {
-    setEdited(prev => {
-      const arr = [...(prev[key] as string[])]
-      arr[idx] = value
-      return { ...prev, [key]: arr }
-    })
-  }
-
-  function updateDictItem(key: keyof AgentPromptSpec, field: string, value: string) {
-    setEdited(prev => ({
-      ...prev,
-      [key]: { ...(prev[key] as Record<string, string>), [field]: value },
-    }))
-  }
-
-  async function handleSaveSession() {
-    if (!session) return
-    setSessionSaving(true)
-    setSessionSaved(false)
+  async function handleSaveSessionConfig() {
+    if (!session) return;
+    setSessionSaving(true);
+    setSessionSaved(false);
     try {
-      const specToSave: AgentPromptSpec = {
-        ...edited,
-        session_context: (editedContext.agent_role || editedContext.participant_role || editedContext.session_objective)
-          ? editedContext
-          : undefined,
-      }
-      const updates: Parameters<typeof updateAgent>[2] = { agent_prompt: specToSave }
-      if (editedAgentName && editedAgentName !== agentName) updates.agent_name = editedAgentName
-      if (editedDisplayLabel !== (agentDisplayLabel ?? '')) updates.agent_display_label = editedDisplayLabel || undefined
-      await updateAgent(session.access_token, agentId, updates)
-      setSessionSaved(true)
-      onSaved(specToSave)
+      const config = buildSessionDesignRequest();
+      const updates: Parameters<typeof updateAgent>[2] = {
+        session_design_config: config,
+      };
+      if (editedAgentName.trim() && editedAgentName.trim() !== agentName)
+        updates.agent_name = editedAgentName.trim();
+      if (editedDisplayLabel !== (agentDisplayLabel ?? ""))
+        updates.agent_display_label = editedDisplayLabel.trim() || undefined;
+      await updateAgent(session.access_token, agentId, updates);
+      setSessionSaved(true);
+      setSessionStale(true);
+      setSessionStaleDismissed(false);
       if (updates.agent_name || updates.agent_display_label !== undefined) {
-        onAgentUpdated?.({ agent_name: editedAgentName, agent_display_label: editedDisplayLabel || undefined })
+        onAgentUpdated?.({
+          agent_name: editedAgentName.trim(),
+          agent_display_label: editedDisplayLabel.trim() || undefined,
+        });
       }
-      setTimeout(() => setSessionSaved(false), 3000)
-    } catch { /* silent */ } finally {
-      setSessionSaving(false)
+      setTimeout(() => setSessionSaved(false), 3000);
+    } catch {
+      /* silent */
+    } finally {
+      setSessionSaving(false);
     }
   }
 
-  async function handleHeaderSave() {
-    if (activeTab === 'session') {
-      await handleSaveSession()
-    } else {
-      setEvalSaving(true)
-      setEvalSaved(false)
-      try {
-        await evalTabRef.current?.save()
-        setEvalSaved(true)
-        setTimeout(() => setEvalSaved(false), 3000)
-      } catch { /* silent */ } finally {
-        setEvalSaving(false)
-      }
+  async function handleRecompileSession() {
+    if (!session) return;
+    setRecompileSessionLoading(true);
+    try {
+      const config = buildSessionDesignRequest();
+      const updatedAgent = await recompileSession(
+        session.access_token,
+        agentId,
+        config,
+      );
+      onSaved(updatedAgent.agent_prompt as AgentPromptSpec);
+      onAgentUpdated?.({
+        agent_name: updatedAgent.agent_name,
+        agent_display_label: updatedAgent.agent_display_label ?? undefined,
+      });
+      setSessionStale(false);
+      setSessionStaleDismissed(false);
+    } catch {
+      /* silent */
+    } finally {
+      setRecompileSessionLoading(false);
     }
+  }
+
+  async function handleSaveEvalConfig() {
+    if (!session) return;
+    setEvalSaving(true);
+    setEvalSaved(false);
+    try {
+      await updateAgent(session.access_token, agentId, {
+        eval_config: currentEvalConfig,
+      });
+      setEvalSaved(true);
+      setEvalStale(true);
+      setEvalStaleDismissed(false);
+      setTimeout(() => setEvalSaved(false), 3000);
+    } catch {
+      /* silent */
+    } finally {
+      setEvalSaving(false);
+    }
+  }
+
+  async function handleRecompileEval() {
+    if (!session) return;
+    setRecompileEvalLoading(true);
+    try {
+      const sessionBrief = spec.session_context?.session_brief ?? "";
+      const updatedAgent = await recompileEval(session.access_token, agentId, {
+        session_brief: sessionBrief,
+        eval_config: currentEvalConfig,
+      });
+      const newMetrics = updatedAgent.transcript_evaluation_metrics;
+      if (newMetrics && !isLegacyMetrics(newMetrics.metrics)) {
+        const slots = [...(newMetrics.metrics as EvalMetric[]).slice(0, 4)]
+        while (slots.length < 4) slots.push({ name: '', definition: '', strong: '', weak: '' })
+        setEditedMetrics(slots)
+        setEditedCuratorPrompt(newMetrics.report_curator_prompt)
+      }
+      setEvalStale(false);
+      setEvalStaleDismissed(false);
+    } catch {
+      /* silent */
+    } finally {
+      setRecompileEvalLoading(false);
+    }
+  }
+
+  async function handleSaveMetrics() {
+    if (!session) return;
+    const metrics = editedMetrics.filter(m => m.name.trim())
+    await updateAgent(session.access_token, agentId, {
+      transcript_evaluation_metrics:
+        metrics.length > 0 || editedCuratorPrompt.trim()
+          ? { metrics, report_curator_prompt: editedCuratorPrompt }
+          : null,
+    });
   }
 
   function handleVoiceUpdated(lang: string, voice: string) {
-    onAgentUpdated?.({ agent_language: lang, agent_voice: voice })
+    onAgentUpdated?.({ agent_language: lang, agent_voice: voice });
   }
 
-  async function handleFirstSpeakerChange(val: 'agent' | 'user') {
-    if (val === firstSpeaker || !session) return
-    setFirstSpeaker(val)
+  async function handleFirstSpeakerChange(val: "agent" | "user") {
+    if (val === firstSpeaker || !session) return;
+    setFirstSpeaker(val);
     try {
-      await updateAgent(session.access_token, agentId, { agent_first_speaker: val })
-      onAgentUpdated?.({ agent_language: agentLanguage, agent_voice: agentVoice, agent_first_speaker: val })
-    } catch { /* silent */ }
+      await updateAgent(session.access_token, agentId, {
+        agent_first_speaker: val,
+      });
+      onAgentUpdated?.({
+        agent_language: agentLanguage,
+        agent_voice: agentVoice,
+        agent_first_speaker: val,
+      });
+    } catch {
+      /* silent */
+    }
   }
 
-  const isSaving = activeTab === 'session' ? sessionSaving : evalSaving
-  const isSaved = activeTab === 'session' ? sessionSaved : evalSaved
+  const isSaving = activeTab === "session" ? sessionSaving : evalSaving;
+  const isSaved = activeTab === "session" ? sessionSaved : evalSaved;
 
   return (
     <div className="flex flex-col bg-gray-50 min-h-full">
-      {/* ── Header: title + tabs + lang badge + gear + save ───────────────── */}
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-10 px-4 md:px-6 py-2.5 md:py-3 border-b border-gray-100 flex items-center justify-between bg-white">
         <div className="flex items-center gap-3 md:gap-4">
-          <h2 className="text-sm md:text-base font-semibold text-gray-900">Configure Agent</h2>
-          {/* Desktop tabs */}
-          <div className="hidden md:inline-flex bg-gray-100 rounded-lg p-1 gap-1">
-            <button
-              onClick={() => setActiveTab('session')}
-              className={`text-xs font-medium px-3 py-1.5 rounded-md duration-[120ms] ${
-                activeTab === 'session'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Session
-            </button>
-            <button
-              onClick={() => setActiveTab('evaluation')}
-              className={`text-xs font-medium px-3 py-1.5 rounded-md duration-[120ms] ${
-                activeTab === 'evaluation'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Evaluation
-            </button>
-          </div>
+          <h2 className="text-sm md:text-base font-semibold text-gray-900">
+            Configure Agent
+          </h2>
 
           {/* Mobile tab dropdown */}
           <div className="md:hidden relative" ref={tabMenuRef}>
             <button
-              onClick={() => setTabMenuOpen(v => !v)}
+              onClick={() => setTabMenuOpen((v) => !v)}
               className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 duration-[120ms]"
             >
-              {activeTab === 'session' ? 'Session' : 'Evaluation'}
-              <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${tabMenuOpen ? 'rotate-180' : ''}`} />
+              {activeTab === "session" ? "Session" : "Evaluation"}
+              <ChevronDown
+                className={`w-3 h-3 transition-transform duration-150 ${tabMenuOpen ? "rotate-180" : ""}`}
+              />
             </button>
             {tabMenuOpen && (
-              <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 overflow-hidden">
-                <button
-                  onClick={() => { setActiveTab('session'); setTabMenuOpen(false) }}
-                  className={`w-full text-left px-3 py-2 text-xs font-medium duration-[120ms] ${
-                    activeTab === 'session' ? 'text-indigo-600 bg-indigo-50' : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Session
-                </button>
-                <button
-                  onClick={() => { setActiveTab('evaluation'); setTabMenuOpen(false) }}
-                  className={`w-full text-left px-3 py-2 text-xs font-medium duration-[120ms] ${
-                    activeTab === 'evaluation' ? 'text-indigo-600 bg-indigo-50' : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Evaluation
-                </button>
+              <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
+                {(["session", "evaluation"] as Tab[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => {
+                      setActiveTab(t);
+                      setTabMenuOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-xs font-medium duration-[120ms] capitalize ${
+                      activeTab === t
+                        ? "text-indigo-600 bg-indigo-50"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
               </div>
             )}
           </div>
 
-          {/* Language + voice badges + settings */}
+          {/* Language / voice badges */}
           <div className="hidden md:flex items-center gap-1.5">
             {agentName && (
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-600 bg-gray-100 border border-gray-200 rounded-md px-2 py-1">
@@ -228,86 +374,110 @@ export default function AgentConfigureView({
             </span>
             <button
               onClick={() => setVoiceModalOpen(true)}
-              title="Change voice & language"
               className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
             >
               <Settings2 className="w-3.5 h-3.5" />
             </button>
           </div>
-          {/* Who opens the session */}
+
+          {/* First speaker toggle */}
           <div className="hidden md:flex items-center gap-2">
-            {(['agent', 'user'] as const).map(val => (
+            {(["agent", "user"] as const).map((val) => (
               <button
                 key={val}
                 onClick={() => handleFirstSpeakerChange(val)}
                 className={`flex items-center gap-2 text-xs font-medium px-3.5 py-2 rounded-lg border transition-all duration-150 ${
                   firstSpeaker === val
-                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-200'
-                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900'
+                    ? "bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-200"
+                    : "bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900"
                 }`}
               >
-                {val === 'agent' ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
-                {val === 'agent' ? 'Agent starts' : 'Participant starts'}
+                {val === "agent" ? (
+                  <Bot className="w-4 h-4" />
+                ) : (
+                  <User className="w-4 h-4" />
+                )}
+                {val === "agent" ? "Agent starts" : "Participant starts"}
               </button>
             ))}
           </div>
         </div>
+
+        {/* Save button */}
         <button
-          onClick={handleHeaderSave}
+          onClick={
+            activeTab === "session"
+              ? handleSaveSessionConfig
+              : handleSaveEvalConfig
+          }
           disabled={isSaving}
           className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-600 text-white text-xs md:text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed duration-[120ms]"
-          title={isSaving ? 'Saving…' : isSaved ? 'Saved' : 'Save Changes'}
         >
           <span className="hidden md:inline">
             {isSaving ? (
-              <><Loader2 className="w-3 h-3 md:w-3.5 md:h-3.5 animate-spin" /> Saving…</>
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" />
+                Saving…
+              </>
             ) : isSaved ? (
-              <><CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5" /> Saved</>
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />
+                Saved
+              </>
             ) : (
-              'Save Changes'
+              "Save config"
             )}
           </span>
           <span className="md:hidden">
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" />
-              : isSaved ? <CheckCircle2 className="w-4 h-4" />
-              : <Save className="w-4 h-4" />}
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isSaved ? (
+              <CheckCircle2 className="w-4 h-4" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
           </span>
         </button>
       </div>
-
-      {/* Mobile language/voice + first-speaker row */}
+      {/* Mobile language/voice row */}
       <div className="md:hidden flex items-center justify-between px-4 py-2 bg-white border-b border-gray-100">
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">
-            {agentVoice} · <span className="font-medium text-gray-700">{agentLanguage.toUpperCase()}</span>
+            {agentVoice} ·{" "}
+            <span className="font-medium text-gray-700">
+              {agentLanguage.toUpperCase()}
+            </span>
           </span>
           <button
             onClick={() => setVoiceModalOpen(true)}
-            title="Change voice & language"
             className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]"
           >
             <Settings2 className="w-3.5 h-3.5" />
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Starts</span>
-          {(['agent', 'user'] as const).map(val => (
+          <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+            Starts
+          </span>
+          {(["agent", "user"] as const).map((val) => (
             <button
               key={val}
               onClick={() => handleFirstSpeakerChange(val)}
-              title={val === 'agent' ? 'Agent starts' : 'Participant starts'}
               className={`flex items-center justify-center w-8 h-8 rounded-lg border transition-all duration-150 ${
                 firstSpeaker === val
-                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900'
+                  ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                  : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
               }`}
             >
-              {val === 'agent' ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
+              {val === "agent" ? (
+                <Bot className="w-4 h-4" />
+              ) : (
+                <User className="w-4 h-4" />
+              )}
             </button>
           ))}
         </div>
       </div>
-
       <VoiceSettingsModal
         agentId={agentId}
         agentLanguage={agentLanguage}
@@ -316,385 +486,242 @@ export default function AgentConfigureView({
         onClose={() => setVoiceModalOpen(false)}
         onUpdated={handleVoiceUpdated}
       />
+      {/* ── Two-panel layout ────────────────────────────────────────────────── */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left sidebar — desktop only */}
+        <nav className="hidden md:flex flex-col w-44 shrink-0 border-r border-gray-100 bg-white py-6 px-3 gap-1">
+          {(["session", "evaluation"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setActiveTab(t)}
+              className={`w-full text-left px-3 py-2 text-sm font-medium rounded-lg transition-all duration-[120ms] capitalize ${
+                activeTab === t
+                  ? "bg-indigo-50 text-indigo-700"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </nav>
 
-      {activeTab === 'session' ? (
-        <>
-          {/* ── Two-column body ──────────────────────────────────────────────── */}
-          <div className="flex flex-col md:flex-row md:items-start">
-            {/* LHS — string sections */}
-            <div className="w-full md:w-[55%] flex flex-col gap-4 px-3 md:px-5 py-4 md:py-5 border-b md:border-b-0 md:border-r border-gray-100">
-              {/* Agent name + display label */}
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Names</span>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === "session" ? (
+            <div className="px-6 md:px-8 py-6 space-y-5">
+              {/* No config notice */}
+              {!sessionDesignConfig && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
+                  This agent was created before config storage was added. Fill
+                  in the fields below and click
+                  <span className="font-semibold"> Regenerate Agent</span> to
+                  enable config-based editing.
                 </div>
-                <div className="px-5 py-4 space-y-3">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Persona name</span>
-                      <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">Used in prompt — rename carefully</span>
+              )}
+
+              {/* Stale config notice */}
+              <AnimatePresence>
+                {sessionStale && !sessionStaleDismissed && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-3">
+                      <div className="flex items-center gap-2 text-sm text-amber-800">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                        Config updated — regenerate to apply changes.
+                      </div>
+                      <button
+                        onClick={() => setSessionStaleDismissed(true)}
+                        className="text-amber-400 hover:text-amber-700 duration-[120ms]"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
-                    <input
-                      type="text"
-                      value={editedAgentName}
-                      onChange={e => setEditedAgentName(e.target.value)}
-                      placeholder="e.g. Dr. Patel"
-                      className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
-                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Names card */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  Names
+                </p>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-gray-600">
+                      Persona name
+                    </label>
+                    <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">
+                      Used in prompt — rename carefully
+                    </span>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Display label</span>
-                      <span className="text-[10px] text-gray-400">Shown in records — freely editable</span>
-                    </div>
-                    <input
-                      type="text"
-                      value={editedDisplayLabel}
-                      onChange={e => setEditedDisplayLabel(e.target.value)}
-                      placeholder="e.g. Viva Voce Biology Examiner"
-                      className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
-                    />
+                  <input
+                    type="text"
+                    value={editedAgentName}
+                    onChange={(e) => setEditedAgentName(e.target.value)}
+                    placeholder="e.g. Dr. Patel"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-gray-600">
+                      Display label
+                    </label>
+                    <span className="text-[10px] text-gray-400">
+                      Shown in records — freely editable
+                    </span>
                   </div>
+                  <input
+                    type="text"
+                    value={editedDisplayLabel}
+                    onChange={(e) => setEditedDisplayLabel(e.target.value)}
+                    placeholder="e.g. Viva Voce Biology Examiner"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                  />
                 </div>
               </div>
-              <SessionContextSection
-                value={editedContext}
-                onChange={setEditedContext}
-              />
-              <StringSection
-                label="Identity & Persona"
-                value={edited.identity_and_persona}
-                rows={3}
-                onChange={v => updateStringField('identity_and_persona', v)}
-              />
-            </div>
 
-            {/* RHS — collapsible sections */}
-            <div className="flex-1 flex flex-col gap-3 px-3 md:px-5 py-4 md:py-5">
-              <DictSection
-                label="Behavior Rules"
-                value={edited.behavior_rules}
-                defaultOpen={true}
-                onItemChange={(field, v) => updateDictItem('behavior_rules', field, v)}
-              />
-              <CollapsibleSection
-                label="Guardrails"
-                value={edited.guardrails}
-                defaultOpen={false}
-                onItemChange={(i, v) => updateListItem('guardrails', i, v)}
-              />
-            </div>
-          </div>
-        </>
-      ) : (
-        <EvaluationTab
-          ref={evalTabRef}
-          agentId={agentId}
-          initialMetrics={evaluationMetrics ?? null}
-        />
-      )}
-    </div>
-  )}
+              {/* Session config fields */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  Session configuration
+                </p>
 
-interface EvaluationTabProps {
-  agentId: string
-  initialMetrics: EvaluationMetrics | null
-  ref?: React.Ref<{ save: () => Promise<void> }>
-}
-
-function EvaluationTab({ agentId, initialMetrics, ref }: EvaluationTabProps) {
-  const { session } = useAuth()
-  const [evalPrompt, setEvalPrompt] = useState(initialMetrics?.report_curator_prompt ?? '')
-  const MAX_METRICS = 4
-
-  // 4 editable metric slots
-  const [slotDrafts, setSlotDrafts] = useState<string[]>(() => {
-    const m = initialMetrics?.metrics ?? []
-    const slots = m.slice(0, MAX_METRICS)
-    while (slots.length < MAX_METRICS) slots.push('')
-    return slots
-  })
-
-  const originalMetrics = useMemo(() => new Set(initialMetrics?.metrics ?? []), [])
-  const metricNames = slotDrafts.filter(Boolean)
-
-  function updateSlot(idx: number, value: string) {
-    setSlotDrafts(prev => {
-      const next = [...prev]
-      next[idx] = value
-      return next
-    })
-  }
-
-  function clearSlot(idx: number) {
-    setSlotDrafts(prev => {
-      const next = [...prev]
-      next[idx] = ''
-      return next
-    })
-  }
-
-  async function handleSave() {
-    if (!session) return
-    const metrics = slotDrafts.filter(Boolean)
-    const hasContent = metrics.length > 0 || evalPrompt.trim()
-    await updateAgent(session.access_token, agentId, {
-      transcript_evaluation_metrics: hasContent ? { metrics, report_curator_prompt: evalPrompt } : null,
-    })
-  }
-
-  useImperativeHandle(ref, () => ({
-    save: handleSave,
-  }))
-
-  return (
-    <div className="px-3 md:px-5 py-4 md:py-5 flex flex-col md:flex-row gap-5">
-      {/* Eval prompt — main content */}
-      <div className="flex-1 order-2 md:order-1">
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Eval Prompt</span>
-          </div>
-          <div className="px-5 py-4">
-            <textarea
-              value={evalPrompt}
-              onChange={e => setEvalPrompt(e.target.value)}
-              rows={10}
-              placeholder="Scoring rubric and instructions for evaluating sessions…"
-              className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Metrics — sidebar */}
-      <div className="w-full md:w-[280px] flex-shrink-0 order-1 md:order-2">
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Metrics</span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${metricNames.length >= MAX_METRICS ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
-                {metricNames.length}/{MAX_METRICS}
-              </span>
-            </div>
-          </div>
-          <div className="px-5 py-4 flex flex-col gap-3">
-            {/* 4 editable slots */}
-            <div className="grid grid-cols-2 gap-2">
-              {slotDrafts.map((draft, i) => {
-                const isOriginal = draft && originalMetrics.has(draft)
-                return (
-                  <div key={i} className="relative">
-                    <input
-                      type="text"
-                      value={draft}
-                      onChange={e => updateSlot(i, e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                      disabled={!draft && metricNames.length >= MAX_METRICS}
-                      placeholder={!draft && metricNames.length < MAX_METRICS ? '+' : ''}
-                      className={`w-full text-sm rounded-lg px-3 py-2 pr-7 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 duration-[120ms] ${
-                        draft
-                          ? isOriginal
-                            ? 'bg-gray-50 border border-gray-200 text-gray-600 font-medium placeholder:text-gray-300'
-                            : 'bg-indigo-50 border border-indigo-100 text-indigo-700 font-medium placeholder:text-indigo-300'
-                          : 'bg-white border border-gray-200 text-gray-900 placeholder:text-gray-400'
-                      } disabled:opacity-40 disabled:cursor-not-allowed`}
-                    />
-                    {draft && (
+                {/* Duration */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Duration
+                  </label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {DURATION_PILLS.map((d) => (
                       <button
-                        onClick={() => clearSlot(i)}
-                        className={`absolute right-2 top-1/2 -translate-y-1/2 duration-[120ms] ${
-                          isOriginal ? 'text-gray-400 hover:text-gray-600' : 'text-indigo-400 hover:text-indigo-600'
+                        key={d}
+                        type="button"
+                        onClick={() => {
+                          setSessionConfig((prev) => ({
+                            ...prev,
+                            session_duration_minutes: d,
+                          }));
+                          setIsCustomDuration(false);
+                        }}
+                        className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                          !isCustomDuration &&
+                          sessionConfig.session_duration_minutes === d
+                            ? "bg-indigo-600 text-white border-indigo-600"
+                            : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
                         }`}
                       >
-                        <X className="w-3 h-3" />
+                        {d} min
                       </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomDuration(true)}
+                      className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                        isCustomDuration
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      Custom
+                    </button>
+                    {isCustomDuration && (
+                      <input
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={customDuration}
+                        onChange={(e) => setCustomDuration(e.target.value)}
+                        placeholder="20"
+                        autoFocus
+                        className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      />
                     )}
                   </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+                </div>
 
-// ── String section (LHS) ────────────────────────────────────────────────────────
-
-interface StringSectionProps {
-  label: string
-  value: string
-  rows: number
-  onChange: (v: string) => void
-}
-
-function StringSection({ label, value, rows, onChange }: StringSectionProps) {
-  const [isOpen, setIsOpen] = useState(false)
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col">
-      <button
-        onClick={() => setIsOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 duration-[120ms]"
-      >
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 duration-[120ms] ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            key="content"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
-            <div className="px-5 pb-5 pt-1 border-t border-gray-100">
-              <textarea
-                value={value}
-                onChange={e => onChange(e.target.value)}
-                rows={rows}
-                className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-// ── Collapsible section (RHS) ───────────────────────────────────────────────────
-
-interface CollapsibleSectionProps {
-  label: string
-  value: string[]
-  defaultOpen: boolean
-  onItemChange: (idx: number, val: string) => void
-}
-
-function CollapsibleSection({
-  label, value, defaultOpen, onItemChange,
-}: CollapsibleSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <button
-        onClick={() => setIsOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 duration-[120ms] group"
-      >
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</span>
-        <div className="flex items-center gap-2">
-          <ChevronDown
-            className={`w-4 h-4 text-gray-400 duration-[120ms] ${isOpen ? 'rotate-180' : ''}`}
-          />
-        </div>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            key="content"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
-            <div className="px-5 pb-5 pt-1 space-y-2.5 border-t border-gray-100">
-              {value.map((item, idx) => (
-                <div key={idx} className="flex gap-2.5 items-start">
-                  <span className="text-xs text-gray-400 font-mono mt-2.5 w-5 flex-shrink-0 text-right">{idx + 1}.</span>
+                {/* Session objective */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Session objective
+                  </label>
                   <textarea
-                    value={item}
-                    onChange={e => onItemChange(idx, e.target.value)}
+                    value={sessionConfig.session_objective ?? ""}
+                    onChange={(e) =>
+                      setSessionConfig((prev) => ({
+                        ...prev,
+                        session_objective: e.target.value,
+                      }))
+                    }
                     rows={2}
-                    className="flex-1 text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
+                    placeholder="e.g. Conduct a rigorous oral examination on machine learning…"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                   />
                 </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
 
-// ── Session context section ────────────────────────────────────────────────────
-
-interface SessionContextSectionProps {
-  value: SessionContext
-  onChange: (v: SessionContext) => void
-}
-
-function SessionContextSection({ value, onChange }: SessionContextSectionProps) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100">
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Session Context</span>
-      </div>
-      <div className="px-5 pb-5 pt-1 space-y-3">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Agent role</span>
-                <textarea
-                  value={value.agent_role}
-                  onChange={e => onChange({ ...value, agent_role: e.target.value })}
-                  rows={2}
-                  placeholder="The agent's role in this session"
-                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Participant role</span>
-                <textarea
-                  value={value.participant_role}
-                  onChange={e => onChange({ ...value, participant_role: e.target.value })}
-                  rows={2}
-                  placeholder="Who the participant is in this session"
-                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Session objective</span>
-                <textarea
-                  value={value.session_objective}
-                  onChange={e => onChange({ ...value, session_objective: e.target.value })}
-                  rows={2}
-                  placeholder="What this session is for"
-                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1 flex-shrink-0">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Duration (min)</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={120}
-                    value={value.session_duration_minutes || ''}
-                    onChange={e => onChange({ ...value, session_duration_minutes: parseInt(e.target.value, 10) || 0 })}
-                    placeholder="15"
-                    className="w-20 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                {/* Agent role */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Agent role
+                  </label>
+                  <textarea
+                    value={sessionConfig.agent_role ?? ""}
+                    onChange={(e) =>
+                      setSessionConfig((prev) => ({
+                        ...prev,
+                        agent_role: e.target.value,
+                      }))
+                    }
+                    rows={2}
+                    placeholder="e.g. A rigorous oral examiner…"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                   />
                 </div>
-                <div className="flex flex-col gap-1 flex-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Style</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {COMM_STYLES.map(s => (
+
+                {/* Participant role */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Participant role
+                  </label>
+                  <textarea
+                    value={sessionConfig.participant_role ?? ""}
+                    onChange={(e) =>
+                      setSessionConfig((prev) => ({
+                        ...prev,
+                        participant_role: e.target.value,
+                      }))
+                    }
+                    rows={2}
+                    placeholder="e.g. A postgraduate student…"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Communication style */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Communication style
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {COMM_STYLES.map((s) => (
                       <button
                         key={s}
                         type="button"
-                        onClick={() => onChange({ ...value, communication_style: s })}
-                        className={`px-2.5 py-1 text-xs rounded-lg border transition-all duration-[120ms] ${
-                          value.communication_style === s
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                        onClick={() =>
+                          setSessionConfig((prev) => ({
+                            ...prev,
+                            communication_style: s,
+                          }))
+                        }
+                        className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                          sessionConfig.communication_style === s
+                            ? "bg-indigo-600 text-white border-indigo-600"
+                            : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
                         }`}
                       >
                         {s}
@@ -702,80 +729,300 @@ function SessionContextSection({ value, onChange }: SessionContextSectionProps) 
                     ))}
                   </div>
                 </div>
+
+                {/* Additional context */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Additional context
+                    <span className="ml-1.5 text-xs font-normal text-gray-400">
+                      (optional)
+                    </span>
+                  </label>
+                  <textarea
+                    value={sessionConfig.additional_context ?? ""}
+                    onChange={(e) =>
+                      setSessionConfig((prev) => ({
+                        ...prev,
+                        additional_context: e.target.value,
+                      }))
+                    }
+                    rows={2}
+                    placeholder="Extra context or constraints…"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                  />
+                </div>
               </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Session brief</span>
-                <textarea
-                  value={value.session_brief}
-                  onChange={e => onChange({ ...value, session_brief: e.target.value })}
-                  rows={2}
-                  placeholder="One sentence: what happens in this session and for how long"
-                  className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms]"
-                />
+
+              {/* Regenerate button */}
+              <button
+                onClick={handleRecompileSession}
+                disabled={recompileSessionLoading}
+                className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-[120ms]"
+              >
+                {recompileSessionLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Regenerating…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Regenerate Agent
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="px-6 md:px-8 py-6 space-y-5">
+              {/* No eval config notice */}
+              {!evalConfig && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
+                  This agent was created before eval config storage was added.
+                  Set your preferences below and click
+                  <span className="font-semibold"> Regenerate Eval</span>.
+                </div>
+              )}
+
+              {/* Stale eval notice */}
+              <AnimatePresence>
+                {evalStale && !evalStaleDismissed && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-3">
+                      <div className="flex items-center gap-2 text-sm text-amber-800">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                        Eval config updated — regenerate to apply changes.
+                      </div>
+                      <button
+                        onClick={() => setEvalStaleDismissed(true)}
+                        className="text-amber-400 hover:text-amber-700 duration-[120ms]"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Eval config form */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                  Evaluation configuration
+                </p>
+
+                {/* Mode selector */}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCurrentEvalConfig((prev) => ({
+                        ...prev,
+                        mode: "auto",
+                      }))
+                    }
+                    className={`text-left border rounded-xl p-4 transition-all duration-[120ms] ${
+                      currentEvalConfig.mode === "auto"
+                        ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200"
+                        : "bg-white border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-sm font-medium text-gray-900">
+                        Auto-generate
+                      </p>
+                      <Sparkles
+                        size={14}
+                        className={
+                          currentEvalConfig.mode === "auto"
+                            ? "text-indigo-500"
+                            : "text-gray-300"
+                        }
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Based on session design
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCurrentEvalConfig((prev) => ({
+                        ...prev,
+                        mode: "custom",
+                      }))
+                    }
+                    className={`text-left border rounded-xl p-4 transition-all duration-[120ms] ${
+                      currentEvalConfig.mode === "custom"
+                        ? "bg-white border-indigo-300 ring-1 ring-indigo-200"
+                        : "bg-white border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-sm font-medium text-gray-900">
+                        Customize
+                      </p>
+                      <Brain
+                        size={14}
+                        className={
+                          currentEvalConfig.mode === "custom"
+                            ? "text-indigo-500"
+                            : "text-gray-300"
+                        }
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Define criteria manually
+                    </p>
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {currentEvalConfig.mode === "custom" && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="overflow-hidden space-y-3"
+                    >
+                      {[
+                        {
+                          label: "What is being evaluated?",
+                          key: "competency" as const,
+                          placeholder:
+                            "e.g. Oral defence of research methodology",
+                        },
+                        {
+                          label: "Strong performance",
+                          key: "strong_performance" as const,
+                          placeholder:
+                            "e.g. Gives structured, well-reasoned answers…",
+                        },
+                        {
+                          label: "Weak performance",
+                          key: "weak_performance" as const,
+                          placeholder:
+                            "e.g. Gives vague answers without reasoning…",
+                        },
+                        {
+                          label: "Additional context",
+                          key: "additional" as const,
+                          placeholder: "Any other notes…",
+                        },
+                      ].map(({ label, key, placeholder }) => (
+                        <div key={key}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {label}
+                          </label>
+                          <textarea
+                            value={currentEvalConfig[key] ?? ""}
+                            onChange={(e) =>
+                              setCurrentEvalConfig((prev) => ({
+                                ...prev,
+                                [key]: e.target.value,
+                              }))
+                            }
+                            rows={2}
+                            placeholder={placeholder}
+                            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                          />
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
+
+              {/* Regenerate eval button */}
+              <button
+                onClick={handleRecompileEval}
+                disabled={recompileEvalLoading}
+                className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-[120ms]"
+              >
+                {recompileEvalLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Regenerating…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Regenerate Eval
+                  </>
+                )}
+              </button>
+
+              {/* Current metrics — editable */}
+              {(editedMetrics.some(m => m.name) || editedCuratorPrompt) && (
+                <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Current metrics
+                  </p>
+                  <div className="space-y-3">
+                    {editedMetrics.map((metric, i) => (
+                      <div key={i} className="border border-gray-100 rounded-xl p-3 space-y-2.5">
+                        <p className="text-xs font-semibold text-gray-400">Metric {i + 1}</p>
+                        <input
+                          type="text"
+                          value={metric.name}
+                          onChange={(e) => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, name: e.target.value } : m))}
+                          placeholder="Name"
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                        />
+                        <textarea
+                          value={metric.definition}
+                          onChange={(e) => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, definition: e.target.value } : m))}
+                          placeholder="Definition"
+                          rows={2}
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <textarea
+                            value={metric.strong}
+                            onChange={(e) => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, strong: e.target.value } : m))}
+                            placeholder="Strong (5/5)"
+                            rows={2}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                          />
+                          <textarea
+                            value={metric.weak}
+                            onChange={(e) => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, weak: e.target.value } : m))}
+                            placeholder="Weak (1/5)"
+                            rows={2}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                      Report curator prompt
+                    </label>
+                    <textarea
+                      value={editedCuratorPrompt}
+                      onChange={(e) => setEditedCuratorPrompt(e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSaveMetrics}
+                    className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-colors duration-[120ms]"
+                  >
+                    Save metrics
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
 }
-
-// ── Dict section (behavior_rules) ──────────────────────────────────────────────
-
-interface DictSectionProps {
-  label: string
-  value: Record<string, string>
-  defaultOpen: boolean
-  onItemChange: (field: string, val: string) => void
-}
-
-const BEHAVIOR_KEY_ORDER = ['opening', 'probing', 'adaptation', 'feedback', 'closing']
-
-function DictSection({
-  label, value, defaultOpen, onItemChange,
-}: DictSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
-  const keys = [
-    ...BEHAVIOR_KEY_ORDER.filter(k => k in value),
-    ...Object.keys(value).filter(k => !BEHAVIOR_KEY_ORDER.includes(k)),
-  ]
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <button
-        onClick={() => setIsOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 duration-[120ms] group"
-      >
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 duration-[120ms] ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            key="content"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
-            <div className="px-5 pb-5 pt-1 space-y-3 border-t border-gray-100">
-              {keys.map(key => (
-                <div key={key} className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{key}</span>
-                  <textarea
-                    value={value[key] ?? ''}
-                    onChange={e => onItemChange(key, e.target.value)}
-                    rows={2}
-                    className="w-full text-sm text-gray-800 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 resize-none duration-[120ms] leading-relaxed"
-                  />
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-

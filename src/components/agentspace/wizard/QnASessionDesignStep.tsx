@@ -1,13 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Brain, FileText, Globe, Image, LayoutTemplate, Upload, X } from 'lucide-react'
+import { ChevronDown, Clock, FileText, Globe, Image, Upload, X } from 'lucide-react'
 import type { QnASessionDesignRequest } from '../../../lib/api'
-import {
-  QNA_TEMPLATES,
-  qnaTemplateToSessionDesign,
-  type QnAAgentTemplate,
-} from '../../../lib/agentTemplates'
-import TemplateBrowserModal from './TemplateBrowserModal'
+import AutoExpandTextarea from './AutoExpandTextarea'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -21,7 +16,8 @@ interface AttachedFile {
 
 interface Props {
   language: string
-  onContinue: (design: QnASessionDesignRequest) => void
+  initialValues?: Partial<QnASessionDesignRequest>
+  onChange: (design: QnASessionDesignRequest | null) => void
 }
 
 // ── Suggestion data ────────────────────────────────────────────────────────────
@@ -29,32 +25,31 @@ interface Props {
 const DURATION_PILLS = [10, 15, 30] as const
 
 const OBJECTIVE_CHIPS = [
-  'Assess the participant\'s knowledge of --- through structured questioning',
-  'Test understanding of --- across key topics and concepts',
-  'Evaluate the participant\'s ability to apply --- in context',
-  'Review comprehension of --- using targeted follow-up questions',
+  { label: 'Knowledge check',   value: "Assess the participant's knowledge of --- through structured questioning" },
+  { label: 'Topic review',      value: 'Test understanding of --- across key topics and concepts' },
+  { label: 'Applied skills',    value: "Evaluate the participant's ability to apply --- in context" },
+  { label: 'Comprehension',     value: 'Review comprehension of --- using targeted follow-up questions' },
 ]
 
 const AGENT_ROLE_CHIPS = [
-  'A formal examiner testing knowledge of --- with follow-up probing',
-  'A supportive tutor checking understanding and providing feedback on ---',
-  'A neutral assessor evaluating knowledge of --- without bias',
-  'A rigorous evaluator challenging the participant on --- under pressure',
+  { label: 'Formal examiner',  value: 'A formal examiner testing knowledge of --- with follow-up probing' },
+  { label: 'Supportive tutor', value: 'A supportive tutor checking understanding and providing feedback on ---' },
+  { label: 'Neutral assessor', value: 'A neutral assessor evaluating knowledge of --- without bias' },
+  { label: 'Rigorous evaluator', value: 'A rigorous evaluator challenging the participant on --- under pressure' },
 ]
 
 const PARTICIPANT_CHIPS = [
-  'A student revising for or sitting a formal assessment',
-  'A professional verifying their knowledge in a specific domain',
-  'A language learner testing vocabulary and comprehension',
-  'A job candidate completing a knowledge screening test',
-  'A researcher reviewing their understanding of a subject area',
+  { label: 'Exam student',    value: 'A student revising for or sitting a formal assessment' },
+  { label: 'Professional',    value: 'A professional verifying their knowledge in a specific domain' },
+  { label: 'Language learner', value: 'A language learner testing vocabulary and comprehension' },
+  { label: 'Job candidate',   value: 'A job candidate completing a knowledge screening test' },
 ]
 
-const STYLE_PILLS = [
-  { label: 'Conversational', value: 'Conversational' },
-  { label: 'Formal', value: 'Formal' },
-  { label: 'Coaching', value: 'Coaching' },
-  { label: 'Strict', value: 'Strict' },
+const STYLE_OPTIONS = [
+  { label: 'Conversational', value: 'Conversational', desc: 'Relaxed, natural flow' },
+  { label: 'Formal',         value: 'Formal',         desc: 'Professional, structured' },
+  { label: 'Coaching',       value: 'Coaching',       desc: 'Supportive, guiding' },
+  { label: 'Strict',         value: 'Strict',         desc: 'Rigorous, no-nonsense' },
 ] as const
 
 // ── File helpers ───────────────────────────────────────────────────────────────
@@ -129,19 +124,29 @@ function imageSlotCount(list: AttachedFile[]) {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function QnASessionDesignStep({ language, onContinue }: Props) {
-  const [agentName, setAgentName] = useState('')
-  const [duration, setDuration] = useState<number | null>(null)
-  const [customDuration, setCustomDuration] = useState('')
-  const [isCustomDuration, setIsCustomDuration] = useState(false)
-  const [sessionObjective, setSessionObjective] = useState('')
-  const [agentRole, setAgentRole] = useState('')
-  const [participantRole, setParticipantRole] = useState('')
-  const [style, setStyle] = useState('')
-  const [feedbackMode, setFeedbackMode] = useState<'silent' | 'feedback'>('silent')
-  const [additionalContext, setAdditionalContext] = useState('')
-  const [showAdditional, setShowAdditional] = useState(false)
-  const [templateModalOpen, setTemplateModalOpen] = useState(false)
+export default function QnASessionDesignStep({ language, initialValues, onChange }: Props) {
+  const [agentName, setAgentName] = useState(() => initialValues?.agent_name ?? '')
+  const [duration, setDuration] = useState<number | null>(() => {
+    const d = initialValues?.session_duration_minutes
+    if (!d) return null
+    return DURATION_PILLS.includes(d as typeof DURATION_PILLS[number]) ? d : null
+  })
+  const [customDuration, setCustomDuration] = useState(() => {
+    const d = initialValues?.session_duration_minutes
+    if (!d) return ''
+    return DURATION_PILLS.includes(d as typeof DURATION_PILLS[number]) ? '' : String(d)
+  })
+  const [isCustomDuration, setIsCustomDuration] = useState(() => {
+    const d = initialValues?.session_duration_minutes
+    return !!d && !DURATION_PILLS.includes(d as typeof DURATION_PILLS[number])
+  })
+  const [sessionObjective, setSessionObjective] = useState(() => initialValues?.session_objective ?? '')
+  const [agentRole, setAgentRole] = useState(() => initialValues?.agent_role ?? '')
+  const [participantRole, setParticipantRole] = useState(() => initialValues?.participant_role ?? '')
+  const [style, setStyle] = useState(() => initialValues?.communication_style ?? '')
+  const [feedbackMode, setFeedbackMode] = useState<'silent' | 'feedback'>(() => initialValues?.feedback_mode ?? 'silent')
+  const [additionalContext, setAdditionalContext] = useState(() => initialValues?.additional_context ?? '')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const [files, setFiles] = useState<AttachedFile[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
@@ -152,9 +157,8 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
   const agentRoleRef = useRef<HTMLTextAreaElement>(null)
   const participantRef = useRef<HTMLTextAreaElement>(null)
 
-  const effectiveDuration = isCustomDuration
-    ? parseInt(customDuration, 10) || null
-    : duration
+
+  const effectiveDuration = isCustomDuration ? parseInt(customDuration, 10) || null : duration
 
   const canContinue =
     agentName.trim() &&
@@ -177,24 +181,6 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
       const pos = chip.indexOf('---')
       if (pos !== -1) ref.current.setSelectionRange(pos, pos + 3)
     }, 10)
-  }
-
-  function handleTemplateSelect(template: QnAAgentTemplate) {
-    const design = qnaTemplateToSessionDesign(template, template.suggested_name)
-    setAgentName(design.agent_name)
-    setSessionObjective(design.session_objective)
-    setAgentRole(design.agent_role)
-    setParticipantRole(design.participant_role)
-    setStyle(design.communication_style)
-    setFeedbackMode(design.feedback_mode)
-    const idx = DURATION_PILLS.indexOf(design.session_duration_minutes as typeof DURATION_PILLS[number])
-    if (idx !== -1) {
-      setDuration(design.session_duration_minutes)
-      setIsCustomDuration(false)
-    } else {
-      setIsCustomDuration(true)
-      setCustomDuration(String(design.session_duration_minutes))
-    }
   }
 
   async function handleFiles(incoming: File[]) {
@@ -238,14 +224,14 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
     e.preventDefault(); setDragging(false); handleFiles(Array.from(e.dataTransfer.files))
   }
 
-  function handleContinue() {
-    if (!canContinue || effectiveDuration === null) return
+  useEffect(() => {
+    if (!canContinue || effectiveDuration === null) { onChange(null); return }
     const resourceText = files.filter(f => f.fileType === 'text').map(f => f.text).join('\n\n')
     const resourceImages = [
       ...files.filter(f => f.fileType === 'image').map(f => f.dataUri!),
       ...files.filter(f => f.fileType === 'scanned-pdf').flatMap(f => f.pageImages!),
     ]
-    onContinue({
+    onChange({
       agent_name: agentName.trim(),
       session_objective: sessionObjective.trim(),
       agent_role: agentRole.trim(),
@@ -257,99 +243,78 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
       resource_images: resourceImages.length > 0 ? resourceImages : undefined,
       additional_context: additionalContext.trim() || undefined,
     })
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentName, sessionObjective, agentRole, participantRole, style, duration, customDuration, isCustomDuration, feedbackMode, additionalContext, files])
+
+  const summaryFilled = agentName.trim() || agentRole.trim() || participantRole.trim() || effectiveDuration || style || sessionObjective.trim()
 
   return (
-    <>
-      {templateModalOpen && (
-        <TemplateBrowserModal
-          type="qna"
-          onSelect={handleTemplateSelect}
-          onClose={() => setTemplateModalOpen(false)}
-        />
-      )}
-
-      <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="px-8 pt-8 pb-4">
-          <div className="flex items-center gap-2 mb-4">
+    <div className="max-w-5xl mx-auto px-8 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-3">
+          {language && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full border border-gray-200">
               <Globe size={11} />
               {language}
             </span>
-
-          </div>
-
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <h2 className="text-2xl font-semibold text-gray-900 whitespace-nowrap">
-              Design your assessment with
-            </h2>
-            <input
-              type="text"
-              value={agentName}
-              onChange={e => setAgentName(e.target.value)}
-              placeholder="Agent name"
-              className="text-2xl font-semibold text-indigo-600 bg-transparent border-b-2 border-indigo-200 focus:border-indigo-500 focus:outline-none placeholder:text-indigo-300 min-w-[120px] w-auto transition-colors duration-[120ms]"
-              style={{ width: `${Math.max(agentName.length || 12, 12)}ch` }}
-            />
-          </div>
-          <p className="text-sm text-gray-500 mt-1">
-            Fill in the session details or start from a template.
-          </p>
-
-          <div className="flex items-center gap-3 mt-4">
-            <button
-              onClick={() => setTemplateModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors duration-[120ms]"
-            >
-              <LayoutTemplate size={14} />
-              Browse templates
-            </button>
-            {QNA_TEMPLATES.slice(0, 3).map(t => (
-              <button
-                key={t.id}
-                onClick={() => handleTemplateSelect(t)}
-                className="text-xs text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors duration-[120ms]"
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
+          )}
         </div>
+        <h2 className="text-2xl font-semibold text-gray-900">Design your assessment</h2>
+        <p className="text-sm text-gray-500 mt-1">Define who the agent is and what the session should accomplish.</p>
+      </div>
 
-        {/* Fields */}
-        <div className="flex-1 overflow-y-auto px-8 pb-4 space-y-6">
-          {/* Duration */}
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-2">Session duration</label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {DURATION_PILLS.map(d => (
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_360px] gap-8 items-start">
+
+        {/* ── Left: Form fields ─────────────────────────────────────────── */}
+        <div className="space-y-6">
+
+          {/* Agent name + duration row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Agent name</label>
+              <input
+                type="text"
+                value={agentName}
+                onChange={e => setAgentName(e.target.value)}
+                placeholder="e.g. Prof. Chen"
+                className="w-full text-base text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <Clock size={13} className="inline mr-1 text-gray-400" />
+                Duration
+              </label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {DURATION_PILLS.map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => { setDuration(d); setIsCustomDuration(false) }}
+                    className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                      !isCustomDuration && duration === d
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {d} min
+                  </button>
+                ))}
                 <button
-                  key={d}
                   type="button"
-                  onClick={() => { setDuration(d); setIsCustomDuration(false) }}
-                  className={`px-4 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                    !isCustomDuration && duration === d
+                  onClick={() => setIsCustomDuration(true)}
+                  className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                    isCustomDuration
                       ? 'bg-indigo-600 text-white border-indigo-600'
                       : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
-                  {d} min
+                  Custom
                 </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setIsCustomDuration(true)}
-                className={`px-4 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                  isCustomDuration
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                Custom
-              </button>
-              {isCustomDuration && (
-                <div className="flex items-center gap-1.5">
+                {isCustomDuration && (
                   <input
                     type="number"
                     min={1}
@@ -358,35 +323,32 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
                     onChange={e => setCustomDuration(e.target.value)}
                     placeholder="20"
                     autoFocus
-                    className="w-20 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                    className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
                   />
-                  <span className="text-sm text-gray-500">min</span>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
           {/* Session objective */}
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">Session objective</label>
-            <p className="text-xs text-gray-400 mb-2">What topics or knowledge areas is this assessment covering?</p>
-            <textarea
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Session objective</label>
+            <AutoExpandTextarea
               ref={objectiveRef}
               value={sessionObjective}
               onChange={e => setSessionObjective(e.target.value)}
-              placeholder="e.g. Assess understanding of data structures and algorithms through structured questioning"
-              rows={2}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
+              placeholder="e.g. Assess understanding of data structures through structured questioning…"
+              className="w-full px-3 py-2.5 text-base border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
               {OBJECTIVE_CHIPS.map(chip => (
                 <button
-                  key={chip}
+                  key={chip.label}
                   type="button"
-                  onClick={() => applyChip(chip, setSessionObjective, objectiveRef)}
-                  className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms]"
+                  onClick={() => applyChip(chip.value, setSessionObjective, objectiveRef)}
+                  className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms] shrink-0"
                 >
-                  {chip.replace('---', '[topic]')}
+                  {chip.label}
                 </button>
               ))}
             </div>
@@ -394,27 +356,23 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
 
           {/* Agent role */}
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">
-              {agentName || 'Agent'}'s role
-            </label>
-            <p className="text-xs text-gray-400 mb-2">How should {agentName || 'the agent'} behave during questioning?</p>
-            <textarea
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Agent role</label>
+            <AutoExpandTextarea
               ref={agentRoleRef}
               value={agentRole}
               onChange={e => setAgentRole(e.target.value)}
-              placeholder="e.g. A formal examiner testing knowledge with targeted follow-up questions"
-              rows={2}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
+              placeholder="e.g. A formal examiner testing knowledge of the subject with follow-up probing…"
+              className="w-full px-3 py-2.5 text-base border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
               {AGENT_ROLE_CHIPS.map(chip => (
                 <button
-                  key={chip}
+                  key={chip.label}
                   type="button"
-                  onClick={() => applyChip(chip, setAgentRole, agentRoleRef)}
-                  className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms]"
+                  onClick={() => applyChip(chip.value, setAgentRole, agentRoleRef)}
+                  className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms] shrink-0"
                 >
-                  {chip.replace('---', '[topic]')}
+                  {chip.label}
                 </button>
               ))}
             </div>
@@ -422,25 +380,23 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
 
           {/* Participant role */}
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">Who is being assessed?</label>
-            <p className="text-xs text-gray-400 mb-2">Describe the participant's background and purpose</p>
-            <textarea
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Participant role</label>
+            <AutoExpandTextarea
               ref={participantRef}
               value={participantRole}
               onChange={e => setParticipantRole(e.target.value)}
-              placeholder="e.g. A student revising for a mid-semester assessment"
-              rows={2}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
+              placeholder="e.g. A student revising for or sitting a formal assessment…"
+              className="w-full px-3 py-2.5 text-base border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
               {PARTICIPANT_CHIPS.map(chip => (
                 <button
-                  key={chip}
+                  key={chip.label}
                   type="button"
-                  onClick={() => applyChip(chip, setParticipantRole, participantRef)}
-                  className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms]"
+                  onClick={() => applyChip(chip.value, setParticipantRole, participantRef)}
+                  className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms] shrink-0"
                 >
-                  {chip}
+                  {chip.label}
                 </button>
               ))}
             </div>
@@ -448,84 +404,73 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
 
           {/* Communication style */}
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-2">Communication style</label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {STYLE_PILLS.map(s => (
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Communication style</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {STYLE_OPTIONS.map(s => (
                 <button
                   key={s.value}
                   type="button"
                   onClick={() => setStyle(s.value)}
-                  className={`px-4 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                  className={`px-3 py-2.5 text-sm rounded-lg border text-left transition-all duration-[120ms] ${
                     style === s.value
                       ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                      : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
-                  {s.label}
+                  <span className="block font-medium">{s.label}</span>
+                  <span className={`block text-xs mt-0.5 ${style === s.value ? 'text-indigo-200' : 'text-gray-400'}`}>
+                    {s.desc}
+                  </span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Feedback mode */}
+          {/* After-answer feedback mode */}
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-2">
-              After each answer, {agentName || 'the agent'} should
-            </label>
-            <div className="flex flex-col gap-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">After each answer</label>
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setFeedbackMode('silent')}
-                className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all duration-[120ms] ${
+                className={`flex-1 px-3 py-2.5 text-sm rounded-lg border text-left transition-all duration-[120ms] ${
                   feedbackMode === 'silent'
-                    ? 'border-indigo-400 bg-indigo-50'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 ${
-                  feedbackMode === 'silent' ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300'
-                }`} />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Move on silently</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Acknowledge briefly and continue to the next question</p>
-                </div>
+                <span className="block font-medium">Move on silently</span>
+                <span className={`block text-xs mt-0.5 ${feedbackMode === 'silent' ? 'text-indigo-200' : 'text-gray-400'}`}>
+                  No immediate feedback
+                </span>
               </button>
               <button
                 type="button"
                 onClick={() => setFeedbackMode('feedback')}
-                className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all duration-[120ms] ${
+                className={`flex-1 px-3 py-2.5 text-sm rounded-lg border text-left transition-all duration-[120ms] ${
                   feedbackMode === 'feedback'
-                    ? 'border-indigo-400 bg-indigo-50'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 ${
-                  feedbackMode === 'feedback' ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300'
-                }`} />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Give brief feedback</p>
-                  <p className="text-xs text-gray-500 mt-0.5">One sentence of targeted response before moving on</p>
-                </div>
+                <span className="block font-medium">Give brief feedback</span>
+                <span className={`block text-xs mt-0.5 ${feedbackMode === 'feedback' ? 'text-indigo-200' : 'text-gray-400'}`}>
+                  Comment before next question
+                </span>
               </button>
             </div>
           </div>
 
-          {/* Resource materials */}
+          {/* File attachment */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Reference materials{' '}
-              <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <p className="text-xs text-gray-400 mb-2">
-              Upload course notes, textbook pages, or images to ground the questions
-            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Resource files <span className="text-xs font-normal text-gray-400">(optional)</span></label>
             <div
               onDragEnter={e => { e.preventDefault(); setDragging(true) }}
               onDragOver={e => { e.preventDefault(); setDragging(true) }}
               onDragLeave={() => setDragging(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl px-4 py-4 text-center cursor-pointer transition-all duration-[120ms] ${
+              className={`border-2 border-dashed rounded-lg px-4 py-3 text-center cursor-pointer transition-all duration-[120ms] ${
                 dragging ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -537,9 +482,9 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
                 className="hidden"
                 onChange={e => { if (e.target.files) handleFiles(Array.from(e.target.files)); e.target.value = '' }}
               />
-              <Upload className="w-4 h-4 text-gray-400 mx-auto mb-1.5" />
+              <Upload className="w-4 h-4 text-gray-400 mx-auto mb-1" />
               <p className="text-sm text-gray-500">Drop files or click to browse</p>
-              <p className="text-xs text-gray-400 mt-0.5">PDF, .txt, JPG/PNG/WebP — max 3 files</p>
+              <p className="text-xs text-gray-400 mt-0.5">PDF, .txt, images — max 3 files</p>
             </div>
 
             <AnimatePresence>
@@ -556,16 +501,16 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
             </AnimatePresence>
 
             {files.length > 0 && (
-              <div className="mt-2 flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1 mt-2">
                 {files.map((f, i) => (
                   <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
                     {f.fileType === 'text'
-                      ? <FileText className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                      : <Image className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      ? <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      : <Image className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                     }
                     <span className="text-sm text-gray-700 truncate flex-1">{f.name}</span>
                     {f.fileType === 'scanned-pdf' && (
-                      <span className="text-xs text-gray-400 shrink-0">{f.pageImages!.length}p scanned</span>
+                      <span className="text-xs text-gray-400 shrink-0">{f.pageImages!.length}p</span>
                     )}
                     <button
                       onClick={e => { e.stopPropagation(); removeFile(i) }}
@@ -579,48 +524,120 @@ export default function QnASessionDesignStep({ language, onContinue }: Props) {
             )}
           </div>
 
-          {/* Additional context */}
-          {showAdditional ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Additional context{' '}
-                <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <textarea
-                value={additionalContext}
-                onChange={e => setAdditionalContext(e.target.value)}
-                placeholder="Any extra context that should shape the agent's behaviour..."
-                rows={2}
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
-              />
-            </div>
-          ) : (
+          {/* Advanced / additional context */}
+          <div>
             <button
               type="button"
-              onClick={() => setShowAdditional(true)}
-              className="text-sm text-gray-400 hover:text-gray-600 transition-colors duration-[120ms]"
+              onClick={() => setAdvancedOpen(v => !v)}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 duration-[120ms]"
             >
-              + Add additional context (optional)
+              <ChevronDown className={`w-3 h-3 transition-transform duration-[120ms] ${advancedOpen ? 'rotate-180' : ''}`} />
+              Advanced
             </button>
-          )}
+            <AnimatePresence>
+              {advancedOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden mt-3"
+                >
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Additional context
+                    <span className="ml-1.5 text-xs font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <AutoExpandTextarea
+                    value={additionalContext}
+                    onChange={e => setAdditionalContext(e.target.value)}
+                    placeholder="Any extra context, constraints, or instructions for the agent…"
+                    className="w-full px-3 py-2.5 text-base border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
         </div>
 
-        {/* CTA */}
-        <div className="px-8 pb-8 pt-4 border-t border-gray-100">
-          <button
-            onClick={handleContinue}
-            disabled={!canContinue}
-            className={`w-full py-3 text-sm font-medium rounded-xl transition-all duration-[120ms] flex items-center justify-center gap-2 ${
-              canContinue
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            <Brain className="w-4 h-4" />
-            Continue
-          </button>
+        {/* ── Right: Live summary card ──────────────────────────────────── */}
+        <div className="sticky top-6">
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-4">Session preview</p>
+
+            {summaryFilled ? (
+              <div className="space-y-3 text-sm text-gray-700 leading-relaxed">
+                {agentName.trim() && (
+                  <p>
+                    <span className="font-semibold text-gray-900">{agentName.trim()}</span>
+                    {agentRole.trim() ? (
+                      <span className="text-gray-600"> will act as {agentRole.trim().toLowerCase().replace(/^a\s/, '')}</span>
+                    ) : (
+                      <span className="text-gray-400"> — role not set</span>
+                    )}
+                    {'.'}
+                  </p>
+                )}
+
+                {(effectiveDuration || style || participantRole.trim()) && (
+                  <p className="text-gray-600">
+                    {effectiveDuration ? (
+                      <><span className="font-medium text-gray-800">{effectiveDuration}-minute</span>{' '}</>
+                    ) : null}
+                    {style ? (
+                      <><span className="font-medium text-gray-800">{style.toLowerCase()}</span>{' '}assessment{' '}</>
+                    ) : (
+                      <>assessment{' '}</>
+                    )}
+                    {participantRole.trim() ? (
+                      <>with <span className="font-medium text-gray-800">{participantRole.trim().toLowerCase()}</span>.</>
+                    ) : (
+                      <>— participant not set.</>
+                    )}
+                  </p>
+                )}
+
+                {feedbackMode === 'feedback' && (
+                  <p className="text-xs text-gray-500">Brief feedback given after each answer.</p>
+                )}
+
+                {sessionObjective.trim() && (
+                  <p className="text-gray-500 text-xs border-t border-gray-100 pt-3 mt-3">
+                    <span className="font-medium text-gray-600">Objective:</span>{' '}
+                    {sessionObjective.trim()}
+                  </p>
+                )}
+
+                {files.length > 0 && (
+                  <p className="text-xs text-gray-400">{files.length} resource file{files.length > 1 ? 's' : ''} attached.</p>
+                )}
+              </div>
+            ) : (
+              <div className="py-6 text-center">
+                <p className="text-sm text-gray-400">Fill in the fields on the left to see a preview of your session setup.</p>
+              </div>
+            )}
+
+            {/* Completion checklist */}
+            <div className="mt-5 pt-4 border-t border-gray-100 space-y-1.5">
+              {[
+                { label: 'Agent name',  filled: !!agentName.trim() },
+                { label: 'Objective',   filled: !!sessionObjective.trim() },
+                { label: 'Agent role',  filled: !!agentRole.trim() },
+                { label: 'Participant', filled: !!participantRole.trim() },
+                { label: 'Style',       filled: !!style },
+                { label: 'Duration',    filled: effectiveDuration !== null && effectiveDuration > 0 },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.filled ? 'bg-indigo-500' : 'bg-gray-200'}`} />
+                  <span className={`text-xs ${item.filled ? 'text-gray-600' : 'text-gray-400'}`}>{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+
       </div>
-    </>
+    </div>
   )
 }

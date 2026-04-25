@@ -1,18 +1,17 @@
-import { useRef, useState } from 'react'
-import { Globe, LayoutTemplate } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Globe, Clock, ChevronDown } from 'lucide-react'
 import type { SessionDesignRequest } from '../../../lib/api'
-import {
-  GENERAL_TEMPLATES,
-  templateToSessionDesign,
-  type AgentTemplate,
-} from '../../../lib/agentTemplates'
+import { templateToSessionDesign, type AgentTemplate } from '../../../lib/agentTemplates'
 import TemplateBrowserModal from './TemplateBrowserModal'
+import AutoExpandTextarea from './AutoExpandTextarea'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface Props {
   language: string
-  onContinue: (design: SessionDesignRequest) => void
+  initialValues?: Partial<SessionDesignRequest>
+  onChange: (design: SessionDesignRequest | null) => void
 }
 
 // ── Suggestion data ────────────────────────────────────────────────────────────
@@ -20,57 +19,65 @@ interface Props {
 const DURATION_PILLS = [10, 15, 30] as const
 
 const OBJECTIVE_CHIPS = [
-  'Assess understanding of --- through structured questioning',
-  'Practise for an upcoming --- interview and build confidence',
-  'Coach the participant to improve their --- skills',
-  'Conduct a mock examination of the participant on ---',
+  { label: 'Knowledge assessment', value: 'Assess understanding of --- through structured questioning' },
+  { label: 'Mock examination',     value: 'Conduct a mock examination of the participant on ---' },
+  { label: 'Interview practice',   value: 'Practise for an upcoming --- interview and build confidence' },
+  { label: 'Coaching session',     value: 'Coach the participant to improve their --- skills' },
 ]
 
 const AGENT_ROLE_CHIPS = [
-  'A rigorous oral examiner testing depth of knowledge on ---',
-  'A professional interviewer assessing fit for a --- role',
-  'A supportive coach helping the participant improve their ---',
-  'A roleplay character: a --- in a realistic professional scenario',
+  { label: 'Oral examiner',      value: 'A rigorous oral examiner testing depth of knowledge on ---' },
+  { label: 'Interviewer',        value: 'A professional interviewer assessing fit for a --- role' },
+  { label: 'Supportive coach',   value: 'A supportive coach helping the participant improve their ---' },
+  { label: 'Roleplay character', value: 'A roleplay character: a --- in a realistic professional scenario' },
 ]
 
 const PARTICIPANT_CHIPS = [
-  'A student preparing for a formal examination or assessment',
-  'A job candidate preparing for a professional interview',
-  'A professional looking to develop their --- skills',
-  'A researcher defending their thesis or project work',
-  'A sales representative preparing for client-facing conversations',
-  'A speaker preparing to present at a conference or event',
+  { label: 'Exam student',  value: 'A student preparing for a formal examination or assessment' },
+  { label: 'Job candidate', value: 'A job candidate preparing for a professional interview' },
+  { label: 'Professional',  value: 'A professional looking to develop their --- skills' },
+  { label: 'Researcher',    value: 'A researcher defending their thesis or project work' },
 ]
 
-const STYLE_PILLS = [
-  { label: 'Conversational', value: 'Conversational' },
-  { label: 'Formal', value: 'Formal' },
-  { label: 'Coaching', value: 'Coaching' },
-  { label: 'Strict', value: 'Strict' },
+const STYLE_OPTIONS = [
+  { label: 'Conversational', value: 'Conversational', desc: 'Relaxed, natural flow' },
+  { label: 'Formal', value: 'Formal', desc: 'Professional, structured' },
+  { label: 'Coaching', value: 'Coaching', desc: 'Supportive, guiding' },
+  { label: 'Strict', value: 'Strict', desc: 'Rigorous, no-nonsense' },
 ] as const
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function SessionDesignStep({ language, onContinue }: Props) {
-  const [agentName, setAgentName] = useState('')
-  const [duration, setDuration] = useState<number | null>(null)
-  const [customDuration, setCustomDuration] = useState('')
-  const [isCustomDuration, setIsCustomDuration] = useState(false)
-  const [sessionObjective, setSessionObjective] = useState('')
-  const [agentRole, setAgentRole] = useState('')
-  const [participantRole, setParticipantRole] = useState('')
-  const [style, setStyle] = useState('')
-  const [additionalContext, setAdditionalContext] = useState('')
-  const [showAdditional, setShowAdditional] = useState(false)
+export default function SessionDesignStep({ language, initialValues, onChange }: Props) {
+  const [agentName, setAgentName] = useState(() => initialValues?.agent_name ?? '')
+  const [duration, setDuration] = useState<number | null>(() => {
+    const d = initialValues?.session_duration_minutes
+    if (!d) return null
+    return DURATION_PILLS.includes(d as typeof DURATION_PILLS[number]) ? d : null
+  })
+  const [customDuration, setCustomDuration] = useState(() => {
+    const d = initialValues?.session_duration_minutes
+    if (!d) return ''
+    return DURATION_PILLS.includes(d as typeof DURATION_PILLS[number]) ? '' : String(d)
+  })
+  const [isCustomDuration, setIsCustomDuration] = useState(() => {
+    const d = initialValues?.session_duration_minutes
+    return !!d && !DURATION_PILLS.includes(d as typeof DURATION_PILLS[number])
+  })
+  const [sessionObjective, setSessionObjective] = useState(() => initialValues?.session_objective ?? '')
+  const [agentRole, setAgentRole] = useState(() => initialValues?.agent_role ?? '')
+  const [participantRole, setParticipantRole] = useState(() => initialValues?.participant_role ?? '')
+  const [style, setStyle] = useState(() => initialValues?.communication_style ?? '')
+  const [additionalContext, setAdditionalContext] = useState(() => initialValues?.additional_context ?? '')
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const objectiveRef = useRef<HTMLTextAreaElement>(null)
   const agentRoleRef = useRef<HTMLTextAreaElement>(null)
   const participantRef = useRef<HTMLTextAreaElement>(null)
 
-  const effectiveDuration = isCustomDuration
-    ? parseInt(customDuration, 10) || null
-    : duration
+
+  const effectiveDuration = isCustomDuration ? parseInt(customDuration, 10) || null : duration
 
   const canContinue =
     agentName.trim() &&
@@ -82,7 +89,6 @@ export default function SessionDesignStep({ language, onContinue }: Props) {
     style
 
   function applyChip(
-    _current: string,
     chip: string,
     setter: (v: string) => void,
     ref: React.RefObject<HTMLTextAreaElement | null>,
@@ -92,9 +98,7 @@ export default function SessionDesignStep({ language, onContinue }: Props) {
       if (!ref.current) return
       ref.current.focus()
       const pos = chip.indexOf('---')
-      if (pos !== -1) {
-        ref.current.setSelectionRange(pos, pos + 3)
-      }
+      if (pos !== -1) ref.current.setSelectionRange(pos, pos + 3)
     }, 10)
   }
 
@@ -105,19 +109,23 @@ export default function SessionDesignStep({ language, onContinue }: Props) {
     setAgentRole(design.agent_role)
     setParticipantRole(design.participant_role)
     setStyle(design.communication_style)
-    const idx = DURATION_PILLS.indexOf(design.session_duration_minutes as typeof DURATION_PILLS[number])
-    if (idx !== -1) {
-      setDuration(design.session_duration_minutes)
+    const d = design.session_duration_minutes
+    if (DURATION_PILLS.includes(d as typeof DURATION_PILLS[number])) {
+      setDuration(d)
       setIsCustomDuration(false)
+      setCustomDuration('')
     } else {
+      setDuration(null)
       setIsCustomDuration(true)
-      setCustomDuration(String(design.session_duration_minutes))
+      setCustomDuration(String(d))
     }
+    setTemplateModalOpen(false)
   }
 
-  function handleContinue() {
-    if (!canContinue || effectiveDuration === null) return
-    onContinue({
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!canContinue || effectiveDuration === null) { onChange(null); return }
+    onChange({
       agent_name: agentName.trim(),
       session_objective: sessionObjective.trim(),
       agent_role: agentRole.trim(),
@@ -126,7 +134,10 @@ export default function SessionDesignStep({ language, onContinue }: Props) {
       session_duration_minutes: effectiveDuration,
       additional_context: additionalContext.trim() || undefined,
     })
-  }
+  }, [agentName, sessionObjective, agentRole, participantRole, style, duration, customDuration, isCustomDuration, additionalContext])
+
+  // Live summary preview
+  const summaryFilled = agentName.trim() || agentRole.trim() || participantRole.trim() || effectiveDuration || style || sessionObjective.trim()
 
   return (
     <>
@@ -138,260 +149,295 @@ export default function SessionDesignStep({ language, onContinue }: Props) {
         />
       )}
 
-      <div className="flex flex-col h-full">
+      <div className="max-w-5xl mx-auto px-8 py-8">
         {/* Header */}
-        <div className="px-8 pt-8 pb-4">
-          {/* Language + persona badges */}
-          <div className="flex items-center gap-2 mb-4">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full border border-gray-200">
-              <Globe size={11} />
-              {language}
-            </span>
-
-          </div>
-
-          {/* Heading with inline agent name */}
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <h2 className="text-2xl font-semibold text-gray-900 whitespace-nowrap">
-              Design your session with
-            </h2>
-            <input
-              type="text"
-              value={agentName}
-              onChange={e => setAgentName(e.target.value)}
-              placeholder="Agent name"
-              className="text-2xl font-semibold text-indigo-600 bg-transparent border-b-2 border-indigo-200 focus:border-indigo-500 focus:outline-none placeholder:text-indigo-300 min-w-[120px] w-auto transition-colors duration-[120ms]"
-              style={{ width: `${Math.max(agentName.length || 12, 12)}ch` }}
-            />
-          </div>
-          <p className="text-sm text-gray-500 mt-1">
-            Fill in the session details or start from a template.
-          </p>
-
-          {/* Template selector */}
-          <div className="flex items-center gap-3 mt-4">
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            {language && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full border border-gray-200">
+                <Globe size={11} />
+                {language}
+              </span>
+            )}
             <button
               onClick={() => setTemplateModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors duration-[120ms]"
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors duration-[120ms]"
             >
-              <LayoutTemplate size={14} />
               Browse templates
             </button>
-            {GENERAL_TEMPLATES.slice(0, 3).map(t => (
-              <button
-                key={t.id}
-                onClick={() => handleTemplateSelect(t)}
-                className="text-xs text-gray-500 hover:text-gray-800 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors duration-[120ms]"
-              >
-                {t.name}
-              </button>
-            ))}
           </div>
+          <h2 className="text-2xl font-semibold text-gray-900">Design your session</h2>
+          <p className="text-sm text-gray-500 mt-1">Define who the agent is and what the session should accomplish.</p>
         </div>
 
-        {/* Fields */}
-        <div className="flex-1 overflow-y-auto px-8 pb-4 space-y-6">
-          {/* Duration */}
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-2">
-              Session duration
-            </label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {DURATION_PILLS.map(d => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => { setDuration(d); setIsCustomDuration(false) }}
-                  className={`px-4 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                    !isCustomDuration && duration === d
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {d} min
-                </button>
-              ))}
+        {/* Two-column layout */}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_360px] gap-8 items-start">
+
+          {/* ── Left: Form fields ─────────────────────────────────────────── */}
+          <div className="space-y-6">
+
+            {/* Agent name + duration row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Agent name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Agent name</label>
+                <input
+                  type="text"
+                  value={agentName}
+                  onChange={e => setAgentName(e.target.value)}
+                  placeholder="e.g. Dr. Patel"
+                  className="w-full text-base text-gray-800 border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                />
+              </div>
+
+              {/* Duration */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <Clock size={13} className="inline mr-1 text-gray-400" />
+                  Duration
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {DURATION_PILLS.map(d => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => { setDuration(d); setIsCustomDuration(false) }}
+                      className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                        !isCustomDuration && duration === d
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {d} min
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomDuration(true)}
+                    className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                      isCustomDuration
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    Custom
+                  </button>
+                  {isCustomDuration && (
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={customDuration}
+                      onChange={e => setCustomDuration(e.target.value)}
+                      placeholder="20"
+                      autoFocus
+                      className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Session objective */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Session objective</label>
+              <AutoExpandTextarea
+                ref={objectiveRef}
+                value={sessionObjective}
+                onChange={e => setSessionObjective(e.target.value)}
+                placeholder="e.g. Conduct a rigorous oral examination on machine learning fundamentals…"
+                className="w-full px-3 py-2.5 text-base border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {OBJECTIVE_CHIPS.map(chip => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => applyChip(chip.value, setSessionObjective, objectiveRef)}
+                    className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms] shrink-0"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Agent role */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Agent role</label>
+              <AutoExpandTextarea
+                ref={agentRoleRef}
+                value={agentRole}
+                onChange={e => setAgentRole(e.target.value)}
+                placeholder="e.g. A rigorous oral examiner testing depth of knowledge on the subject…"
+                className="w-full px-3 py-2.5 text-base border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {AGENT_ROLE_CHIPS.map(chip => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => applyChip(chip.value, setAgentRole, agentRoleRef)}
+                    className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms] shrink-0"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Participant role */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Participant role</label>
+              <AutoExpandTextarea
+                ref={participantRef}
+                value={participantRole}
+                onChange={e => setParticipantRole(e.target.value)}
+                placeholder="e.g. A postgraduate student preparing for their thesis defense…"
+                className="w-full px-3 py-2.5 text-base border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+              />
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {PARTICIPANT_CHIPS.map(chip => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => applyChip(chip.value, setParticipantRole, participantRef)}
+                    className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms] shrink-0"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Communication style */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Communication style</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {STYLE_OPTIONS.map(s => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => setStyle(s.value)}
+                    className={`px-3 py-2.5 text-sm rounded-lg border text-left transition-all duration-[120ms] ${
+                      style === s.value
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="block font-medium">{s.label}</span>
+                    <span className={`block text-xs mt-0.5 ${style === s.value ? 'text-indigo-200' : 'text-gray-400'}`}>
+                      {s.desc}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Advanced / additional context */}
+            <div>
               <button
                 type="button"
-                onClick={() => setIsCustomDuration(true)}
-                className={`px-4 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                  isCustomDuration
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                }`}
+                onClick={() => setAdvancedOpen(v => !v)}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 duration-[120ms]"
               >
-                Custom
+                <ChevronDown className={`w-3 h-3 transition-transform duration-[120ms] ${advancedOpen ? 'rotate-180' : ''}`} />
+                Advanced
               </button>
-              {isCustomDuration && (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={1}
-                    max={120}
-                    value={customDuration}
-                    onChange={e => setCustomDuration(e.target.value)}
-                    placeholder="20"
-                    autoFocus
-                    className="w-20 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                  />
-                  <span className="text-sm text-gray-500">min</span>
+              <AnimatePresence>
+                {advancedOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden mt-3"
+                  >
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Additional context
+                      <span className="ml-1.5 text-xs font-normal text-gray-400">(optional)</span>
+                    </label>
+                    <AutoExpandTextarea
+                      value={additionalContext}
+                      onChange={e => setAdditionalContext(e.target.value)}
+                      placeholder="Any extra context, constraints, or instructions for the agent…"
+                      className="w-full px-3 py-2.5 text-base border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* ── Right: Live summary card ──────────────────────────────────── */}
+          <div className="sticky top-6">
+            <div className="bg-white border border-gray-200 rounded-xl p-6">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-4">Session preview</p>
+
+              {summaryFilled ? (
+                <div className="space-y-3 text-sm text-gray-700 leading-relaxed">
+                  {agentName.trim() && (
+                    <p>
+                      <span className="font-semibold text-gray-900">{agentName.trim()}</span>
+                      {agentRole.trim() ? (
+                        <span className="text-gray-600"> will act as {agentRole.trim().toLowerCase().replace(/^a\s/, '')}</span>
+                      ) : (
+                        <span className="text-gray-400"> — role not set</span>
+                      )}
+                      {'.'}
+                    </p>
+                  )}
+
+                  {(effectiveDuration || style || participantRole.trim()) && (
+                    <p className="text-gray-600">
+                      {effectiveDuration ? (
+                        <><span className="font-medium text-gray-800">{effectiveDuration}-minute</span>{' '}</>
+                      ) : null}
+                      {style ? (
+                        <><span className="font-medium text-gray-800">{style.toLowerCase()}</span>{' '}session{' '}</>
+                      ) : (
+                        <>session{' '}</>
+                      )}
+                      {participantRole.trim() ? (
+                        <>with <span className="font-medium text-gray-800">{participantRole.trim().toLowerCase()}</span>.</>
+                      ) : (
+                        <>— participant not set.</>
+                      )}
+                    </p>
+                  )}
+
+                  {sessionObjective.trim() && (
+                    <p className="text-gray-500 text-xs border-t border-gray-100 pt-3 mt-3">
+                      <span className="font-medium text-gray-600">Objective:</span>{' '}
+                      {sessionObjective.trim()}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="py-6 text-center">
+                  <p className="text-sm text-gray-400">Fill in the fields on the left to see a preview of your session setup.</p>
                 </div>
               )}
+
+              {/* Completion checklist */}
+              <div className="mt-5 pt-4 border-t border-gray-100 space-y-1.5">
+                {[
+                  { label: 'Agent name', filled: !!agentName.trim() },
+                  { label: 'Objective', filled: !!sessionObjective.trim() },
+                  { label: 'Agent role', filled: !!agentRole.trim() },
+                  { label: 'Participant', filled: !!participantRole.trim() },
+                  { label: 'Style', filled: !!style },
+                  { label: 'Duration', filled: effectiveDuration !== null && effectiveDuration > 0 },
+                ].map(item => (
+                  <div key={item.label} className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.filled ? 'bg-indigo-500' : 'bg-gray-200'}`} />
+                    <span className={`text-xs ${item.filled ? 'text-gray-600' : 'text-gray-400'}`}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Session objective */}
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">
-              Session objective
-            </label>
-            <p className="text-xs text-gray-400 mb-2">
-              What is this session trying to achieve?
-            </p>
-            <textarea
-              ref={objectiveRef}
-              value={sessionObjective}
-              onChange={e => setSessionObjective(e.target.value)}
-              placeholder="e.g. Conduct a rigorous oral examination of the participant's thesis"
-              rows={2}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
-            />
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {OBJECTIVE_CHIPS.map(chip => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => applyChip(sessionObjective, chip, setSessionObjective, objectiveRef)}
-                  className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms]"
-                >
-                  {chip.replace('---', '[topic]')}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Agent role */}
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">
-              {agentName || 'Agent'}'s role in this session
-            </label>
-            <p className="text-xs text-gray-400 mb-2">
-              Who is {agentName || 'the agent'} in this session? Define the persona and behaviour.
-            </p>
-            <textarea
-              ref={agentRoleRef}
-              value={agentRole}
-              onChange={e => setAgentRole(e.target.value)}
-              placeholder="e.g. A rigorous oral examiner probing depth of understanding and academic reasoning"
-              rows={2}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
-            />
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {AGENT_ROLE_CHIPS.map(chip => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => applyChip(agentRole, chip, setAgentRole, agentRoleRef)}
-                  className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms]"
-                >
-                  {chip.replace('---', '[topic]')}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Participant role */}
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">
-              Who is joining this session?
-            </label>
-            <p className="text-xs text-gray-400 mb-2">
-              Describe the participant's background and purpose in this session
-            </p>
-            <textarea
-              ref={participantRef}
-              value={participantRole}
-              onChange={e => setParticipantRole(e.target.value)}
-              placeholder="e.g. A postgraduate student defending their thesis"
-              rows={2}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
-            />
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {PARTICIPANT_CHIPS.map(chip => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => applyChip(participantRole, chip, setParticipantRole, participantRef)}
-                  className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-full border border-gray-200 hover:border-indigo-200 transition-colors duration-[120ms]"
-                >
-                  {chip.replace('---', '[field]')}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Communication style */}
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-2">
-              Communication style
-            </label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {STYLE_PILLS.map(s => (
-                <button
-                  key={s.value}
-                  type="button"
-                  onClick={() => setStyle(s.value)}
-                  className={`px-4 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                    style === s.value
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Additional context */}
-          {showAdditional ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Additional context{' '}
-                <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <textarea
-                value={additionalContext}
-                onChange={e => setAdditionalContext(e.target.value)}
-                placeholder="Any extra context that should shape the agent's behaviour..."
-                rows={2}
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent transition-all duration-[120ms]"
-              />
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowAdditional(true)}
-              className="text-sm text-gray-400 hover:text-gray-600 transition-colors duration-[120ms]"
-            >
-              + Add additional context (optional)
-            </button>
-          )}
-        </div>
-
-        {/* CTA */}
-        <div className="px-8 pb-8 pt-4 border-t border-gray-100">
-          <button
-            onClick={handleContinue}
-            disabled={!canContinue}
-            className={`w-full py-3 text-sm font-medium rounded-xl transition-all duration-[120ms] ${
-              canContinue
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            Continue
-          </button>
         </div>
       </div>
     </>
