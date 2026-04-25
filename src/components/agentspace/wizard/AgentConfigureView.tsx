@@ -645,61 +645,86 @@ export default function AgentConfigureView({
                   </div>
                 </div>
 
-                {/* Session objective */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Session objective
-                  </label>
-                  <textarea
-                    value={sessionConfig.session_objective ?? ""}
-                    onChange={(e) =>
-                      setSessionConfig((prev) => ({
-                        ...prev,
-                        session_objective: e.target.value,
-                      }))
-                    }
-                    rows={2}
-                    placeholder="e.g. Conduct a rigorous oral examination on machine learning…"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                  />
-                </div>
+                {/* Textareas - 2 per row on large screens */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Session objective */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Session objective
+                    </label>
+                    <textarea
+                      value={sessionConfig.session_objective ?? ""}
+                      onChange={(e) =>
+                        setSessionConfig((prev) => ({
+                          ...prev,
+                          session_objective: e.target.value,
+                        }))
+                      }
+                      rows={2}
+                      placeholder="e.g. Conduct a rigorous oral examination on machine learning…"
+                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                    />
+                  </div>
 
-                {/* Agent role */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Agent role
-                  </label>
-                  <textarea
-                    value={sessionConfig.agent_role ?? ""}
-                    onChange={(e) =>
-                      setSessionConfig((prev) => ({
-                        ...prev,
-                        agent_role: e.target.value,
-                      }))
-                    }
-                    rows={2}
-                    placeholder="e.g. A rigorous oral examiner…"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                  />
-                </div>
+                  {/* Agent role */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Agent role
+                    </label>
+                    <textarea
+                      value={sessionConfig.agent_role ?? ""}
+                      onChange={(e) =>
+                        setSessionConfig((prev) => ({
+                          ...prev,
+                          agent_role: e.target.value,
+                        }))
+                      }
+                      rows={2}
+                      placeholder="e.g. A rigorous oral examiner…"
+                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                    />
+                  </div>
 
-                {/* Participant role */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Participant role
-                  </label>
-                  <textarea
-                    value={sessionConfig.participant_role ?? ""}
-                    onChange={(e) =>
-                      setSessionConfig((prev) => ({
-                        ...prev,
-                        participant_role: e.target.value,
-                      }))
-                    }
-                    rows={2}
-                    placeholder="e.g. A postgraduate student…"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                  />
+                  {/* Participant role */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Participant role
+                    </label>
+                    <textarea
+                      value={sessionConfig.participant_role ?? ""}
+                      onChange={(e) =>
+                        setSessionConfig((prev) => ({
+                          ...prev,
+                          participant_role: e.target.value,
+                        }))
+                      }
+                      rows={2}
+                      placeholder="e.g. A postgraduate student…"
+                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Additional context */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Additional context
+                      <span className="ml-1.5 text-xs font-normal text-gray-400">
+                        (optional)
+                      </span>
+                    </label>
+                    <textarea
+                      value={sessionConfig.additional_context ?? ""}
+                      onChange={(e) =>
+                        setSessionConfig((prev) => ({
+                          ...prev,
+                          additional_context: e.target.value,
+                        }))
+                      }
+                      rows={2}
+                      placeholder="Extra context or constraints…"
+                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                    />
+                  </div>
                 </div>
 
                 {/* Communication style */}
@@ -728,28 +753,6 @@ export default function AgentConfigureView({
                       </button>
                     ))}
                   </div>
-                </div>
-
-                {/* Additional context */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Additional context
-                    <span className="ml-1.5 text-xs font-normal text-gray-400">
-                      (optional)
-                    </span>
-                  </label>
-                  <textarea
-                    value={sessionConfig.additional_context ?? ""}
-                    onChange={(e) =>
-                      setSessionConfig((prev) => ({
-                        ...prev,
-                        additional_context: e.target.value,
-                      }))
-                    }
-                    rows={2}
-                    placeholder="Extra context or constraints…"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                  />
                 </div>
               </div>
 
@@ -888,7 +891,7 @@ export default function AgentConfigureView({
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.2, ease: "easeOut" }}
-                      className="overflow-hidden space-y-3"
+                      className="overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-4"
                     >
                       {[
                         {
@@ -963,7 +966,7 @@ export default function AgentConfigureView({
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                     Current metrics
                   </p>
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     {editedMetrics.map((metric, i) => (
                       <div key={i} className="border border-gray-100 rounded-xl p-3 space-y-2.5">
                         <p className="text-xs font-semibold text-gray-400">Metric {i + 1}</p>

@@ -156,7 +156,7 @@ export default function LanguageVoiceSelector({ onSelectionChange }: Props) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-8 py-8">
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <h2 className="text-2xl font-semibold text-gray-900 mb-1">Choose Language & Voice</h2>
           <p className="text-sm text-gray-500 mb-6">
             Select the language your agent will speak and a voice to preview.

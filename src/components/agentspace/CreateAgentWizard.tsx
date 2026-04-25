@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  AlertTriangle, Check, ChevronRight, Clock, Copy,
-  Link2, Loader2, MessageSquare, Settings2, ToggleLeft, ToggleRight, X,
+  AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, Copy,
+  Link2, Loader2, MessageSquare, Settings2, ToggleLeft, ToggleRight, X, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -77,6 +77,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   const [evalLoading, setEvalLoading] = useState(false)
   const [saveLoading, setSaveLoading] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [showCompileSuccess, setShowCompileSuccess] = useState(false)
   const [testPhase, setTestPhase] = useState<string>('idle')
   const [shouldEndTest, setShouldEndTest] = useState(false)
 
@@ -103,6 +104,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       setEvalLoading(false)
       setSaveLoading(false)
       setRegenerating(false)
+      setShowCompileSuccess(false)
       setTestPhase('idle')
       setShouldEndTest(false)
       setError(null)
@@ -116,6 +118,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
 
   function getStepStatus(s: WizardStep): 'upcoming' | 'current' | 'done' | 'loading' {
     if (step === s) {
+      if (s === 'session-design' && compileLoading) return 'loading'
       if (s === 'evaluation' && (compileLoading || evalLoading)) return 'loading'
       if (s === 'test' && saveLoading) return 'loading'
       if (s === 'evaluation' && regenerating) return 'loading'
@@ -150,13 +153,12 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   function runCompileChain(design: SessionDesignRequest, lang: string, voiceName: string) {
     setCompileLoading(true)
     setCompileError(null)
+    setError(null)
     setCompileResult(null)
-    setEvalResult(null)
-    setPendingEvalResult(null)
     setSavedAgent(null)
     setConfiguredSpec(null)
 
-    compileAgent(session!.access_token, design)
+    return compileAgent(session!.access_token, design)
       .then(compileRes => {
         setCompileResult(compileRes)
         setCompileLoading(false)
@@ -203,7 +205,10 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       })
       .catch(() => {
         setCompileError('Compilation failed. Please try again.')
+        setError('Compilation failed. Please try again.')
+        setIsSubscriptionError(false)
         setCompileLoading(false)
+        throw new Error('compile failed')
       })
   }
 
@@ -213,59 +218,44 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
     const lang = pendingLangVoice?.lang ?? selectedLanguage
     const voiceName = pendingLangVoice?.voiceName ?? selectedVoiceName
 
-    // Non-regressive: skip recompile if session design hasn't changed
     const designUnchanged =
       sessionDesign !== null &&
       JSON.stringify(design) === JSON.stringify(sessionDesign) &&
       compileResult !== null
 
-    setSessionDesign(design)
     markDone('session-design')
-    setStep('evaluation')
 
-    if (designUnchanged) return
+    if (designUnchanged) {
+      setStep('evaluation')
+      return
+    }
+
+    setError(null)
+    setShowCompileSuccess(false)
+    setCompileError(null)
 
     runCompileChain(design, lang, voiceName)
-  }
-
-  function handleRetryCompile() {
-    if (!session || !sessionDesign) return
-    const lang = selectedLanguage
-    const voiceName = selectedVoiceName
-    runCompileChain(sessionDesign, lang, voiceName)
+      .then(() => {
+        setSessionDesign(design)
+        setShowCompileSuccess(true)
+        setTimeout(() => {
+          setShowCompileSuccess(false)
+          setStep('evaluation')
+        }, 1200)
+      })
+      .catch(() => {})
   }
 
   async function handleEvalContinue() {
-    if (!pendingEvalResult || !session) return
+    if (!pendingEvalResult || !session || !savedAgent) return
     markDone('evaluation')
     setStep('test')
-    if (savedAgent) {
-      try {
-        await updateAgent(session.access_token, savedAgent.id, {
-          transcript_evaluation_metrics: pendingEvalResult,
-          eval_config: { mode: 'auto' },
-        })
-      } catch { /* silent */ }
-    }
-  }
-
-  async function handleEvalRegenerate() {
-    if (!compileResult || !session) return
-    setRegenerating(true)
-    const ctx = compileResult.spec.session_context
-    const sessionBrief = ctx?.session_brief ?? ''
-    const additionalContext = ctx
-      ? [`Agent role: ${ctx.agent_role}`, `Participant: ${ctx.participant_role}`, `Objective: ${ctx.session_objective}`, `Style: ${ctx.communication_style}`, `Duration: ${ctx.session_duration_minutes} min`].join('\n')
-      : ''
     try {
-      const metrics = await generateEvaluationCriteria(session.access_token, {
-        session_brief: sessionBrief,
-        competency: '', strong_performance: '', weak_performance: '', additional: additionalContext,
+      await updateAgent(session.access_token, savedAgent.id, {
+        transcript_evaluation_metrics: pendingEvalResult,
+        eval_config: { mode: 'auto' },
       })
-      setEvalResult(metrics)
-      setPendingEvalResult(metrics)
     } catch { /* silent */ }
-    finally { setRegenerating(false) }
   }
 
   function handleTestPhaseChange(phase: string) {
@@ -411,39 +401,24 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
                 {step === 'session-design' && (
                   <SessionDesignStep
                     language={pendingLangVoice?.lang ?? ''}
-                    initialValues={selectedTemplate ? {
+                    initialValues={pendingSessionDesign ?? sessionDesign ?? (selectedTemplate ? {
                       agent_name: selectedTemplate.suggested_name,
                       session_objective: selectedTemplate.session_objective,
                       agent_role: selectedTemplate.agent_role,
                       participant_role: selectedTemplate.participant_role,
                       communication_style: selectedTemplate.style,
                       session_duration_minutes: selectedTemplate.duration,
-                    } : undefined}
+                    } : undefined)}
                     onChange={setPendingSessionDesign}
                   />
                 )}
 
                 {step === 'evaluation' && (
-                  compileError && !compileLoading ? (
-                    <div className="max-w-2xl mx-auto px-8 py-12 flex flex-col items-center gap-4">
-                      <div className="w-full border border-red-200 bg-red-50 rounded-xl p-6 flex flex-col items-center gap-3 text-center">
-                        <p className="text-sm text-red-700">{compileError}</p>
-                        <button
-                          onClick={handleRetryCompile}
-                          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 duration-[120ms]"
-                        >
-                          Try again
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <EvaluationStep
-                      evalResult={evalResult}
-                      regenerating={regenerating}
-                      onResultChange={setPendingEvalResult}
-                      onRegenerate={handleEvalRegenerate}
-                    />
-                  )
+                  <EvaluationStep
+                    evalResult={evalResult}
+                    regenerating={regenerating}
+                    onResultChange={setPendingEvalResult}
+                  />
                 )}
 
                 {step === 'test' && (
@@ -501,12 +476,14 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
                   'evaluation':     'session-design',
                   'test':           'evaluation',
                 }
+                const isDesignStale = step === 'session-design' && sessionDesign !== null && pendingSessionDesign !== null && JSON.stringify(pendingSessionDesign) !== JSON.stringify(sessionDesign)
                 const canContinue =
                   step === 'voice-language'  ? pendingLangVoice !== null :
-                  step === 'session-design'  ? pendingSessionDesign !== null :
-                  step === 'evaluation'      ? (pendingEvalResult !== null && !compileLoading) :
+                  step === 'session-design'  ? (pendingSessionDesign !== null && !compileLoading) :
+                  step === 'evaluation'      ? (pendingEvalResult !== null && !evalLoading) :
                   step === 'test'            ? (savedAgent !== null && testPhase !== 'reporting' && testPhase !== 'connecting') :
                   false
+                const isButtonDisabled = !canContinue || (step === 'session-design' && (compileLoading || showCompileSuccess)) || (step === 'evaluation' && regenerating)
                 function handleContinue() {
                   if (step === 'voice-language') handleLanguageVoiceContinue()
                   else if (step === 'session-design') handleSessionDesignContinue()
@@ -517,23 +494,60 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
                   <div className="shrink-0 border-t border-gray-100 bg-white px-6 py-4 flex items-center justify-between gap-3">
                     <button
                       onClick={() => { const back = backStep[step]; if (back) setStep(back) }}
-                      className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:border-gray-300 duration-[120ms]"
+                      disabled={compileLoading}
+                      className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:border-gray-300 duration-[120ms] disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Back
                     </button>
-                    <button
-                      onClick={handleContinue}
-                      disabled={!canContinue || regenerating}
-                      className={`px-6 py-2 text-sm font-semibold rounded-lg duration-[120ms] ${
-                        canContinue && !regenerating
-                          ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {step === 'evaluation' ? 'Save & continue' :
-                       step === 'test' && testPhase === 'active' ? 'End & continue' :
-                       'Continue'}
-                    </button>
+                    {step === 'session-design' ? (
+                      <button
+                        onClick={handleContinue}
+                        disabled={isButtonDisabled}
+                        className={`px-6 py-2 text-sm font-semibold rounded-lg duration-[120ms] flex items-center gap-2 min-w-[140px] justify-center ${
+                          compileLoading
+                            ? 'bg-indigo-600 text-white opacity-80'
+                            : showCompileSuccess
+                            ? 'bg-emerald-600 text-white'
+                            : compileError && !compileLoading
+                            ? 'bg-red-600 text-white hover:bg-red-700'
+                            : canContinue
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {compileLoading ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" />Compiling…</>
+                        ) : showCompileSuccess ? (
+                          <><CheckCircle2 className="w-4 h-4" />Done</>
+                        ) : compileError && !compileLoading ? (
+                          <><XCircle className="w-4 h-4" />Retry</>
+                        ) : isDesignStale ? (
+                          'Regenerate'
+                        ) : (
+                          'Continue'
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleContinue}
+                        disabled={isButtonDisabled}
+                        className={`px-6 py-2 text-sm font-semibold rounded-lg duration-[120ms] flex items-center gap-2 ${
+                          canContinue && !regenerating && !saveLoading
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {step === 'evaluation' && saveLoading ? (
+                          <><Loader2 className="w-3 h-3 animate-spin" />Saving agent…</>
+                        ) : step === 'evaluation' ? (
+                          'Save & continue'
+                        ) : step === 'test' && testPhase === 'active' ? (
+                          'End & continue'
+                        ) : (
+                          'Continue'
+                        )}
+                      </button>
+                    )}
                   </div>
                 )
               })()}
@@ -563,7 +577,7 @@ function TemplatesContent({
   onStartBlank: () => void
 }) {
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12">
+    <div className="max-w-5xl mx-auto px-8 py-12">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900 mb-2">Start with a template</h1>
         <p className="text-sm text-gray-500">Choose a template to pre-fill your session design, or start from scratch.</p>
@@ -746,7 +760,7 @@ function DeployContent({
   const tileMuted = 'opacity-40 pointer-events-none'
 
   return (
-    <div className="flex items-center justify-center h-full px-6">
+    <div className="max-w-5xl mx-auto px-8 py-12 flex items-center justify-center h-full">
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}

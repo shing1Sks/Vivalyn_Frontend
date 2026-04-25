@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Loader2, RefreshCw } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import type { EvalMetric, EvaluationMetrics } from '../../../lib/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -9,7 +9,6 @@ interface Props {
   evalResult: EvaluationMetrics | null
   regenerating: boolean
   onResultChange: (metrics: EvaluationMetrics | null) => void
-  onRegenerate: () => void
 }
 
 const EVAL_PHASES = [
@@ -61,7 +60,7 @@ function toEvalMetrics(raw: EvaluationMetrics['metrics']): EvalMetric[] {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function EvaluationStep({ evalResult, regenerating, onResultChange, onRegenerate }: Props) {
+export default function EvaluationStep({ evalResult, regenerating, onResultChange }: Props) {
   const [editedMetrics, setEditedMetrics] = useState<EvalMetric[]>(() =>
     evalResult ? toEvalMetrics(evalResult.metrics) : []
   )
@@ -94,24 +93,12 @@ export default function EvaluationStep({ evalResult, regenerating, onResultChang
   const isLegacy = evalResult ? isLegacyMetrics(evalResult.metrics) : false
 
   return (
-    <div className="max-w-2xl mx-auto px-8 py-8">
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Evaluation criteria</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Review and adjust the metrics used to score each session.
-          </p>
-        </div>
-        {evalResult && (
-          <button
-            onClick={onRegenerate}
-            disabled={regenerating}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 duration-[120ms] disabled:opacity-40 disabled:pointer-events-none mt-1"
-          >
-            <RefreshCw className={`w-3 h-3 ${regenerating ? 'animate-spin' : ''}`} />
-            Regenerate
-          </button>
-        )}
+    <div className="max-w-5xl mx-auto px-8 py-8">
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold text-gray-900">Evaluation criteria</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Review and adjust the metrics used to score each session.
+        </p>
       </div>
 
       {/* Loading / regenerating overlay */}
@@ -131,7 +118,7 @@ export default function EvaluationStep({ evalResult, regenerating, onResultChang
 
       {/* Metric cards */}
       {evalResult && !regenerating && !isLegacy && (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {editedMetrics.map((metric, i) => (
             <div key={i} className="border border-gray-200 rounded-xl p-4 space-y-3">
               <div className="flex items-center gap-2 mb-1">
@@ -178,7 +165,7 @@ export default function EvaluationStep({ evalResult, regenerating, onResultChang
             </div>
           ))}
 
-          <div className="space-y-1.5">
+          <div className="lg:col-span-2 space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-400">
               Report curator prompt
             </label>
@@ -192,11 +179,46 @@ export default function EvaluationStep({ evalResult, regenerating, onResultChang
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Skeleton + loading overlay */}
       {!evalResult && !regenerating && (
-        <div className="border border-dashed border-gray-200 rounded-xl p-12 flex flex-col items-center gap-3">
-          <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
-          <p className="text-sm text-gray-400">Preparing evaluation criteria…</p>
+        <div className="min-h-[60vh] flex flex-col">
+          {/* Sticky loader banner */}
+          <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm border-b border-gray-100 px-0 py-3 flex items-center gap-3 mb-4">
+            <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+            <MorphingText phases={EVAL_PHASES} active={true} />
+          </div>
+
+          <div className="flex-1 select-none pointer-events-none">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50/50">
+                  <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+                  <div className="space-y-1.5">
+                    <div className="h-3 w-10 bg-gray-200 rounded animate-pulse" />
+                    <div className="h-9 bg-gray-100 rounded-lg animate-pulse" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="h-3 w-16 bg-gray-200 rounded animate-pulse" />
+                    <div className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <div className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="h-3 w-16 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 space-y-1.5">
+              <div className="h-3 w-40 bg-gray-200 rounded animate-pulse" />
+              <div className="h-32 bg-gray-100 rounded-lg animate-pulse" />
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  AlertTriangle, Check, ChevronRight, Clock, Copy,
-  Link2, Loader2, MessageSquare, Settings2, ToggleLeft, ToggleRight, X,
+  AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, Copy,
+  Link2, Loader2, MessageSquare, Settings2, ToggleLeft, ToggleRight, X, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../../../context/AuthContext'
 import {
@@ -120,6 +120,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
   const [evalLoading, setEvalLoading] = useState(false)
   const [saveLoading, setSaveLoading] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [showCompileSuccess, setShowCompileSuccess] = useState(false)
   const [testPhase, setTestPhase] = useState<string>('idle')
   const [shouldEndTest, setShouldEndTest] = useState(false)
 
@@ -145,6 +146,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
       setEvalLoading(false)
       setSaveLoading(false)
       setRegenerating(false)
+      setShowCompileSuccess(false)
       setTestPhase('idle')
       setShouldEndTest(false)
       setError(null)
@@ -158,6 +160,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
 
   function getStepStatus(s: QnAWizardStep): 'upcoming' | 'current' | 'done' | 'loading' {
     if (step === s) {
+      if (s === 'session-design' && compileLoading) return 'loading'
       if (s === 'evaluation' && (evalLoading || regenerating)) return 'loading'
       if (s === 'test' && saveLoading) return 'loading'
       return 'current'
@@ -189,10 +192,9 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
   function runCompileAndQuestions(design: QnASessionDesignRequest) {
     setCompileLoading(true)
     setCompileError(null)
+    setError(null)
     setCompileResult(null)
-    setGeneratedQuestions([])
-    setPendingBank(null)
-    Promise.all([
+    return Promise.all([
       compileQnAAgent(session!.access_token, { session_design: design }),
       generateQnAQuestions(session!.access_token, {
         context: design.session_objective,
@@ -203,11 +205,15 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
       .then(([compileRes, questions]) => {
         setCompileResult(compileRes)
         setGeneratedQuestions(questions)
+        setPendingBank(null)
         setCompileLoading(false)
       })
       .catch(() => {
         setCompileError('Compilation failed. Please try again.')
+        setError('Compilation failed. Please try again.')
+        setIsSubscriptionError(false)
         setCompileLoading(false)
+        throw new Error('compile failed')
       })
   }
 
@@ -215,28 +221,40 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
     if (!pendingSessionDesign || !session) return
     const design = pendingSessionDesign
 
-    // Non-regressive: skip recompile if session design hasn't changed
     const designUnchanged =
       sessionDesign !== null &&
       JSON.stringify(design) === JSON.stringify(sessionDesign) &&
       compileResult !== null
 
-    setSessionDesign(design)
     markDone('session-design')
-    setStep('questions')
 
-    if (designUnchanged) return
+    if (designUnchanged) {
+      setStep('questions')
+      return
+    }
 
-    // New or changed design — reset downstream and recompile
-    setEvalResult(null)
-    setPendingEvalResult(null)
+    setError(null)
+    setShowCompileSuccess(false)
+    setCompileError(null)
+
     setSavedAgent(null)
     runCompileAndQuestions(design)
+      .then(() => {
+        setSessionDesign(design)
+        setShowCompileSuccess(true)
+        setTimeout(() => {
+          setShowCompileSuccess(false)
+          setStep('questions')
+        }, 1200)
+      })
+      .catch(() => {})
   }
 
   function handleRetryCompile() {
     if (!session || !sessionDesign) return
-    runCompileAndQuestions(sessionDesign)
+    setError(null)
+    setCompileError(null)
+    runCompileAndQuestions(sessionDesign).catch(() => {})
   }
 
   function handleQuestionsContinue() {
@@ -297,36 +315,15 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
   }
 
   async function handleEvalContinue() {
-    if (!pendingEvalResult || !session) return
+    if (!pendingEvalResult || !session || !savedAgent) return
     markDone('evaluation')
     setStep('test')
-    if (savedAgent) {
-      try {
-        await updateAgent(session.access_token, savedAgent.id, {
-          transcript_evaluation_metrics: pendingEvalResult,
-          eval_config: { mode: 'auto' },
-        })
-      } catch { /* silent */ }
-    }
-  }
-
-  async function handleEvalRegenerate() {
-    if (!compileResult || !session) return
-    setRegenerating(true)
-    const ctx = compileResult.spec.session_context
-    const sessionBrief = ctx?.session_brief ?? ''
-    const additionalContext = ctx
-      ? [`Agent role: ${ctx.agent_role}`, `Participant: ${ctx.participant_role}`, `Objective: ${ctx.session_objective}`, `Style: ${ctx.communication_style}`, `Duration: ${ctx.session_duration_minutes} min`].join('\n')
-      : ''
     try {
-      const metrics = await generateEvaluationCriteria(session.access_token, {
-        session_brief: sessionBrief,
-        competency: '', strong_performance: '', weak_performance: '', additional: additionalContext,
+      await updateAgent(session.access_token, savedAgent.id, {
+        transcript_evaluation_metrics: pendingEvalResult,
+        eval_config: { mode: 'auto' },
       })
-      setEvalResult(metrics)
-      setPendingEvalResult(metrics)
     } catch { /* silent */ }
-    finally { setRegenerating(false) }
   }
 
   function handleTestPhaseChange(phase: string) {
@@ -469,7 +466,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
                 {step === 'session-design' && (
                   <QnASessionDesignStep
                     language={pendingLangVoice?.lang ?? ''}
-                    initialValues={selectedTemplate ? {
+                    initialValues={pendingSessionDesign ?? sessionDesign ?? (selectedTemplate ? {
                       agent_name: selectedTemplate.suggested_name,
                       session_objective: selectedTemplate.session_objective,
                       agent_role: selectedTemplate.agent_role,
@@ -477,7 +474,7 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
                       communication_style: selectedTemplate.style,
                       session_duration_minutes: selectedTemplate.duration,
                       feedback_mode: selectedTemplate.feedback_mode,
-                    } : undefined}
+                    } : undefined)}
                     onChange={setPendingSessionDesign}
                   />
                 )}
@@ -497,7 +494,6 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
                     evalResult={evalResult}
                     regenerating={regenerating}
                     onResultChange={setPendingEvalResult}
-                    onRegenerate={handleEvalRegenerate}
                   />
                 )}
 
@@ -539,13 +535,15 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
                   'evaluation':     'questions',
                   'test':           'evaluation',
                 }
+                const isDesignStale = step === 'session-design' && sessionDesign !== null && pendingSessionDesign !== null && JSON.stringify(pendingSessionDesign) !== JSON.stringify(sessionDesign)
                 const canContinue =
                   step === 'voice-language'  ? pendingLangVoice !== null :
-                  step === 'session-design'  ? pendingSessionDesign !== null :
+                  step === 'session-design'  ? (pendingSessionDesign !== null && !compileLoading) :
                   step === 'questions'       ? (pendingBank !== null && !compileLoading && compileError === null) :
                   step === 'evaluation'      ? (pendingEvalResult !== null && !evalLoading) :
                   step === 'test'            ? (savedAgent !== null && testPhase !== 'reporting' && testPhase !== 'connecting') :
                   false
+                const isButtonDisabled = !canContinue || (step === 'session-design' && (compileLoading || showCompileSuccess)) || (step === 'evaluation' && regenerating)
                 function handleContinue() {
                   if (step === 'voice-language') handleLanguageVoiceContinue()
                   else if (step === 'session-design') handleSessionDesignContinue()
@@ -557,23 +555,60 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
                   <div className="shrink-0 border-t border-gray-100 bg-white px-6 py-4 flex items-center justify-between gap-3">
                     <button
                       onClick={() => { const back = backStep[step]; if (back) setStep(back) }}
-                      className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:border-gray-300 duration-[120ms]"
+                      disabled={compileLoading}
+                      className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:border-gray-300 duration-[120ms] disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Back
                     </button>
-                    <button
-                      onClick={handleContinue}
-                      disabled={!canContinue || regenerating}
-                      className={`px-6 py-2 text-sm font-semibold rounded-lg duration-[120ms] ${
-                        canContinue && !regenerating
-                          ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {step === 'evaluation' ? 'Save & continue' :
-                       step === 'test' && testPhase === 'active' ? 'End & continue' :
-                       'Continue'}
-                    </button>
+                    {step === 'session-design' ? (
+                      <button
+                        onClick={handleContinue}
+                        disabled={isButtonDisabled}
+                        className={`px-6 py-2 text-sm font-semibold rounded-lg duration-[120ms] flex items-center gap-2 min-w-[140px] justify-center ${
+                          compileLoading
+                            ? 'bg-indigo-600 text-white opacity-80'
+                            : showCompileSuccess
+                            ? 'bg-emerald-600 text-white'
+                            : compileError && !compileLoading
+                            ? 'bg-red-600 text-white hover:bg-red-700'
+                            : canContinue
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {compileLoading ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" />Compiling…</>
+                        ) : showCompileSuccess ? (
+                          <><CheckCircle2 className="w-4 h-4" />Done</>
+                        ) : compileError && !compileLoading ? (
+                          <><XCircle className="w-4 h-4" />Retry</>
+                        ) : isDesignStale ? (
+                          'Regenerate'
+                        ) : (
+                          'Continue'
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleContinue}
+                        disabled={isButtonDisabled}
+                        className={`px-6 py-2 text-sm font-semibold rounded-lg duration-[120ms] flex items-center gap-2 ${
+                          canContinue && !regenerating && !saveLoading
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {step === 'evaluation' && saveLoading ? (
+                          <><Loader2 className="w-3 h-3 animate-spin" />Saving agent…</>
+                        ) : step === 'evaluation' ? (
+                          'Save & continue'
+                        ) : step === 'test' && testPhase === 'active' ? (
+                          'End & continue'
+                        ) : (
+                          'Continue'
+                        )}
+                      </button>
+                    )}
                   </div>
                 )
               })()}
@@ -603,7 +638,7 @@ function QnATemplatesContent({
   onStartBlank: () => void
 }) {
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12">
+    <div className="max-w-5xl mx-auto px-8 py-12">
       <div className="mb-8">
         <span className="text-xs font-semibold uppercase tracking-wider text-indigo-500 bg-indigo-50 rounded-full px-2.5 py-1">
           QnA Agent
@@ -840,7 +875,7 @@ function QnADeployContent({
   const tileMuted = 'opacity-40 pointer-events-none'
 
   return (
-    <div className="flex items-center justify-center h-full px-6">
+    <div className="max-w-5xl mx-auto px-8 py-12 flex items-center justify-center h-full">
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}

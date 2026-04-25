@@ -209,7 +209,7 @@ export default function QnAConfigureView({ agent }: Props) {
   const spec = agent.agent_prompt as QnAPromptSpec
 
   // ── Questions tab state ────────────────────────────────────────────────────
-  const [bank, setBank] = useState<QnAQuestionBank>(spec.question_bank)
+  const [bank, setBank] = useState<QnAQuestionBank>(spec.question_bank ?? { fixed: [], randomized_pool: [], randomized_count: 1 })
   const [savingBank, setSavingBank] = useState(false)
   const [savedBankOk, setSavedBankOk] = useState(false)
 
@@ -611,78 +611,96 @@ export default function QnAConfigureView({ agent }: Props) {
           <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Session configuration</p>
 
-            {/* Feedback mode */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Feedback mode</label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['silent', 'feedback'] as const).map(fm => (
-                  <button key={fm} type="button"
-                    onClick={() => setSessionConfig(prev => ({ ...prev, feedback_mode: fm }))}
-                    className={`px-3 py-2.5 text-sm rounded-lg border text-left capitalize transition-all duration-[120ms] ${
-                      sessionConfig.feedback_mode === fm
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
-                    }`}>
-                    {fm}
-                  </button>
-                ))}
+            {/* Compact controls - 2 per row on large screens */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Feedback mode */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Feedback mode</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['silent', 'feedback'] as const).map(fm => (
+                    <button key={fm} type="button"
+                      onClick={() => setSessionConfig(prev => ({ ...prev, feedback_mode: fm }))}
+                      className={`px-3 py-2.5 text-sm rounded-lg border text-left capitalize transition-all duration-[120ms] ${
+                        sessionConfig.feedback_mode === fm
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                      }`}>
+                      {fm}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Duration</label>
-              <div className="flex items-center gap-2 flex-wrap">
-                {DURATION_PILLS.map(d => (
-                  <button key={d} type="button"
-                    onClick={() => { setSessionConfig(prev => ({ ...prev, session_duration_minutes: d })); setIsCustomDuration(false) }}
+              {/* Duration */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Duration</label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {DURATION_PILLS.map(d => (
+                    <button key={d} type="button"
+                      onClick={() => { setSessionConfig(prev => ({ ...prev, session_duration_minutes: d })); setIsCustomDuration(false) }}
+                      className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                        !isCustomDuration && sessionConfig.session_duration_minutes === d
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                      }`}>
+                      {d} min
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setIsCustomDuration(true)}
                     className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                      !isCustomDuration && sessionConfig.session_duration_minutes === d
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                      isCustomDuration ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                     }`}>
-                    {d} min
+                    Custom
                   </button>
-                ))}
-                <button type="button" onClick={() => setIsCustomDuration(true)}
-                  className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                    isCustomDuration ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                  }`}>
-                  Custom
-                </button>
-                {isCustomDuration && (
-                  <input type="number" min={1} max={120} value={customDuration}
-                    onChange={e => setCustomDuration(e.target.value)} placeholder="20" autoFocus
-                    className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                )}
+                  {isCustomDuration && (
+                    <input type="number" min={1} max={120} value={customDuration}
+                      onChange={e => setCustomDuration(e.target.value)} placeholder="20" autoFocus
+                      className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Session objective */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Session objective</label>
-              <textarea value={sessionConfig.session_objective ?? ''}
-                onChange={e => setSessionConfig(prev => ({ ...prev, session_objective: e.target.value }))}
-                rows={2} placeholder="e.g. Test the participant's knowledge on…"
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
-            </div>
+            {/* Textareas - 2 per row on large screens */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Session objective */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Session objective</label>
+                <textarea value={sessionConfig.session_objective ?? ''}
+                  onChange={e => setSessionConfig(prev => ({ ...prev, session_objective: e.target.value }))}
+                  rows={2} placeholder="e.g. Test the participant's knowledge on…"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
+              </div>
 
-            {/* Agent role */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Agent role</label>
-              <textarea value={sessionConfig.agent_role ?? ''}
-                onChange={e => setSessionConfig(prev => ({ ...prev, agent_role: e.target.value }))}
-                rows={2} placeholder="e.g. A knowledgeable interviewer…"
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
-            </div>
+              {/* Agent role */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Agent role</label>
+                <textarea value={sessionConfig.agent_role ?? ''}
+                  onChange={e => setSessionConfig(prev => ({ ...prev, agent_role: e.target.value }))}
+                  rows={2} placeholder="e.g. A knowledgeable interviewer…"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
+              </div>
 
-            {/* Participant role */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Participant role</label>
-              <textarea value={sessionConfig.participant_role ?? ''}
-                onChange={e => setSessionConfig(prev => ({ ...prev, participant_role: e.target.value }))}
-                rows={2} placeholder="e.g. A student being assessed on…"
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
+              {/* Participant role */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Participant role</label>
+                <textarea value={sessionConfig.participant_role ?? ''}
+                  onChange={e => setSessionConfig(prev => ({ ...prev, participant_role: e.target.value }))}
+                  rows={2} placeholder="e.g. A student being assessed on…"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
+              </div>
+
+              {/* Additional context */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Additional context
+                  <span className="ml-1.5 text-xs font-normal text-gray-400">(optional)</span>
+                </label>
+                <textarea value={sessionConfig.additional_context ?? ''}
+                  onChange={e => setSessionConfig(prev => ({ ...prev, additional_context: e.target.value }))}
+                  rows={2} placeholder="Extra context or constraints…"
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
+              </div>
             </div>
 
             {/* Communication style */}
@@ -701,18 +719,6 @@ export default function QnAConfigureView({ agent }: Props) {
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Additional context */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Additional context
-                <span className="ml-1.5 text-xs font-normal text-gray-400">(optional)</span>
-              </label>
-              <textarea value={sessionConfig.additional_context ?? ''}
-                onChange={e => setSessionConfig(prev => ({ ...prev, additional_context: e.target.value }))}
-                rows={2} placeholder="Extra context or constraints…"
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
             </div>
           </div>
 
@@ -796,7 +802,7 @@ export default function QnAConfigureView({ agent }: Props) {
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="overflow-hidden space-y-3"
+                  className="overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-4"
                 >
                   {[
                     { label: 'What is being evaluated?', key: 'competency' as const, placeholder: 'e.g. Knowledge of subject matter' },
@@ -827,7 +833,7 @@ export default function QnAConfigureView({ agent }: Props) {
           {(editedMetrics.some(m => m.name) || editedCuratorPrompt) && (
             <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Current metrics</p>
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {editedMetrics.map((metric, i) => (
                   <div key={i} className="border border-gray-100 rounded-xl p-3 space-y-2.5">
                     <p className="text-xs font-semibold text-gray-400">Metric {i + 1}</p>

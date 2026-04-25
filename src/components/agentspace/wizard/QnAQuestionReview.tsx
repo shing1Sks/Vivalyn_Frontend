@@ -179,8 +179,8 @@ export default function QnAQuestionReview({ initialQuestions, onBankChange }: Pr
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto px-6 py-8">
-        <div className="max-w-4xl mx-auto">
+      <div className="flex-1 overflow-y-auto px-8 py-8">
+        <div className="max-w-5xl mx-auto">
           <h2 className="text-2xl font-semibold text-gray-900 mb-1">Review your question bank</h2>
           <p className="text-sm text-gray-500 mb-6">
             Click any question to edit it. Use the move button to switch between pools. The lightning bolt enables a follow-up probe after that question.
