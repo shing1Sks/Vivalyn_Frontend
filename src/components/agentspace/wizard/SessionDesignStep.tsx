@@ -11,6 +11,7 @@ import AutoExpandTextarea from './AutoExpandTextarea'
 interface Props {
   language: string
   initialValues?: Partial<SessionDesignRequest>
+  defaultAgentName?: string
   onChange: (design: SessionDesignRequest | null) => void
 }
 
@@ -48,8 +49,8 @@ const STYLE_OPTIONS = [
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function SessionDesignStep({ language, initialValues, onChange }: Props) {
-  const [agentName, setAgentName] = useState(() => initialValues?.agent_name ?? '')
+export default function SessionDesignStep({ language, initialValues, defaultAgentName, onChange }: Props) {
+  const [agentName, setAgentName] = useState(() => initialValues?.agent_name ?? defaultAgentName ?? '')
   const [duration, setDuration] = useState<number | null>(() => {
     const d = initialValues?.session_duration_minutes
     if (!d) return null

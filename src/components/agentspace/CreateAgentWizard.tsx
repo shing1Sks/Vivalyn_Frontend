@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, Copy,
-  Link2, Loader2, MessageSquare, Settings2, ToggleLeft, ToggleRight, X, XCircle,
+  Link2, Loader2, MessageSquare, Pencil, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -58,6 +58,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
 
   const [step, setStep] = useState<WizardStep>('templates')
   const [completedSteps, setCompletedSteps] = useState<Set<WizardStep>>(new Set())
+  const [maxReachedIdx, setMaxReachedIdx] = useState(0)
 
   const [selectedLanguage, setSelectedLanguage] = useState('')
   const [selectedVoiceName, setSelectedVoiceName] = useState('')
@@ -85,9 +86,15 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
   const [isSubscriptionError, setIsSubscriptionError] = useState(false)
 
   useEffect(() => {
+    const idx = NAV_STEPS.findIndex(s => s.key === step)
+    if (idx >= 0) setMaxReachedIdx(prev => Math.max(prev, idx))
+  }, [step])
+
+  useEffect(() => {
     if (open) {
       setStep('templates')
       setCompletedSteps(new Set())
+      setMaxReachedIdx(0)
       setSelectedLanguage('')
       setSelectedVoiceName('')
       setSelectedTemplate(null)
@@ -132,12 +139,14 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
 
   function handleTemplateSelect(t: AgentTemplate) {
     setSelectedTemplate(t)
+    setPendingSessionDesign(null)
     markDone('templates')
     setStep('voice-language')
   }
 
   function handleStartBlank() {
     setSelectedTemplate(null)
+    setPendingSessionDesign(null)
     markDone('templates')
     setStep('voice-language')
   }
@@ -292,7 +301,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
             <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
               {NAV_STEPS.map((s, i) => {
                 const status = getStepStatus(s.key)
-                const isClickable = status === 'done' && !compileLoading && !evalLoading && !saveLoading
+                const isClickable = i <= maxReachedIdx && step !== s.key && !compileLoading && !evalLoading && !saveLoading
                 return (
                   <button
                     key={s.key}
@@ -409,6 +418,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
                       communication_style: selectedTemplate.style,
                       session_duration_minutes: selectedTemplate.duration,
                     } : undefined)}
+                    defaultAgentName={!selectedTemplate ? (pendingLangVoice?.voiceName ?? '') : undefined}
                     onChange={setPendingSessionDesign}
                   />
                 )}
@@ -719,6 +729,9 @@ function DeployContent({
   const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
     (savedAgent?.agent_first_speaker as 'agent' | 'user') ?? 'agent'
   )
+  const [displayLabel, setDisplayLabel] = useState(savedAgent?.agent_display_label ?? '')
+  const [labelDraft, setLabelDraft] = useState(savedAgent?.agent_display_label ?? '')
+  const [editingLabel, setEditingLabel] = useState(false)
 
   const liveUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}` : ''
   const testUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}?mode=test` : ''
@@ -754,6 +767,14 @@ function DeployContent({
     try {
       await updateAgent(token, savedAgent.id, { agent_first_speaker: val })
     } catch { /* silent */ }
+  }
+
+  async function saveLabel() {
+    setEditingLabel(false)
+    const trimmed = labelDraft.trim()
+    if (trimmed === displayLabel || !savedAgent) return
+    setDisplayLabel(trimmed)
+    try { await updateAgent(token, savedAgent.id, { agent_display_label: trimmed || undefined }) } catch { /* silent */ }
   }
 
   const tileBase = 'border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 duration-[120ms] w-full text-left'
@@ -838,6 +859,29 @@ function DeployContent({
             <span className="text-sm text-gray-700 font-medium">Configure</span>
           </motion.button>
         </motion.div>
+
+        <div className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <Tag className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-sm text-gray-700 font-medium">Display label</span>
+          </div>
+          {editingLabel ? (
+            <input
+              autoFocus
+              value={labelDraft}
+              onChange={e => setLabelDraft(e.target.value)}
+              onBlur={saveLabel}
+              onKeyDown={e => { if (e.key === 'Enter') saveLabel(); if (e.key === 'Escape') { setLabelDraft(displayLabel); setEditingLabel(false) } }}
+              placeholder="Public-facing name…"
+              className="text-sm text-right border-b border-indigo-400 outline-none text-gray-700 bg-transparent max-w-[160px]"
+            />
+          ) : (
+            <button onClick={() => { setLabelDraft(displayLabel); setEditingLabel(true) }} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 duration-[120ms]">
+              {displayLabel || <span className="text-gray-300 text-xs italic">not set</span>}
+              <Pencil className="w-3 h-3 text-gray-400 shrink-0" />
+            </button>
+          )}
+        </div>
 
         <div className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">

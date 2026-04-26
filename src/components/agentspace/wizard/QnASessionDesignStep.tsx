@@ -17,6 +17,7 @@ interface AttachedFile {
 interface Props {
   language: string
   initialValues?: Partial<QnASessionDesignRequest>
+  defaultAgentName?: string
   onChange: (design: QnASessionDesignRequest | null) => void
 }
 
@@ -124,8 +125,8 @@ function imageSlotCount(list: AttachedFile[]) {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function QnASessionDesignStep({ language, initialValues, onChange }: Props) {
-  const [agentName, setAgentName] = useState(() => initialValues?.agent_name ?? '')
+export default function QnASessionDesignStep({ language, initialValues, defaultAgentName, onChange }: Props) {
+  const [agentName, setAgentName] = useState(() => initialValues?.agent_name ?? defaultAgentName ?? '')
   const [duration, setDuration] = useState<number | null>(() => {
     const d = initialValues?.session_duration_minutes
     if (!d) return null

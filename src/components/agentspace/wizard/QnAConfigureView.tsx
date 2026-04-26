@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle, Bot, Brain, CheckCircle2, ChevronDown, ChevronUp,
-  Loader2, Plus, RefreshCw, Save, Settings2, Sparkles, Trash2, User, X,
+  GripVertical, Loader2, Plus, RefreshCw, Save, Settings2, Sparkles, Trash2, User, X,
   Zap, ArrowLeftRight,
 } from 'lucide-react'
 import {
@@ -33,6 +33,18 @@ type Tab = 'questions' | 'profile' | 'evaluation'
 const COMM_STYLES = ['Conversational', 'Formal', 'Coaching', 'Strict'] as const
 const DURATION_PILLS = [10, 15, 30] as const
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function reorderBank<T extends { id: string }>(arr: T[], fromId: string, toId: string): T[] {
+  const next = [...arr]
+  const fi = next.findIndex(q => q.id === fromId)
+  const ti = next.findIndex(q => q.id === toId)
+  if (fi === -1 || ti === -1) return arr
+  const [item] = next.splice(fi, 1)
+  next.splice(ti, 0, item)
+  return next
+}
+
 // ── Question bank editor ───────────────────────────────────────────────────────
 
 interface QuestionBankEditorProps {
@@ -41,77 +53,136 @@ interface QuestionBankEditorProps {
 }
 
 function QuestionBankEditor({ bank, onChange }: QuestionBankEditorProps) {
-  function editFixed(id: string, text: string) {
-    onChange({ ...bank, fixed: bank.fixed.map(q => q.id === id ? { ...q, text } : q) })
+  const dragIdRef = useRef<string | null>(null)
+  const dragSectionRef = useRef<'fixed' | 'randomized' | null>(null)
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const [sectionDropTarget, setSectionDropTarget] = useState<'fixed' | 'randomized' | null>(null)
+
+  function handleDragStart(id: string, section: 'fixed' | 'randomized') {
+    dragIdRef.current = id
+    dragSectionRef.current = section
   }
-  function deleteFixed(id: string) {
-    onChange({ ...bank, fixed: bank.fixed.filter(q => q.id !== id) })
+  function handleDragOverItem(e: React.DragEvent, id: string, section: 'fixed' | 'randomized') {
+    e.preventDefault(); e.stopPropagation()
+    if (dragSectionRef.current === section) { if (dragIdRef.current !== id) setDropTargetId(id); setSectionDropTarget(null) }
+    else { setSectionDropTarget(section); setDropTargetId(null) }
   }
-  function moveFixedToPool(id: string) {
-    const q = bank.fixed.find(q => q.id === id)
-    if (!q) return
-    onChange({ ...bank, fixed: bank.fixed.filter(q => q.id !== id), randomized_pool: [...bank.randomized_pool, q] })
+  function handleDragOverSection(e: React.DragEvent, section: 'fixed' | 'randomized') {
+    e.preventDefault()
+    if (dragSectionRef.current !== section) { setSectionDropTarget(section); setDropTargetId(null) }
   }
-  function addFixed() {
-    onChange({ ...bank, fixed: [...bank.fixed, { id: crypto.randomUUID(), text: 'New question', cross_question_enabled: false }] })
+  function clearDrag() { dragIdRef.current = null; dragSectionRef.current = null; setDropTargetId(null); setSectionDropTarget(null) }
+
+  function handleDropOnItem(targetId: string, targetSection: 'fixed' | 'randomized') {
+    const fromId = dragIdRef.current; const fromSection = dragSectionRef.current; clearDrag()
+    if (!fromId || !fromSection) return
+    if (fromSection === targetSection && fromId !== targetId) {
+      if (fromSection === 'fixed') onChange({ ...bank, fixed: reorderBank(bank.fixed, fromId, targetId) })
+      else onChange({ ...bank, randomized_pool: reorderBank(bank.randomized_pool, fromId, targetId) })
+    } else if (fromSection !== targetSection) {
+      crossMove(fromId, fromSection, bank, onChange)
+    }
   }
-  function editRandomized(id: string, text: string) {
-    onChange({ ...bank, randomized_pool: bank.randomized_pool.map(q => q.id === id ? { ...q, text } : q) })
-  }
-  function deleteRandomized(id: string) {
-    onChange({ ...bank, randomized_pool: bank.randomized_pool.filter(q => q.id !== id) })
-  }
-  function toggleCross(id: string) {
-    onChange({ ...bank, randomized_pool: bank.randomized_pool.map(q => q.id === id ? { ...q, cross_question_enabled: !q.cross_question_enabled } : q) })
-  }
-  function movePoolToFixed(id: string) {
-    const q = bank.randomized_pool.find(q => q.id === id)
-    if (!q) return
-    onChange({ ...bank, randomized_pool: bank.randomized_pool.filter(q => q.id !== id), fixed: [...bank.fixed, { ...q, cross_question_enabled: false }] })
-  }
-  function addRandomized() {
-    onChange({ ...bank, randomized_pool: [...bank.randomized_pool, { id: crypto.randomUUID(), text: 'New question', cross_question_enabled: false }] })
+  function handleDropOnSection(e: React.DragEvent, targetSection: 'fixed' | 'randomized') {
+    e.preventDefault(); const fromId = dragIdRef.current; const fromSection = dragSectionRef.current; clearDrag()
+    if (!fromId || !fromSection || fromSection === targetSection) return
+    crossMove(fromId, fromSection, bank, onChange)
   }
 
+  function editFixed(id: string, text: string) { onChange({ ...bank, fixed: bank.fixed.map(q => q.id === id ? { ...q, text } : q) }) }
+  function deleteFixed(id: string) { onChange({ ...bank, fixed: bank.fixed.filter(q => q.id !== id) }) }
+  function moveFixedToPool(id: string) {
+    const q = bank.fixed.find(q => q.id === id); if (!q) return
+    onChange({ ...bank, fixed: bank.fixed.filter(q => q.id !== id), randomized_pool: [...bank.randomized_pool, q] })
+  }
+  function addFixed() { onChange({ ...bank, fixed: [...bank.fixed, { id: crypto.randomUUID(), text: 'New question', cross_question_enabled: false }] }) }
+  function editRandomized(id: string, text: string) { onChange({ ...bank, randomized_pool: bank.randomized_pool.map(q => q.id === id ? { ...q, text } : q) }) }
+  function deleteRandomized(id: string) { onChange({ ...bank, randomized_pool: bank.randomized_pool.filter(q => q.id !== id) }) }
+  function toggleCross(id: string) { onChange({ ...bank, randomized_pool: bank.randomized_pool.map(q => q.id === id ? { ...q, cross_question_enabled: !q.cross_question_enabled } : q) }) }
+  function movePoolToFixed(id: string) {
+    const q = bank.randomized_pool.find(q => q.id === id); if (!q) return
+    onChange({ ...bank, randomized_pool: bank.randomized_pool.filter(q => q.id !== id), fixed: [...bank.fixed, { ...q, cross_question_enabled: false }] })
+  }
+  function addRandomized() { onChange({ ...bank, randomized_pool: [...bank.randomized_pool, { id: crypto.randomUUID(), text: 'New question', cross_question_enabled: false }] }) }
+
   const validCount = Math.min(bank.randomized_count, bank.randomized_pool.length)
+
+  const itemVariants = {
+    initial: { opacity: 0, y: -5 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.13, ease: 'easeOut' } },
+    exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.1 } },
+  }
 
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
-        <div>
+        <div
+          onDragOver={e => handleDragOverSection(e, 'fixed')}
+          onDrop={e => handleDropOnSection(e, 'fixed')}
+          className={`rounded-xl transition-all duration-[120ms] ${sectionDropTarget === 'fixed' ? 'ring-2 ring-indigo-300 ring-offset-2' : ''}`}
+        >
           <div className="flex items-center justify-between mb-3">
             <div>
               <h4 className="text-sm font-semibold text-gray-900">Fixed Questions</h4>
-              <p className="text-xs text-gray-500 mt-0.5">Asked every session</p>
+              <p className="text-xs text-gray-500 mt-0.5">Asked every session — drag to reorder</p>
             </div>
             <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">{bank.fixed.length}</span>
           </div>
           <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
-            {bank.fixed.map(q => (
-              <QuestionItem key={q.id} question={q} showCross={false}
-                onEdit={t => editFixed(q.id, t)} onDelete={() => deleteFixed(q.id)}
-                onMove={() => moveFixedToPool(q.id)} />
-            ))}
+            <AnimatePresence initial={false}>
+              {bank.fixed.map((q, i) => (
+                <motion.div key={q.id} layout variants={itemVariants} initial="initial" animate="animate" exit="exit"
+                  draggable onDragStart={() => handleDragStart(q.id, 'fixed')}
+                  onDragOver={e => handleDragOverItem(e, q.id, 'fixed')}
+                  onDrop={() => handleDropOnItem(q.id, 'fixed')}
+                  onDragEnd={clearDrag}
+                  className="flex items-center gap-1"
+                >
+                  <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <QuestionItem question={q} index={i + 1} showCross={false} isDropTarget={dropTargetId === q.id}
+                      onEdit={t => editFixed(q.id, t)} onDelete={() => deleteFixed(q.id)} onMove={() => moveFixedToPool(q.id)} />
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
             <button onClick={addFixed} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-indigo-600 duration-[120ms] py-1.5 px-1">
               <Plus className="w-4 h-4" /> Add question
             </button>
           </div>
         </div>
 
-        <div>
+        <div
+          onDragOver={e => handleDragOverSection(e, 'randomized')}
+          onDrop={e => handleDropOnSection(e, 'randomized')}
+          className={`rounded-xl transition-all duration-[120ms] ${sectionDropTarget === 'randomized' ? 'ring-2 ring-indigo-300 ring-offset-2' : ''}`}
+        >
           <div className="flex items-center justify-between mb-3">
             <div>
               <h4 className="text-sm font-semibold text-gray-900">Randomized Pool</h4>
-              <p className="text-xs text-gray-500 mt-0.5">Sampled each session</p>
+              <p className="text-xs text-gray-500 mt-0.5">Sampled each session — drag to reorder</p>
             </div>
             <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">{bank.randomized_pool.length}</span>
           </div>
           <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
-            {bank.randomized_pool.map(q => (
-              <QuestionItem key={q.id} question={q} showCross={true}
-                onEdit={t => editRandomized(q.id, t)} onDelete={() => deleteRandomized(q.id)}
-                onMove={() => movePoolToFixed(q.id)} onToggleCross={() => toggleCross(q.id)} />
-            ))}
+            <AnimatePresence initial={false}>
+              {bank.randomized_pool.map((q, i) => (
+                <motion.div key={q.id} layout variants={itemVariants} initial="initial" animate="animate" exit="exit"
+                  draggable onDragStart={() => handleDragStart(q.id, 'randomized')}
+                  onDragOver={e => handleDragOverItem(e, q.id, 'randomized')}
+                  onDrop={() => handleDropOnItem(q.id, 'randomized')}
+                  onDragEnd={clearDrag}
+                  className="flex items-center gap-1"
+                >
+                  <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <QuestionItem question={q} index={i + 1} showCross={true} isDropTarget={dropTargetId === q.id}
+                      onEdit={t => editRandomized(q.id, t)} onDelete={() => deleteRandomized(q.id)}
+                      onMove={() => movePoolToFixed(q.id)} onToggleCross={() => toggleCross(q.id)} />
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
             <button onClick={addRandomized} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-indigo-600 duration-[120ms] py-1.5 px-1">
               <Plus className="w-4 h-4" /> Add question
             </button>
@@ -122,19 +193,15 @@ function QuestionBankEditor({ bank, onChange }: QuestionBankEditorProps) {
       <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
         <span className="text-sm text-gray-700 flex-1">Questions picked per session from the pool</span>
         <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => onChange({ ...bank, randomized_count: Math.max(1, bank.randomized_count - 1) })}
+          <button onClick={() => onChange({ ...bank, randomized_count: Math.max(1, bank.randomized_count - 1) })}
             disabled={bank.randomized_count <= 1}
-            className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
-          >
+            className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]">
             <ChevronDown className="w-3.5 h-3.5" />
           </button>
           <span className="w-8 text-center text-sm font-semibold text-gray-900">{validCount}</span>
-          <button
-            onClick={() => onChange({ ...bank, randomized_count: Math.min(bank.randomized_pool.length, bank.randomized_count + 1) })}
+          <button onClick={() => onChange({ ...bank, randomized_count: Math.min(bank.randomized_pool.length, bank.randomized_count + 1) })}
             disabled={bank.randomized_count >= bank.randomized_pool.length}
-            className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]"
-          >
+            className="w-7 h-7 rounded-lg flex items-center justify-center border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed duration-[120ms]">
             <ChevronUp className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -143,16 +210,28 @@ function QuestionBankEditor({ bank, onChange }: QuestionBankEditorProps) {
   )
 }
 
+function crossMove(fromId: string, fromSection: 'fixed' | 'randomized', bank: QnAQuestionBank, onChange: (b: QnAQuestionBank) => void) {
+  if (fromSection === 'fixed') {
+    const item = bank.fixed.find(q => q.id === fromId); if (!item) return
+    onChange({ ...bank, fixed: bank.fixed.filter(q => q.id !== fromId), randomized_pool: [...bank.randomized_pool, item] })
+  } else {
+    const item = bank.randomized_pool.find(q => q.id === fromId); if (!item) return
+    onChange({ ...bank, randomized_pool: bank.randomized_pool.filter(q => q.id !== fromId), fixed: [...bank.fixed, { ...item, cross_question_enabled: false }] })
+  }
+}
+
 interface QuestionItemProps {
   question: QnAQuestion
+  index: number
   showCross: boolean
+  isDropTarget: boolean
   onEdit: (text: string) => void
   onDelete: () => void
   onMove: () => void
   onToggleCross?: () => void
 }
 
-function QuestionItem({ question, showCross, onEdit, onDelete, onMove, onToggleCross }: QuestionItemProps) {
+function QuestionItem({ question, index, showCross, isDropTarget, onEdit, onDelete, onMove, onToggleCross }: QuestionItemProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(question.text)
 
@@ -163,7 +242,12 @@ function QuestionItem({ question, showCross, onEdit, onDelete, onMove, onToggleC
   }
 
   return (
-    <div className="flex items-start gap-2 group bg-white border border-gray-200 rounded-lg px-3 py-2 hover:border-gray-300 duration-[120ms]">
+    <div className={`flex items-start gap-2 group bg-white border rounded-lg px-3 py-2 duration-[120ms] ${
+      isDropTarget ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200 hover:border-gray-300'
+    }`}>
+      <span className="w-5 h-5 shrink-0 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-400 mt-0.5 select-none">
+        {index}
+      </span>
       {editing ? (
         <textarea autoFocus value={draft} onChange={e => setDraft(e.target.value)}
           onBlur={commitEdit}

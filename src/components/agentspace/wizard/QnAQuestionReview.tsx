@@ -1,19 +1,41 @@
 import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeftRight, ChevronDown, ChevronUp, GripVertical, Plus, Trash2, Zap } from 'lucide-react'
 import type { QnAQuestion, QnAQuestionBank } from '../../../lib/api'
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function defaultCountForDuration(minutes?: number): number {
+  if (!minutes) return 4
+  if (minutes <= 15) return 2
+  if (minutes <= 30) return 4
+  return 6
+}
+
+function reorder<T extends { id: string }>(arr: T[], fromId: string, toId: string): T[] {
+  const next = [...arr]
+  const fi = next.findIndex(q => q.id === fromId)
+  const ti = next.findIndex(q => q.id === toId)
+  if (fi === -1 || ti === -1) return arr
+  const [item] = next.splice(fi, 1)
+  next.splice(ti, 0, item)
+  return next
+}
 
 // ── Question row ───────────────────────────────────────────────────────────────
 
 interface QuestionRowProps {
   question: QnAQuestion
+  index: number
   showCrossToggle: boolean
+  isDropTarget: boolean
   onEdit: (text: string) => void
   onDelete: () => void
   onMove: () => void
   onToggleCross?: () => void
 }
 
-function QuestionRow({ question, showCrossToggle, onEdit, onDelete, onMove, onToggleCross }: QuestionRowProps) {
+function QuestionRow({ question, index, showCrossToggle, isDropTarget, onEdit, onDelete, onMove, onToggleCross }: QuestionRowProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(question.text)
 
@@ -24,7 +46,12 @@ function QuestionRow({ question, showCrossToggle, onEdit, onDelete, onMove, onTo
   }
 
   return (
-    <div className="flex items-start gap-2 group bg-white border border-gray-200 rounded-lg px-3 py-2 hover:border-gray-300 duration-[120ms]">
+    <div className={`flex items-start gap-2 group bg-white border rounded-lg px-3 py-2 duration-[120ms] ${
+      isDropTarget ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200 hover:border-gray-300'
+    }`}>
+      <span className="w-5 h-5 shrink-0 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-400 mt-0.5 select-none">
+        {index}
+      </span>
       {editing ? (
         <textarea
           autoFocus
@@ -44,7 +71,7 @@ function QuestionRow({ question, showCrossToggle, onEdit, onDelete, onMove, onTo
         </p>
       )}
 
-      <div className="flex items-center gap-1 flex-shrink-0 opacity-100 duration-[120ms]">
+      <div className="flex items-center gap-1 shrink-0 duration-[120ms]">
         {showCrossToggle && onToggleCross && (
           <button
             onClick={onToggleCross}
@@ -54,18 +81,10 @@ function QuestionRow({ question, showCrossToggle, onEdit, onDelete, onMove, onTo
             <Zap className="w-3.5 h-3.5" />
           </button>
         )}
-        <button
-          onClick={onMove}
-          title="Move to other pool"
-          className="p-1 rounded text-gray-400 hover:text-gray-700 duration-[120ms]"
-        >
+        <button onClick={onMove} title="Move to other pool" className="p-1 rounded text-gray-400 hover:text-gray-700 duration-[120ms]">
           <ArrowLeftRight className="w-3.5 h-3.5" />
         </button>
-        <button
-          onClick={onDelete}
-          title="Delete question"
-          className="p-1 rounded text-gray-400 hover:text-red-500 duration-[120ms]"
-        >
+        <button onClick={onDelete} title="Delete question" className="p-1 rounded text-gray-400 hover:text-red-500 duration-[120ms]">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -77,12 +96,13 @@ function QuestionRow({ question, showCrossToggle, onEdit, onDelete, onMove, onTo
 
 interface Props {
   initialQuestions: Array<{ text: string; type: 'fixed' | 'randomized'; cross_question_enabled: boolean }>
+  sessionDurationMinutes?: number
   onBankChange: (bank: QnAQuestionBank | null) => void
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function QnAQuestionReview({ initialQuestions, onBankChange }: Props) {
+export default function QnAQuestionReview({ initialQuestions, sessionDurationMinutes, onBankChange }: Props) {
   const [fixed, setFixed] = useState<QnAQuestion[]>(() =>
     initialQuestions
       .filter(q => q.type === 'fixed')
@@ -93,37 +113,93 @@ export default function QnAQuestionReview({ initialQuestions, onBankChange }: Pr
       .filter(q => q.type === 'randomized')
       .map(q => ({ id: crypto.randomUUID(), text: q.text, cross_question_enabled: q.cross_question_enabled }))
   )
-  const [randomizedCount, setRandomizedCount] = useState(Math.min(5, initialQuestions.filter(q => q.type === 'randomized').length))
 
-  // ── Drag-to-reorder for fixed questions ──────────────────────────────────────
+  const initialRandomized = initialQuestions.filter(q => q.type === 'randomized').length
+  const [randomizedCount, setRandomizedCount] = useState(() =>
+    Math.min(defaultCountForDuration(sessionDurationMinutes), initialRandomized || 1)
+  )
+
+  // ── Drag state ───────────────────────────────────────────────────────────────
   const dragIdRef = useRef<string | null>(null)
-  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const dragSectionRef = useRef<'fixed' | 'randomized' | null>(null)
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const [sectionDropTarget, setSectionDropTarget] = useState<'fixed' | 'randomized' | null>(null)
 
-  function handleDragStart(id: string) {
+  function handleDragStart(id: string, section: 'fixed' | 'randomized') {
     dragIdRef.current = id
+    dragSectionRef.current = section
   }
-  function handleDragOver(e: React.DragEvent, id: string) {
+
+  function handleDragOverItem(e: React.DragEvent, id: string, section: 'fixed' | 'randomized') {
     e.preventDefault()
-    if (dragIdRef.current !== id) setDragOverId(id)
+    e.stopPropagation()
+    if (dragSectionRef.current === section) {
+      if (dragIdRef.current !== id) setDropTargetId(id)
+      setSectionDropTarget(null)
+    } else {
+      setSectionDropTarget(section)
+      setDropTargetId(null)
+    }
   }
-  function handleDrop(targetId: string) {
+
+  function handleDragOverSection(e: React.DragEvent, section: 'fixed' | 'randomized') {
+    e.preventDefault()
+    if (dragSectionRef.current !== section) {
+      setSectionDropTarget(section)
+      setDropTargetId(null)
+    }
+  }
+
+  function handleDropOnItem(targetId: string, targetSection: 'fixed' | 'randomized') {
     const fromId = dragIdRef.current
+    const fromSection = dragSectionRef.current
     dragIdRef.current = null
-    setDragOverId(null)
-    if (!fromId || fromId === targetId) return
-    setFixed(prev => {
-      const arr = [...prev]
-      const fromIdx = arr.findIndex(q => q.id === fromId)
-      const toIdx = arr.findIndex(q => q.id === targetId)
-      if (fromIdx === -1 || toIdx === -1) return prev
-      const [removed] = arr.splice(fromIdx, 1)
-      arr.splice(toIdx, 0, removed)
-      return arr
-    })
+    dragSectionRef.current = null
+    setDropTargetId(null)
+    setSectionDropTarget(null)
+
+    if (!fromId || !fromSection) return
+
+    if (fromSection === targetSection && fromId !== targetId) {
+      if (fromSection === 'fixed') setFixed(prev => reorder(prev, fromId, targetId))
+      else setRandomized(prev => reorder(prev, fromId, targetId))
+    } else if (fromSection !== targetSection) {
+      crossMove(fromId, fromSection)
+    }
   }
+
+  function handleDropOnSection(e: React.DragEvent, targetSection: 'fixed' | 'randomized') {
+    e.preventDefault()
+    const fromId = dragIdRef.current
+    const fromSection = dragSectionRef.current
+    dragIdRef.current = null
+    dragSectionRef.current = null
+    setDropTargetId(null)
+    setSectionDropTarget(null)
+
+    if (!fromId || !fromSection || fromSection === targetSection) return
+    crossMove(fromId, fromSection)
+  }
+
+  function crossMove(fromId: string, fromSection: 'fixed' | 'randomized') {
+    if (fromSection === 'fixed') {
+      const item = fixed.find(q => q.id === fromId)
+      if (!item) return
+      setFixed(prev => prev.filter(q => q.id !== fromId))
+      setRandomized(prev => [...prev, item])
+    } else {
+      const item = randomized.find(q => q.id === fromId)
+      if (!item) return
+      setRandomized(prev => prev.filter(q => q.id !== fromId))
+      setFixed(prev => [...prev, { ...item, cross_question_enabled: false }])
+    }
+  }
+
   function handleDragEnd() {
     dragIdRef.current = null
-    setDragOverId(null)
+    dragSectionRef.current = null
+    setDropTargetId(null)
+    setSectionDropTarget(null)
   }
 
   // ── Fixed mutations ──────────────────────────────────────────────────────────
@@ -175,6 +251,12 @@ export default function QnAQuestionReview({ initialQuestions, onBankChange }: Pr
     onBankChange(canContinue ? { fixed, randomized_pool: randomized, randomized_count: validCount } : null)
   }, [fixed, randomized, randomizedCount])
 
+  const itemVariants = {
+    initial: { opacity: 0, y: -6 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.15, ease: 'easeOut' } },
+    exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.1 } },
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -183,12 +265,16 @@ export default function QnAQuestionReview({ initialQuestions, onBankChange }: Pr
         <div className="max-w-5xl mx-auto">
           <h2 className="text-2xl font-semibold text-gray-900 mb-1">Review your question bank</h2>
           <p className="text-sm text-gray-500 mb-6">
-            Click any question to edit it. Use the move button to switch between pools. The lightning bolt enables a follow-up probe after that question.
+            Click any question to edit. Drag to reorder or move between pools. The lightning bolt enables a follow-up probe.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Fixed bank */}
-            <div>
+            <div
+              onDragOver={e => handleDragOverSection(e, 'fixed')}
+              onDrop={e => handleDropOnSection(e, 'fixed')}
+              className={`rounded-xl transition-all duration-[120ms] ${sectionDropTarget === 'fixed' ? 'ring-2 ring-indigo-300 ring-offset-2' : ''}`}
+            >
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900">Fixed Questions</h3>
@@ -200,28 +286,37 @@ export default function QnAQuestionReview({ initialQuestions, onBankChange }: Pr
               </div>
 
               <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
-                {fixed.map(q => (
-                  <div
-                    key={q.id}
-                    draggable
-                    onDragStart={() => handleDragStart(q.id)}
-                    onDragOver={e => handleDragOver(e, q.id)}
-                    onDrop={() => handleDrop(q.id)}
-                    onDragEnd={handleDragEnd}
-                    className={`flex items-center gap-1 transition-opacity duration-[120ms] ${dragOverId === q.id ? 'opacity-40' : ''}`}
-                  >
-                    <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <QuestionRow
-                        question={q}
-                        showCrossToggle={false}
-                        onEdit={text => editFixed(q.id, text)}
-                        onDelete={() => deleteFixed(q.id)}
-                        onMove={() => moveToRandomized(q.id)}
-                      />
-                    </div>
-                  </div>
-                ))}
+                <AnimatePresence initial={false}>
+                  {fixed.map((q, i) => (
+                    <motion.div
+                      key={q.id}
+                      layout
+                      variants={itemVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      draggable
+                      onDragStart={() => handleDragStart(q.id, 'fixed')}
+                      onDragOver={e => handleDragOverItem(e, q.id, 'fixed')}
+                      onDrop={() => handleDropOnItem(q.id, 'fixed')}
+                      onDragEnd={handleDragEnd}
+                      className="flex items-center gap-1"
+                    >
+                      <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <QuestionRow
+                          question={q}
+                          index={i + 1}
+                          showCrossToggle={false}
+                          isDropTarget={dropTargetId === q.id}
+                          onEdit={text => editFixed(q.id, text)}
+                          onDelete={() => deleteFixed(q.id)}
+                          onMove={() => moveToRandomized(q.id)}
+                        />
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
                 <button
                   onClick={addFixed}
                   className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-indigo-600 duration-[120ms] py-1.5 px-1"
@@ -233,11 +328,15 @@ export default function QnAQuestionReview({ initialQuestions, onBankChange }: Pr
             </div>
 
             {/* Randomized pool */}
-            <div>
+            <div
+              onDragOver={e => handleDragOverSection(e, 'randomized')}
+              onDrop={e => handleDropOnSection(e, 'randomized')}
+              className={`rounded-xl transition-all duration-[120ms] ${sectionDropTarget === 'randomized' ? 'ring-2 ring-indigo-300 ring-offset-2' : ''}`}
+            >
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900">Randomized Pool</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Sampled randomly each session</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Sampled randomly each session — drag to reorder</p>
                 </div>
                 <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">
                   {randomized.length}
@@ -245,17 +344,38 @@ export default function QnAQuestionReview({ initialQuestions, onBankChange }: Pr
               </div>
 
               <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
-                {randomized.map(q => (
-                  <QuestionRow
-                    key={q.id}
-                    question={q}
-                    showCrossToggle={true}
-                    onEdit={text => editRandomized(q.id, text)}
-                    onDelete={() => deleteRandomized(q.id)}
-                    onMove={() => moveToFixed(q.id)}
-                    onToggleCross={() => toggleCross(q.id)}
-                  />
-                ))}
+                <AnimatePresence initial={false}>
+                  {randomized.map((q, i) => (
+                    <motion.div
+                      key={q.id}
+                      layout
+                      variants={itemVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      draggable
+                      onDragStart={() => handleDragStart(q.id, 'randomized')}
+                      onDragOver={e => handleDragOverItem(e, q.id, 'randomized')}
+                      onDrop={() => handleDropOnItem(q.id, 'randomized')}
+                      onDragEnd={handleDragEnd}
+                      className="flex items-center gap-1"
+                    >
+                      <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <QuestionRow
+                          question={q}
+                          index={i + 1}
+                          showCrossToggle={true}
+                          isDropTarget={dropTargetId === q.id}
+                          onEdit={text => editRandomized(q.id, text)}
+                          onDelete={() => deleteRandomized(q.id)}
+                          onMove={() => moveToFixed(q.id)}
+                          onToggleCross={() => toggleCross(q.id)}
+                        />
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
                 <button
                   onClick={addRandomized}
                   className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-indigo-600 duration-[120ms] py-1.5 px-1"
@@ -298,6 +418,10 @@ export default function QnAQuestionReview({ initialQuestions, onBankChange }: Pr
             <div className="flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5" />
               Enable follow-up probe
+            </div>
+            <div className="flex items-center gap-1.5">
+              <GripVertical className="w-3.5 h-3.5" />
+              Drag to reorder or move
             </div>
           </div>
 
