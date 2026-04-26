@@ -1,5 +1,37 @@
 # Changelog
 
+## [73] responsiveness-scroll-lock-and-brand-color-fixes — 2026-04-26
+
+**Why:** Six UI/UX issues accumulated across the frontend: (1) **Agent creation voice selection broke on mobile** — the voice card grid forced 4 columns on all screen sizes, cramming voice name + gender badge + a text-heavy "Preview" button into tiny cells. (2) **Create-agent popover was cramped on small screens** — the agent-type selection modal used a hard `grid-cols-2` with multi-line description text, producing tall narrow rectangles. (3) **Eval tab save button was black** — the "Save metrics" button in both configure views used `bg-gray-900` while every other primary action in the app used `bg-indigo-600`, creating a jarring inconsistency. (4) **Admin greens didn't match brand emerald** — several admin components used Tailwind `green-*` classes instead of the site's `emerald-*` brand palette. (5) **Background scroll was never locked when modals opened** — no modal, dialog, dropdown, or slide panel in the entire codebase prevented the underlying page from scrolling, causing a nuisance on mobile/touch devices. (6) **Two runtime/build regressions** — `selectedRun` was referenced outside its component scope after the scroll-lock integration, and Framer Motion `itemVariants` objects had untyped `ease: 'easeOut'` strings that failed strict TypeScript checking.
+
+**What:** Voice grids now use responsive breakpoints (`grid-cols-1 sm:grid-cols-2 md:grid-cols-4`) and preview buttons show icon-only on small screens (`hidden sm:inline` on text labels). The agent-type popover stacks cards vertically on mobile (`grid-cols-1 sm:grid-cols-2`) with reduced padding (`p-4 sm:p-6`). Both "Save metrics" buttons switched to `bg-indigo-600`. All `green-*` usages in admin views migrated to `emerald-*`. A new `useScrollLock` hook with reference counting toggles `document.body.style.overflow = 'hidden'` when any modal opens and restores it only when the last modal closes — integrated into 16 components across the app. The `selectedRun` scroll-lock call moved from `AgentSpaceContent` into `RecordsTab` where the state actually lives. Framer Motion variant `ease` values typed with `as const` to satisfy strict `Easing` union types.
+
+**Changes:**
+- `src/hooks/useScrollLock.ts` — **new**: reference-counted body scroll lock; increments on mount when `locked === true`, decrements on unmount; restores original `body.style.overflow` only when count reaches zero
+- `src/components/agentspace/wizard/LanguageVoiceSelector.tsx`: voice card grid changed from `grid-cols-4` to `grid-cols-1 sm:grid-cols-2 md:grid-cols-4`; preview button text labels wrapped in `<span className="hidden sm:inline">` so only icons show on mobile
+- `src/components/agentspace/wizard/VoiceSettingsModal.tsx`: same icon-only preview button treatment
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: communication style grid changed from `grid-cols-4` to `grid-cols-2 sm:grid-cols-4`; "Save metrics" button changed from `bg-gray-900` to `bg-indigo-600`
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: same communication style grid and save button fixes; `itemVariants.ease` typed as `'easeOut' as const`
+- `src/pages/AgentSpace.tsx`: agent type selection modal changed from `grid-cols-2` to `grid-cols-1 sm:grid-cols-2`; modal padding changed from `p-6` to `p-4 sm:p-6`; `useScrollLock(typeSelectOpen)` and `useScrollLock(!!configuringAgent)` added to `AgentSpaceContent`; `useScrollLock(!!selectedRun)` added inside `RecordsTab`
+- `src/components/admin/AdminHomeView.tsx`: `STATUS_COLORS.active` and `PLAN_COLORS.pro` changed from `bg-green-50 text-green-700` to `bg-emerald-50 text-emerald-700`; Sessions KPI icon changed from `text-green-600` to `text-emerald-600`
+- `src/components/admin/AdminSubscriptionsView.tsx`: trial eligible badge changed from `text-green-700 bg-green-50` to `text-emerald-700 bg-emerald-50`
+- `src/components/admin/AdminOverviewView.tsx`: OrgRingGauge healthy color hex changed from `'#16a34a'` (green-600) to `'#059669'` (emerald-600)
+- `src/components/agentspace/CreateAgentWizard.tsx`: imported and called `useScrollLock(open)`
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: imported and called `useScrollLock(open)`
+- `src/components/agentspace/CreateAgentSpaceModal.tsx`: imported and called `useScrollLock(open)`
+- `src/components/agentspace/wizard/TemplateBrowserModal.tsx`: imported and called `useScrollLock(true)`
+- `src/components/agentspace/wizard/VoiceSettingsModal.tsx`: imported and called `useScrollLock(open)`
+- `src/components/ui/SupportModal.tsx`: imported and called `useScrollLock(open)`
+- `src/components/ui/InquiryModal.tsx`: imported and called `useScrollLock(open)`
+- `src/components/agentspace/SlidePanel.tsx`: imported and called `useScrollLock(open)`
+- `src/components/agentspace/InboxPanel.tsx`: imported and called `useScrollLock(open)`
+- `src/components/agentspace/RunDetailPanel.tsx`: imported and called `useScrollLock(true)`
+- `src/components/admin/AdminInquiriesView.tsx`: `FollowupEmailModal` imported and called `useScrollLock(true)`
+- `src/components/admin/AdminSubscriptionsView.tsx`: `ActivateModal` imported and called `useScrollLock(true)`
+- `src/components/agentspace/wizard/QnAQuestionReview.tsx`: `itemVariants.ease` typed as `'easeOut' as const`
+
+---
+
 ## [72] wizard-ux-polish-round-2 — 2026-04-26
 
 **Why:** Six UX gaps identified after the v3 wizard shipped: (1) **Agent name default logic** — template selection correctly used the template's suggested name, but starting blank or custom left the agent name field empty rather than defaulting to the selected voice name. (2) **Step sidebar lock-out on back-navigation** — any step visited without clicking Continue was removed from the clickable sidebar set, making it impossible to navigate back to a step the user had merely viewed. (3) **QnA question ordering was unintuitive** — questions had no index numbers, drag handles were invisible, drag animations were abrupt, and cross-section drag (fixed ↔ randomized pool) was not supported. (4) **Randomized pool count had a fixed default of 1** — no relationship to how long the session was, so short sessions defaulted the same as long ones. (5) **Deploy step had no display label field** — users had to open Configure to set the public-facing label. (6) **Template-to-custom switch did not clear the session design form** — navigating back from session design and picking "Start from scratch" still showed the template-prefilled values instead of a clean slate.

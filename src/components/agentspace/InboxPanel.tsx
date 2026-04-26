@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
 import { fetchInboxInvites, acceptInvite, ApiError } from '../../lib/api'
 import type { Invite } from '../../lib/api'
+import { useScrollLock } from '../../hooks/useScrollLock'
 
 interface Props {
   open: boolean
@@ -112,6 +113,7 @@ function InviteCard({
 }
 
 export default function InboxPanel({ open, onClose }: Props) {
+  useScrollLock(open)
   const { session } = useAuth()
   const { refetchSpaces } = useAgentSpace()
 

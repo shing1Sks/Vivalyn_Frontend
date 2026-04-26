@@ -7,6 +7,7 @@ import {
   sendAdminFollowupEmail,
   type Inquiry,
 } from '../../lib/api'
+import { useScrollLock } from '../../hooks/useScrollLock'
 
 const STATUS_OPTIONS = ['new', 'contacted', 'in_progress', 'closed'] as const
 type InquiryStatus = typeof STATUS_OPTIONS[number]
@@ -36,6 +37,7 @@ function FollowupEmailModal({
   onClose: () => void
   token: string
 }) {
+  useScrollLock(true)
   const [subject, setSubject] = useState(`Following up on your Vivalyn inquiry`)
   const [body, setBody] = useState(
     `Hi ${inquiry.name},\n\nThank you for reaching out to Vivalyn. We'd love to help you get started.\n\nBest,\nThe Vivalyn Team`

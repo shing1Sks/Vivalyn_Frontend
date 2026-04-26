@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useScrollLock } from '../hooks/useScrollLock'
 import { AgentSpaceProvider, useAgentSpace } from '../context/AgentSpaceContext'
 import { TokenProvider } from '../context/TokenContext'
 import AgentSpaceHeader from '../components/agentspace/AgentSpaceHeader'
@@ -340,6 +341,8 @@ function RecordsTab({ agentspaceId, token, agents }: RecordsTabProps) {
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
   const agentDropdownRef = useRef<HTMLDivElement>(null)
   const [selectedRun, setSelectedRun] = useState<RunRecord | null>(null)
+
+  useScrollLock(!!selectedRun)
 
   const agentLabelMap = useMemo(() => {
     const m = new Map<string, string>()
@@ -722,6 +725,7 @@ function AgentSpaceContent() {
   const { activeSpace, spaces, spacesLoading, spacesError, refetchSpaces } = useAgentSpace()
   const { signOut, session } = useAuth()
   const navigate = useNavigate()
+
   const [createOpen, setCreateOpen] = useState(false)
   const [membersOpen, setMembersOpen] = useState(false)
   const [invitesOpen, setInvitesOpen] = useState(false)
@@ -742,6 +746,9 @@ function AgentSpaceContent() {
   const [createdByFilter, setCreatedByFilter] = useState<string | null>(null)
   const [creatorDropdownOpen, setCreatorDropdownOpen] = useState(false)
   const creatorDropdownRef = useRef<HTMLDivElement>(null)
+
+  useScrollLock(typeSelectOpen)
+  useScrollLock(!!configuringAgent)
 
   const uniqueCreators = useMemo(
     () => Array.from(new Set(agents.map(a => a.created_by_name))).sort(),
@@ -1185,7 +1192,7 @@ function AgentSpaceContent() {
               transition={{ duration: 0.15 }}
               className="fixed inset-0 z-50 flex items-center justify-center px-4"
             >
-              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg p-6">
+              <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg p-4 sm:p-6">
                 <div className="flex items-center justify-between mb-5">
                   <h2 className="text-base font-semibold text-gray-900">What kind of agent do you want to create?</h2>
                   <button
@@ -1195,7 +1202,7 @@ function AgentSpaceContent() {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     onClick={() => { setTypeSelectOpen(false); setCreateAgentOpen(true) }}
                     className="flex flex-col items-start gap-3 p-4 rounded-xl border border-gray-200 text-left hover:border-gray-300 hover:bg-gray-50 duration-[120ms]"

@@ -256,7 +256,7 @@ export default function LanguageVoiceSelector({ onSelectionChange }: Props) {
                       <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
                         Choose a voice
                       </p>
-                      <div className="grid grid-cols-4 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
                         {activeLang.voices.map(voice => {
                           const isVoiceActive = selectedPref === voice.preference
                           const isLoading = loadingPref === voice.preference
@@ -301,11 +301,11 @@ export default function LanguageVoiceSelector({ onSelectionChange }: Props) {
                                 }`}
                               >
                                 {isLoading ? (
-                                  <><Loader2 className="w-3 h-3 animate-spin" />Loading</>
+                                  <><Loader2 className="w-3 h-3 animate-spin" /><span className="hidden sm:inline">Loading</span></>
                                 ) : isPlaying ? (
-                                  <><SoundWave />Stop</>
+                                  <><SoundWave /><span className="hidden sm:inline">Stop</span></>
                                 ) : (
-                                  <><Volume2 className="w-3 h-3" />Preview</>
+                                  <><Volume2 className="w-3 h-3" /><span className="hidden sm:inline">Preview</span></>
                                 )}
                               </button>
                             </div>

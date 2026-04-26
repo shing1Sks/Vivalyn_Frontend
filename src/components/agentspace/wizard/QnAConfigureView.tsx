@@ -109,7 +109,7 @@ function QuestionBankEditor({ bank, onChange }: QuestionBankEditorProps) {
 
   const itemVariants = {
     initial: { opacity: 0, y: -5 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.13, ease: 'easeOut' } },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.13, ease: 'easeOut' as const } },
     exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.1 } },
   }
 
@@ -790,7 +790,7 @@ export default function QnAConfigureView({ agent }: Props) {
             {/* Communication style */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Communication style</label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {COMM_STYLES.map(s => (
                   <button key={s} type="button"
                     onClick={() => setSessionConfig(prev => ({ ...prev, communication_style: s }))}
@@ -948,7 +948,7 @@ export default function QnAConfigureView({ agent }: Props) {
                   rows={4} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
               </div>
               <button onClick={handleSaveMetrics}
-                className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-colors duration-[120ms]">
+                className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms]">
                 Save metrics
               </button>
             </div>

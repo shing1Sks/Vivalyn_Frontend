@@ -5,6 +5,7 @@ import { X, CheckCircle, CreditCard, Wrench, MessageSquare, HelpCircle } from 'l
 import Button from './Button'
 import { submitSupport, type SupportTicketType } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+import { useScrollLock } from '../../hooks/useScrollLock'
 
 interface Props {
   open: boolean
@@ -48,6 +49,7 @@ const TICKET_OPTIONS: TicketOption[] = [
 ]
 
 export default function SupportModal({ open, onClose }: Props) {
+  useScrollLock(open)
   const [step, setStep] = useState<Step>('form')
   const [selectedType, setSelectedType] = useState<SupportTicketType | null>(null)
   const [message, setMessage] = useState('')

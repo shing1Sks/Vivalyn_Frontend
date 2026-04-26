@@ -5,6 +5,7 @@ import {
   Link2, Loader2, MessageSquare, Pencil, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { useScrollLock } from '../../hooks/useScrollLock'
 import {
   ApiError,
   compileAgent,
@@ -54,6 +55,7 @@ interface Props {
 }
 
 export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props) {
+  useScrollLock(open)
   const { session } = useAuth()
 
   const [step, setStep] = useState<WizardStep>('templates')

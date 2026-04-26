@@ -7,6 +7,7 @@ import {
   type AgentTemplate,
   type QnAAgentTemplate,
 } from '../../../lib/agentTemplates'
+import { useScrollLock } from '../../../hooks/useScrollLock'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ const QNA_CATEGORIES = [
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function TemplateBrowserModal(props: Props) {
+  useScrollLock(true)
   const { type, onClose } = props
 
   const categories = type === 'general' ? GENERAL_CATEGORIES : QNA_CATEGORIES

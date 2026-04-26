@@ -16,7 +16,7 @@ interface Props {
 
 function OrgRingGauge({ balance, lowThreshold }: { balance: number; lowThreshold: number }) {
   const color =
-    balance > lowThreshold * 3 ? '#16a34a'
+    balance > lowThreshold * 3 ? '#059669'
     : balance > lowThreshold ? '#d97706'
     : '#dc2626'
   const fullMark = Math.max(lowThreshold * 20, balance + 1)

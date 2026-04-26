@@ -40,7 +40,7 @@ const STATUS_COLORS: Record<string, string> = {
   seen:    'bg-amber-50 text-amber-700',
   replied: 'bg-blue-50 text-blue-700',
   closed:  'bg-gray-100 text-gray-500',
-  active:  'bg-green-50 text-green-700',
+  active:  'bg-emerald-50 text-emerald-700',
   trial: 'bg-indigo-50 text-indigo-700',
   inactive: 'bg-gray-100 text-gray-500',
   cancelled: 'bg-red-50 text-red-700',
@@ -51,7 +51,7 @@ const PLAN_COLORS: Record<string, string> = {
   trial: 'bg-indigo-50 text-indigo-700',
   starter: 'bg-blue-50 text-blue-700',
   growth: 'bg-purple-50 text-purple-700',
-  pro: 'bg-green-50 text-green-700',
+  pro: 'bg-emerald-50 text-emerald-700',
 }
 
 export function AdminHomeView({ token, onNavigate, onActivateSubscription }: AdminHomeViewProps) {
@@ -111,7 +111,7 @@ export function AdminHomeView({ token, onNavigate, onActivateSubscription }: Adm
           value={stats?.openInquiries ?? 0}
         />
         <StatCard
-          icon={<Activity className="w-4 h-4 text-green-600" />}
+          icon={<Activity className="w-4 h-4 text-emerald-600" />}
           label="Sessions (last 30d)"
           value={stats?.sessionsLast30d ?? 0}
         />

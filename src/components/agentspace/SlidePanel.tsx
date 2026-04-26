@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
+import { useScrollLock } from '../../hooks/useScrollLock'
 
 interface SlidePanelProps {
   open: boolean
@@ -10,6 +11,7 @@ interface SlidePanelProps {
 }
 
 export default function SlidePanel({ open, onClose, title, subtitle, children }: SlidePanelProps) {
+  useScrollLock(open)
   return (
     <AnimatePresence>
       {open && (

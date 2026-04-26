@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2 } from 'lucide-react'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
+import { useScrollLock } from '../../hooks/useScrollLock'
 
 interface CreateAgentSpaceModalProps {
   open: boolean
@@ -14,6 +15,7 @@ export default function CreateAgentSpaceModal({
   onClose,
   onSuccess,
 }: CreateAgentSpaceModalProps) {
+  useScrollLock(open)
   const { createSpace } = useAgentSpace()
   const [name, setName] = useState('')
   const [submitting, setSubmitting] = useState(false)

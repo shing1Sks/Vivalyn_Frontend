@@ -8,6 +8,7 @@ import {
   type LanguageVoiceOption,
 } from '../../../lib/api'
 import { useAuth } from '../../../context/AuthContext'
+import { useScrollLock } from '../../../hooks/useScrollLock'
 
 interface Props {
   agentId: string
@@ -21,6 +22,7 @@ interface Props {
 export default function VoiceSettingsModal({
   agentId, agentLanguage, agentVoice, open, onClose, onUpdated,
 }: Props) {
+  useScrollLock(open)
   const { session } = useAuth()
   const [languages, setLanguages] = useState<LanguageVoiceOption[]>([])
   const [loadingVoices, setLoadingVoices] = useState(false)
@@ -232,11 +234,11 @@ export default function VoiceSettingsModal({
                                   }`}
                                 >
                                   {isLoading ? (
-                                    <><Loader2 className="w-3 h-3 animate-spin" />Loading</>
+                                    <><Loader2 className="w-3 h-3 animate-spin" /><span className="hidden sm:inline">Loading</span></>
                                   ) : isPlaying ? (
-                                    <><SoundWave />Stop</>
+                                    <><SoundWave /><span className="hidden sm:inline">Stop</span></>
                                   ) : (
-                                    <><Volume2 className="w-3 h-3" />Preview</>
+                                    <><Volume2 className="w-3 h-3" /><span className="hidden sm:inline">Preview</span></>
                                   )}
                                 </button>
                               </div>

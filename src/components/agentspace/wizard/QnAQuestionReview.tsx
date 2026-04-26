@@ -253,7 +253,7 @@ export default function QnAQuestionReview({ initialQuestions, sessionDurationMin
 
   const itemVariants = {
     initial: { opacity: 0, y: -6 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.15, ease: 'easeOut' } },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.15, ease: 'easeOut' as const } },
     exit:    { opacity: 0, scale: 0.96, transition: { duration: 0.1 } },
   }
 

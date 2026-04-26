@@ -12,6 +12,7 @@ import {
   type AgentspaceDetails,
   type AgentspaceSearchResult,
 } from '../../lib/api'
+import { useScrollLock } from '../../hooks/useScrollLock'
 
 const PLAN_TIERS = ['trial', 'starter', 'growth', 'pro'] as const
 
@@ -276,7 +277,7 @@ function AgentspaceDetailCard({ token, agentspaceId, planTier }: { token: string
         </div>
       )}
       {isTrial && !details.had_trial && (
-        <div className="flex items-center gap-1.5 text-green-700 bg-green-50 rounded-md px-2 py-1.5">
+        <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 rounded-md px-2 py-1.5">
           <CheckCircle size={12} className="shrink-0" />
           <span>Trial eligible — no prior trial found.</span>
         </div>
@@ -345,6 +346,7 @@ function ActivateModal({
     }
   }
 
+  useScrollLock(true)
   return (
     <AnimatePresence>
       <motion.div

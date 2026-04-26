@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, CheckCircle, ChevronRight, Loader2, MessageSquare, Pause, PlayCircle, X } from 'lucide-react'
 import { fetchRecording, fetchRunRecordById, type EvaluationReport, type RecordingData, type RunRecord } from '../../lib/api'
+import { useScrollLock } from '../../hooks/useScrollLock'
 
 // ── Types ────────────────────────────────────────────────────────────────────────
 
@@ -423,6 +424,7 @@ export interface RunDetailPanelProps {
 }
 
 export default function RunDetailPanel({ run, agentspaceId, token, onClose }: RunDetailPanelProps) {
+  useScrollLock(true)
   const report = run.evaluation_report
   const score = avgScore(report)
 

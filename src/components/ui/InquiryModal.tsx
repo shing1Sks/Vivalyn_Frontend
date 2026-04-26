@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, CheckCircle, ArrowLeft } from 'lucide-react'
 import Button from './Button'
 import { requestOtp, verifyOtp } from '../../lib/api'
+import { useScrollLock } from '../../hooks/useScrollLock'
 
 interface Props {
   open: boolean
@@ -13,6 +14,7 @@ interface Props {
 type Step = 'form' | 'otp' | 'success'
 
 export default function InquiryModal({ open, onClose, prefillEmail }: Props) {
+  useScrollLock(open)
   const [step, setStep] = useState<Step>('form')
   const [name, setName] = useState('')
   const [email, setEmail] = useState(prefillEmail ?? '')
