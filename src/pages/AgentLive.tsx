@@ -38,6 +38,7 @@ interface ActiveSessionProps {
   mode: 'live' | 'test'
   token?: string
   agentFirstSpeaker: string
+  showReport: boolean
   turnCount: number
   onEnded: (turnCount: number, report: SessionReport | null) => void
 }
@@ -50,6 +51,7 @@ function ActiveSession({
   mode,
   token,
   agentFirstSpeaker,
+  showReport,
   onEnded,
 }: ActiveSessionProps) {
   const { phase, agentState, transcript, streamingAgentText, partialUserText, micEnabled, toggleMic, endSession, error, sessionReport, audioLevelRef } =
@@ -85,13 +87,14 @@ function ActiveSession({
     )
   }
 
-  // 'reporting' phase: WS open, backend is generating — show EndedScreen with spinner
+  // 'reporting' phase: backend is generating — if show_report is off, skip the wait entirely
   if (phase === 'reporting') {
     return (
       <EndedScreen
         agentName={agentName}
         turnCount={transcript.filter(e => e.role === 'user').length}
-        isGeneratingReport
+        isGeneratingReport={showReport}
+        hideReport={!showReport}
       />
     )
   }
@@ -211,6 +214,10 @@ export default function AgentLive() {
 
   const handleEnded = (turnCount: number, report: SessionReport | null) => {
     setEndedTurnCount(turnCount)
+    if (!config?.show_report) {
+      setPageState('ended')
+      return
+    }
     const hasScoring = report?.report && Object.keys(report.report.scoring ?? {}).length > 0
     if (hasScoring && report?.report) {
       // Report delivered over WebSocket — show it immediately
@@ -302,6 +309,7 @@ export default function AgentLive() {
         isGeneratingReport={isPollingReport}
         reportAvailable={!!reportData}
         onViewReport={() => setPageState('report')}
+        hideReport={!config?.show_report}
       />
     )
   }
@@ -328,6 +336,7 @@ export default function AgentLive() {
         mode={mode}
         token={mode === 'test' ? (authSession?.access_token ?? '') : undefined}
         agentFirstSpeaker={config?.agent_first_speaker ?? 'agent'}
+        showReport={config?.show_report ?? false}
         turnCount={endedTurnCount}
         onEnded={handleEnded}
       />

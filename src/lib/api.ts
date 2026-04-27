@@ -513,6 +513,7 @@ export interface Agent {
   agent_type: "general" | "qna";
   session_design_config?: SessionDesignRequest | null;
   eval_config?: EvalConfig | null;
+  show_report: boolean;
 }
 
 // ── QnA Types ─────────────────────────────────────────────────────────────────
@@ -601,6 +602,7 @@ export async function updateAgent(
     transcript_evaluation_metrics?: EvaluationMetrics | null;
     session_design_config?: SessionDesignRequest | null;
     eval_config?: EvalConfig | null;
+    show_report?: boolean;
   },
 ): Promise<Agent> {
   const res = await fetch(`${BASE}/api/v1/agents/${agentId}`, {
@@ -807,6 +809,7 @@ export interface AgentPublicConfig {
   agent_language: string;
   agent_status: string;
   agent_first_speaker: string;  // "agent" | "user"
+  show_report: boolean;
 }
 
 export async function fetchAgentPublicConfig(

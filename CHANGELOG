@@ -1,5 +1,21 @@
 # Changelog
 
+## [77] agent-show-report-flag — 2026-04-28
+
+**Why:** Paired with backend [93]. Agents needed a per-agent toggle to control whether the evaluation report is shown to the candidate after a session. Without it, the post-session screen had no way to distinguish "no report configured" from "report intentionally hidden". The default is off — creators explicitly opt in.
+
+**What:** `show_report` wired through the full frontend stack. Agent rows in the dashboard show a live toggle. The wizard deploy step exposes the toggle for both General and QnA agents. The candidate-facing session page reads `show_report` from public-config: if off, the candidate sees "Thank you for joining." the moment the session ends — no spinner, no wait — while report generation continues silently on the backend.
+
+**Changes:**
+- `src/lib/api.ts`: `show_report: boolean` added to `Agent` interface and `AgentPublicConfig` interface; `show_report?: boolean` added to `updateAgent` updates payload
+- `src/pages/AgentSpace.tsx`: `updateAgent` imported; `AgentRow` gains `showReport` + `togglingReport` local state and `handleToggleReport` handler; desktop table header gains "Report" column (`grid-cols` updated from 8 to 9 columns); desktop row renders a `ToggleLeft`/`ToggleRight` icon button for the Report column; mobile badge row removed in favour of a proper icon-button toggle in the action row (pending mobile redesign)
+- `src/components/agentspace/CreateAgentWizard.tsx`: `FileText` added to lucide imports; `DeployContent` gains `showReport` state + `handleShowReportToggle`; "Show report to candidate" toggle row added before the Done button
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: same changes as `CreateAgentWizard` for `QnADeployContent`
+- `src/pages/AgentLive.tsx`: `ActiveSession` gains `showReport` prop; when `phase === 'reporting'` and `showReport` is false, renders `EndedScreen` with `hideReport` immediately (no spinner); `handleEnded` short-circuits all report logic when `config.show_report` is false; `ActiveSession` usage passes `showReport={config?.show_report ?? false}`
+- `src/components/agentlive/EndedScreen.tsx`: `hideReport?: boolean` prop added; when true, renders "Thank you for joining." in place of the report/spinner/transcript-saved section
+
+---
+
 ## [76] agent-config-polish-language-popover-curator-hide-timestamps-scroll-fix — 2026-04-27
 
 **Why:** Five UI/UX issues accumulated across the agent config and live session views: (1) The language selector in the voice settings modal used a native `<select>` dropdown with OS-default styling that clashed with the rest of the app's custom Tailwind aesthetic (indigo rings, rounded cards, smooth transitions). (2) The "Report curator" section in both agent configs exposed a free-text prompt textarea for internal BTS report generation that was not ready for user-facing use. (3) The QnA config opened on the "Questions" tab by default while the General config opened on "Session", creating an inconsistent experience; the tab was also labelled "Profile" instead of "Session". (4) Live session and historical transcript timestamps only showed hours and minutes, omitting seconds that are useful for precise navigation during recordings. (5) The live transcript's `WordRevealText` typing animation (120ms per word) caused the agent message bubble to grow vertically, but the scroll container never followed that growth, leaving users stuck at the top of the latest block while new words appeared below the fold.

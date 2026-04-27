@@ -12,6 +12,7 @@ import {
   ChevronUp,
   Copy,
   Download,
+  FileText,
   Link2,
   ListChecks,
   Loader2,
@@ -44,6 +45,7 @@ import {
   fetchAgentspaceRuns,
   fetchAgentspaceSubscription,
   toggleAgentStatus,
+  updateAgent,
   type Agent,
   type AgentspaceSubscription,
   type EvaluationReport,
@@ -168,6 +170,8 @@ interface AgentRowProps {
 function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) {
   const isLive = agent.agent_status === 'live'
   const [toggling, setToggling] = useState(false)
+  const [showReport, setShowReport] = useState(agent.show_report)
+  const [togglingReport, setTogglingReport] = useState(false)
   const [copiedLive, setCopiedLive] = useState(false)
   const [copiedTest, setCopiedTest] = useState(false)
 
@@ -180,6 +184,19 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
       onStatusChange(updated)
     } catch { /* silent */ } finally {
       setToggling(false)
+    }
+  }
+
+  async function handleToggleReport() {
+    if (togglingReport) return
+    const next = !showReport
+    setTogglingReport(true)
+    try {
+      const updated = await updateAgent(token, agent.id, { show_report: next })
+      setShowReport(updated.show_report)
+      onStatusChange(updated)
+    } catch { /* silent */ } finally {
+      setTogglingReport(false)
     }
   }
 
@@ -237,6 +254,15 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
             <button onClick={handleToggleStatus} disabled={toggling} title={isLive ? 'Pause agent' : 'Deploy agent live'} className="group p-1.5 rounded-lg hover:bg-indigo-50 disabled:opacity-50 duration-[120ms]">
               {toggling ? <Loader2 className="w-5 h-5 text-gray-400 animate-spin" /> : isLive ? <ToggleRight className="w-6 h-6 text-emerald-500 group-hover:text-indigo-600 duration-[120ms]" /> : <ToggleLeft className="w-6 h-6 text-gray-300 group-hover:text-indigo-600 duration-[120ms]" />}
             </button>
+            <button onClick={handleToggleReport} disabled={togglingReport} title={showReport ? 'Hide report from candidates' : 'Show report to candidates'} className="group p-1.5 rounded-lg hover:bg-indigo-50 disabled:opacity-50 duration-[120ms] relative">
+              {togglingReport
+                ? <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                : <>
+                    <FileText className={`w-4 h-4 duration-[120ms] ${showReport ? 'text-indigo-600' : 'text-gray-300 group-hover:text-indigo-600'}`} />
+                    <span className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${showReport ? 'bg-indigo-500' : 'bg-gray-300'}`} />
+                  </>
+              }
+            </button>
             <button onClick={onConfigure} title="Configure agent" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 duration-[120ms]">
               <Settings2 className="w-4 h-4" />
             </button>
@@ -246,7 +272,7 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
       </div>
 
       {/* ── Desktop row (≥ md) ───────────────────────────────────────────── */}
-      <div className="hidden md:grid grid-cols-[1fr_68px_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-3 items-center hover:bg-gray-50/60 duration-[120ms]">
+      <div className="hidden md:grid grid-cols-[1fr_68px_90px_72px_60px_100px_80px_72px_60px] gap-x-4 px-5 py-3 items-center hover:bg-gray-50/60 duration-[120ms]">
         {/* Agent name + persona */}
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
@@ -272,6 +298,24 @@ function AgentRow({ agent, token, onConfigure, onStatusChange }: AgentRowProps) 
           <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
           {isLive ? 'Live' : 'Idle'}
         </span>
+
+        {/* Report */}
+        <div className="flex items-center justify-center">
+          <button
+            onClick={handleToggleReport}
+            disabled={togglingReport}
+            title={showReport ? 'Disable report for candidates' : 'Show report to candidates'}
+            className="group flex items-center p-1 rounded-lg hover:bg-indigo-50 disabled:opacity-50 duration-[120ms]"
+          >
+            {togglingReport ? (
+              <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+            ) : showReport ? (
+              <ToggleRight className="w-6 h-6 text-indigo-600 group-hover:text-indigo-700 duration-[120ms]" />
+            ) : (
+              <ToggleLeft className="w-6 h-6 text-gray-300 group-hover:text-indigo-600 duration-[120ms]" />
+            )}
+          </button>
+        </div>
 
         {/* Created */}
         <span className="text-xs text-gray-400">{formatRelativeDate(agent.created_at)}</span>
@@ -1075,11 +1119,12 @@ function AgentSpaceContent() {
                       <div className="flex flex-col gap-3">
                         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                           {/* Table header — desktop only */}
-                          <div className="hidden md:grid grid-cols-[1fr_68px_90px_72px_100px_80px_72px_60px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+                          <div className="hidden md:grid grid-cols-[1fr_68px_90px_72px_60px_100px_80px_72px_60px] gap-x-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Agent</span>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</span>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Language</span>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</span>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Report</span>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</span>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Links</span>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center">Deploy</span>

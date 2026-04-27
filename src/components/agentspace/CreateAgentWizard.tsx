@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, Copy,
-  Link2, Loader2, MessageSquare, Pencil, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
+  FileText, Link2, Loader2, MessageSquare, Pencil, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useScrollLock } from '../../hooks/useScrollLock'
@@ -734,6 +734,7 @@ function DeployContent({
   const [displayLabel, setDisplayLabel] = useState(savedAgent?.agent_display_label ?? '')
   const [labelDraft, setLabelDraft] = useState(savedAgent?.agent_display_label ?? '')
   const [editingLabel, setEditingLabel] = useState(false)
+  const [showReport, setShowReport] = useState(savedAgent?.show_report ?? false)
 
   const liveUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}` : ''
   const testUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}?mode=test` : ''
@@ -769,6 +770,13 @@ function DeployContent({
     try {
       await updateAgent(token, savedAgent.id, { agent_first_speaker: val })
     } catch { /* silent */ }
+  }
+
+  async function handleShowReportToggle() {
+    if (!savedAgent) return
+    const next = !showReport
+    setShowReport(next)
+    try { await updateAgent(token, savedAgent.id, { show_report: next }) } catch { /* silent */ }
   }
 
   async function saveLabel() {
@@ -903,6 +911,22 @@ function DeployContent({
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-sm text-gray-700 font-medium">Show report to candidate</span>
+          </div>
+          <button
+            onClick={handleShowReportToggle}
+            disabled={!savedAgent}
+            className="disabled:opacity-40"
+          >
+            {showReport
+              ? <ToggleRight className="w-6 h-6 text-indigo-600" />
+              : <ToggleLeft className="w-6 h-6 text-gray-300" />}
+          </button>
         </div>
 
         <button
