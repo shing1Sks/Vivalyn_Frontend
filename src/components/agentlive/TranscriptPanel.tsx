@@ -55,6 +55,10 @@ export default function TranscriptPanel({ transcript, agentName, streamingAgentT
     if (streamingAgentText) scrollToBottom()
   }, [streamingAgentText])
 
+  useEffect(() => {
+    if (partialUserText) scrollToBottom()
+  }, [partialUserText])
+
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-3 border-b border-gray-800">
@@ -104,7 +108,7 @@ export default function TranscriptPanel({ transcript, agentName, streamingAgentT
           <div className="flex flex-col gap-1 items-end">
             <span className="text-[10px] font-medium text-gray-400">You</span>
             <div className="max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed bg-indigo-600 text-white rounded-br-sm">
-              {partialUserText}
+              <WordRevealText text={partialUserText} onReveal={scrollToBottom} />
             </div>
           </div>
         )}
