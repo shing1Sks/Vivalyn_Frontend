@@ -344,6 +344,8 @@ export interface SessionContext {
   session_duration_minutes: number;
   communication_style: string;
   session_brief: string;
+  session_type?: string;
+  feedback_mode?: string;
 }
 
 export interface SessionDesignRequest {

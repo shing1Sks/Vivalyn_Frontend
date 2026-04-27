@@ -32,6 +32,7 @@ type Tab = 'questions' | 'profile' | 'evaluation'
 
 const COMM_STYLES = ['Conversational', 'Formal', 'Coaching', 'Strict'] as const
 const DURATION_PILLS = [10, 15, 30] as const
+const QNA_BEHAVIOR_RULE_ORDER = ['opening', 'transition', 'closing']
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -331,6 +332,8 @@ export default function QnAConfigureView({ agent }: Props) {
   const [sessionStale, setSessionStale] = useState(false)
   const [sessionStaleDismissed, setSessionStaleDismissed] = useState(false)
   const [recompileSessionLoading, setRecompileSessionLoading] = useState(false)
+  const [behaviorOpen, setBehaviorOpen] = useState(true)
+  const [guardrailsOpen, setGuardrailsOpen] = useState(false)
 
   // ── Evaluation tab state ───────────────────────────────────────────────────
   const storedEvalConfig = agent.eval_config as EvalConfig | null | undefined
@@ -626,17 +629,21 @@ export default function QnAConfigureView({ agent }: Props) {
         </nav>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
 
       {/* Questions */}
       {activeTab === 'questions' && (
-        <div className="px-6 md:px-8 py-6">
-          <QuestionBankEditor bank={bank} onChange={setBank} />
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 md:px-8 py-6">
+            <QuestionBankEditor bank={bank} onChange={setBank} />
+          </div>
         </div>
       )}
 
       {/* Profile */}
       {activeTab === 'profile' && (
+        <>
+        <div className="flex-1 overflow-y-auto">
         <div className="px-6 md:px-8 py-6 space-y-5">
 
           {!storedSessionConfig && (
@@ -674,7 +681,7 @@ export default function QnAConfigureView({ agent }: Props) {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-medium text-gray-600">Persona name</label>
-                <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">Used in prompt — rename carefully</span>
+                <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">Used in agent — rename carefully</span>
               </div>
               <input type="text" value={editedAgentName} onChange={e => setEditedAgentName(e.target.value)}
                 placeholder="e.g. Prof. Chen"
@@ -814,10 +821,118 @@ export default function QnAConfigureView({ agent }: Props) {
               : <><RefreshCw className="w-4 h-4" />Regenerate Agent</>}
           </button>
         </div>
+        </div>
+
+        {/* Right output panel — desktop only */}
+        <div className="hidden lg:flex flex-col w-80 xl:w-96 shrink-0 border-l border-gray-100 overflow-y-auto bg-white">
+          <div className="px-5 py-6 space-y-5">
+            {/* Panel header */}
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Agent</p>
+              {spec.session_context?.session_type && (
+                <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded-md px-2 py-0.5 capitalize">
+                  {spec.session_context.session_type}
+                </span>
+              )}
+            </div>
+
+            {/* Stale indicator */}
+            {sessionStale && !sessionStaleDismissed && (
+              <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                Showing last generated — regenerate to update
+              </div>
+            )}
+
+            {/* Identity */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Who I am</p>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {spec.identity_and_persona || (
+                  <span className="text-xs text-gray-400 italic">Not generated yet</span>
+                )}
+              </p>
+            </div>
+
+            {/* Session brief */}
+            {spec.session_context?.session_brief && (
+              <div className="space-y-1.5 pt-4 border-t border-gray-100">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Session brief</p>
+                <p className="text-sm text-gray-700 leading-relaxed">{spec.session_context.session_brief}</p>
+              </div>
+            )}
+
+            {/* Behavior rules — collapsible */}
+            {spec.behavior_rules && Object.keys(spec.behavior_rules).length > 0 && (
+              <div className="pt-4 border-t border-gray-100">
+                <button onClick={() => setBehaviorOpen(v => !v)} className="flex items-center justify-between w-full mb-3 group">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Behavior</p>
+                  <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-[120ms] ${behaviorOpen ? '' : '-rotate-90'}`} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {behaviorOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="overflow-hidden space-y-4"
+                    >
+                      {[
+                        ...QNA_BEHAVIOR_RULE_ORDER.filter(k => k in spec.behavior_rules),
+                        ...Object.keys(spec.behavior_rules).filter(k => !QNA_BEHAVIOR_RULE_ORDER.includes(k)),
+                      ].map(key => (
+                        <div key={key} className="space-y-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{key}</p>
+                          <p className="text-sm text-gray-700 leading-relaxed">{spec.behavior_rules[key]}</p>
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Guardrails — collapsible, closed by default */}
+            {spec.guardrails?.length > 0 && (
+              <div className="pt-4 border-t border-gray-100">
+                <button onClick={() => setGuardrailsOpen(v => !v)} className="flex items-center justify-between w-full mb-3 group">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    Guardrails
+                    <span className="ml-1.5 normal-case font-normal text-gray-300">({spec.guardrails.length})</span>
+                  </p>
+                  <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-[120ms] ${guardrailsOpen ? '' : '-rotate-90'}`} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {guardrailsOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="overflow-hidden"
+                    >
+                      <ol className="space-y-2">
+                        {spec.guardrails.map((g, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="text-[10px] font-medium text-gray-400 mt-0.5 shrink-0 w-3.5 text-right">{i + 1}.</span>
+                            <p className="text-xs text-gray-600 leading-relaxed">{g}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+        </div>
+        </>
       )}
 
       {/* Evaluation */}
       {activeTab === 'evaluation' && (
+        <div className="flex-1 overflow-y-auto">
         <div className="px-6 md:px-8 py-6 space-y-5">
 
           {!storedEvalConfig && (
@@ -953,6 +1068,7 @@ export default function QnAConfigureView({ agent }: Props) {
               </button>
             </div>
           )}
+        </div>
         </div>
       )}
 

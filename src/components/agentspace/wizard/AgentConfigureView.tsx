@@ -52,6 +52,7 @@ interface Props {
 
 const COMM_STYLES = ["Conversational", "Formal", "Coaching", "Strict"] as const;
 const DURATION_PILLS = [10, 15, 30] as const;
+const BEHAVIOR_RULE_ORDER = ["opening", "probing", "adaptation", "feedback", "closing"];
 
 type Tab = "session" | "evaluation";
 
@@ -162,6 +163,10 @@ export default function AgentConfigureView({
 
   // ── Voice / first-speaker ──────────────────────────────────────────────────
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
+
+  // ── Right-panel collapsible sections ──────────────────────────────────────
+  const [behaviorOpen, setBehaviorOpen] = useState(true);
+  const [guardrailsOpen, setGuardrailsOpen] = useState(false);
   const [firstSpeaker, setFirstSpeaker] = useState<"agent" | "user">(
     (agentFirstSpeaker as "agent" | "user") ?? "agent",
   );
@@ -505,525 +510,693 @@ export default function AgentConfigureView({
           ))}
         </nav>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
-          {activeTab === "session" ? (
-            <div className="px-6 md:px-8 py-6 space-y-5">
-              {/* No config notice */}
-              {!sessionDesignConfig && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
-                  This agent was created before config storage was added. Fill
-                  in the fields below and click
-                  <span className="font-semibold"> Regenerate Agent</span> to
-                  enable config-based editing.
-                </div>
-              )}
+        {/* Split content area */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
 
-              {/* Stale config notice */}
-              <AnimatePresence>
-                {sessionStale && !sessionStaleDismissed && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-3">
-                      <div className="flex items-center gap-2 text-sm text-amber-800">
-                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
-                        Config updated — regenerate to apply changes.
-                      </div>
-                      <button
-                        onClick={() => setSessionStaleDismissed(true)}
-                        className="text-amber-400 hover:text-amber-700 duration-[120ms]"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </motion.div>
+          {/* ── Form panel (left) ─────────────────────────────────────────── */}
+          <div className="flex-1 overflow-y-auto">
+            {activeTab === "session" ? (
+              <div className="px-6 md:px-8 py-6 space-y-5">
+                {/* No config notice */}
+                {!sessionDesignConfig && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
+                    This agent was created before config storage was added. Fill
+                    in the fields below and click
+                    <span className="font-semibold"> Regenerate Agent</span> to
+                    enable config-based editing.
+                  </div>
                 )}
-              </AnimatePresence>
 
-              {/* Names card */}
-              <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  Names
-                </p>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-medium text-gray-600">
-                      Persona name
-                    </label>
-                    <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">
-                      Used in prompt — rename carefully
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    value={editedAgentName}
-                    onChange={(e) => setEditedAgentName(e.target.value)}
-                    placeholder="e.g. Dr. Patel"
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-medium text-gray-600">
-                      Display label
-                    </label>
-                    <span className="text-[10px] text-gray-400">
-                      Shown in records — freely editable
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    value={editedDisplayLabel}
-                    onChange={(e) => setEditedDisplayLabel(e.target.value)}
-                    placeholder="e.g. Viva Voce Biology Examiner"
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
-                  />
-                </div>
-              </div>
-
-              {/* Session config fields */}
-              <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  Session configuration
-                </p>
-
-                {/* Duration */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Duration
-                  </label>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {DURATION_PILLS.map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => {
-                          setSessionConfig((prev) => ({
-                            ...prev,
-                            session_duration_minutes: d,
-                          }));
-                          setIsCustomDuration(false);
-                        }}
-                        className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                          !isCustomDuration &&
-                          sessionConfig.session_duration_minutes === d
-                            ? "bg-indigo-600 text-white border-indigo-600"
-                            : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                        }`}
-                      >
-                        {d} min
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setIsCustomDuration(true)}
-                      className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                        isCustomDuration
-                          ? "bg-indigo-600 text-white border-indigo-600"
-                          : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      Custom
-                    </button>
-                    {isCustomDuration && (
-                      <input
-                        type="number"
-                        min={1}
-                        max={120}
-                        value={customDuration}
-                        onChange={(e) => setCustomDuration(e.target.value)}
-                        placeholder="20"
-                        autoFocus
-                        className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {/* Textareas - 2 per row on large screens */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* Session objective */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Session objective
-                    </label>
-                    <textarea
-                      value={sessionConfig.session_objective ?? ""}
-                      onChange={(e) =>
-                        setSessionConfig((prev) => ({
-                          ...prev,
-                          session_objective: e.target.value,
-                        }))
-                      }
-                      rows={2}
-                      placeholder="e.g. Conduct a rigorous oral examination on machine learning…"
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                    />
-                  </div>
-
-                  {/* Agent role */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Agent role
-                    </label>
-                    <textarea
-                      value={sessionConfig.agent_role ?? ""}
-                      onChange={(e) =>
-                        setSessionConfig((prev) => ({
-                          ...prev,
-                          agent_role: e.target.value,
-                        }))
-                      }
-                      rows={2}
-                      placeholder="e.g. A rigorous oral examiner…"
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                    />
-                  </div>
-
-                  {/* Participant role */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Participant role
-                    </label>
-                    <textarea
-                      value={sessionConfig.participant_role ?? ""}
-                      onChange={(e) =>
-                        setSessionConfig((prev) => ({
-                          ...prev,
-                          participant_role: e.target.value,
-                        }))
-                      }
-                      rows={2}
-                      placeholder="e.g. A postgraduate student…"
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                    />
-                  </div>
-
-                  {/* Additional context */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Additional context
-                      <span className="ml-1.5 text-xs font-normal text-gray-400">
-                        (optional)
-                      </span>
-                    </label>
-                    <textarea
-                      value={sessionConfig.additional_context ?? ""}
-                      onChange={(e) =>
-                        setSessionConfig((prev) => ({
-                          ...prev,
-                          additional_context: e.target.value,
-                        }))
-                      }
-                      rows={2}
-                      placeholder="Extra context or constraints…"
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-
-                {/* Communication style */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Communication style
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {COMM_STYLES.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() =>
-                          setSessionConfig((prev) => ({
-                            ...prev,
-                            communication_style: s,
-                          }))
-                        }
-                        className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
-                          sessionConfig.communication_style === s
-                            ? "bg-indigo-600 text-white border-indigo-600"
-                            : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Regenerate button */}
-              <button
-                onClick={handleRecompileSession}
-                disabled={recompileSessionLoading}
-                className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-[120ms]"
-              >
-                {recompileSessionLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Regenerating…
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    Regenerate Agent
-                  </>
-                )}
-              </button>
-            </div>
-          ) : (
-            <div className="px-6 md:px-8 py-6 space-y-5">
-              {/* No eval config notice */}
-              {!evalConfig && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
-                  This agent was created before eval config storage was added.
-                  Set your preferences below and click
-                  <span className="font-semibold"> Regenerate Eval</span>.
-                </div>
-              )}
-
-              {/* Stale eval notice */}
-              <AnimatePresence>
-                {evalStale && !evalStaleDismissed && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-3">
-                      <div className="flex items-center gap-2 text-sm text-amber-800">
-                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
-                        Eval config updated — regenerate to apply changes.
-                      </div>
-                      <button
-                        onClick={() => setEvalStaleDismissed(true)}
-                        className="text-amber-400 hover:text-amber-700 duration-[120ms]"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Eval config form */}
-              <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                  Evaluation configuration
-                </p>
-
-                {/* Mode selector */}
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCurrentEvalConfig((prev) => ({
-                        ...prev,
-                        mode: "auto",
-                      }))
-                    }
-                    className={`text-left border rounded-xl p-4 transition-all duration-[120ms] ${
-                      currentEvalConfig.mode === "auto"
-                        ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200"
-                        : "bg-white border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-sm font-medium text-gray-900">
-                        Auto-generate
-                      </p>
-                      <Sparkles
-                        size={14}
-                        className={
-                          currentEvalConfig.mode === "auto"
-                            ? "text-indigo-500"
-                            : "text-gray-300"
-                        }
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Based on session design
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCurrentEvalConfig((prev) => ({
-                        ...prev,
-                        mode: "custom",
-                      }))
-                    }
-                    className={`text-left border rounded-xl p-4 transition-all duration-[120ms] ${
-                      currentEvalConfig.mode === "custom"
-                        ? "bg-white border-indigo-300 ring-1 ring-indigo-200"
-                        : "bg-white border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-sm font-medium text-gray-900">
-                        Customize
-                      </p>
-                      <Brain
-                        size={14}
-                        className={
-                          currentEvalConfig.mode === "custom"
-                            ? "text-indigo-500"
-                            : "text-gray-300"
-                        }
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Define criteria manually
-                    </p>
-                  </button>
-                </div>
-
+                {/* Stale config notice */}
                 <AnimatePresence>
-                  {currentEvalConfig.mode === "custom" && (
+                  {sessionStale && !sessionStaleDismissed && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease: "easeOut" }}
-                      className="overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-4"
+                      transition={{ duration: 0.15 }}
+                      className="overflow-hidden"
                     >
-                      {[
-                        {
-                          label: "What is being evaluated?",
-                          key: "competency" as const,
-                          placeholder:
-                            "e.g. Oral defence of research methodology",
-                        },
-                        {
-                          label: "Strong performance",
-                          key: "strong_performance" as const,
-                          placeholder:
-                            "e.g. Gives structured, well-reasoned answers…",
-                        },
-                        {
-                          label: "Weak performance",
-                          key: "weak_performance" as const,
-                          placeholder:
-                            "e.g. Gives vague answers without reasoning…",
-                        },
-                        {
-                          label: "Additional context",
-                          key: "additional" as const,
-                          placeholder: "Any other notes…",
-                        },
-                      ].map(({ label, key, placeholder }) => (
-                        <div key={key}>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {label}
-                          </label>
-                          <textarea
-                            value={currentEvalConfig[key] ?? ""}
-                            onChange={(e) =>
-                              setCurrentEvalConfig((prev) => ({
-                                ...prev,
-                                [key]: e.target.value,
-                              }))
-                            }
-                            rows={2}
-                            placeholder={placeholder}
-                            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                          />
+                      <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-3">
+                        <div className="flex items-center gap-2 text-sm text-amber-800">
+                          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                          Config updated — regenerate to apply changes.
                         </div>
-                      ))}
+                        <button
+                          onClick={() => setSessionStaleDismissed(true)}
+                          className="text-amber-400 hover:text-amber-700 duration-[120ms]"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </div>
 
-              {/* Regenerate eval button */}
-              <button
-                onClick={handleRecompileEval}
-                disabled={recompileEvalLoading}
-                className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-[120ms]"
-              >
-                {recompileEvalLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Regenerating…
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    Regenerate Eval
-                  </>
-                )}
-              </button>
-
-              {/* Current metrics — editable */}
-              {(editedMetrics.some(m => m.name) || editedCuratorPrompt) && (
-                <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+                {/* Names card */}
+                <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                    Current metrics
+                    Names
                   </p>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                    {editedMetrics.map((metric, i) => (
-                      <div key={i} className="border border-gray-100 rounded-xl p-3 space-y-2.5">
-                        <p className="text-xs font-semibold text-gray-400">Metric {i + 1}</p>
-                        <input
-                          type="text"
-                          value={metric.name}
-                          onChange={(e) => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, name: e.target.value } : m))}
-                          placeholder="Name"
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                        />
-                        <textarea
-                          value={metric.definition}
-                          onChange={(e) => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, definition: e.target.value } : m))}
-                          placeholder="Definition"
-                          rows={2}
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <textarea
-                            value={metric.strong}
-                            onChange={(e) => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, strong: e.target.value } : m))}
-                            placeholder="Strong (5/5)"
-                            rows={2}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                          />
-                          <textarea
-                            value={metric.weak}
-                            onChange={(e) => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, weak: e.target.value } : m))}
-                            placeholder="Weak (1/5)"
-                            rows={2}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                      Report curator prompt
-                    </label>
-                    <textarea
-                      value={editedCuratorPrompt}
-                      onChange={(e) => setEditedCuratorPrompt(e.target.value)}
-                      rows={4}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-gray-600">
+                        Persona name
+                      </label>
+                      <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">
+                        Used in agent — rename carefully
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={editedAgentName}
+                      onChange={(e) => setEditedAgentName(e.target.value)}
+                      placeholder="e.g. Dr. Patel"
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
                     />
                   </div>
-                  <button
-                    onClick={handleSaveMetrics}
-                    className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms]"
-                  >
-                    Save metrics
-                  </button>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-gray-600">
+                        Display label
+                      </label>
+                      <span className="text-[10px] text-gray-400">
+                        Shown in records — freely editable
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={editedDisplayLabel}
+                      onChange={(e) => setEditedDisplayLabel(e.target.value)}
+                      placeholder="e.g. Viva Voce Biology Examiner"
+                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 duration-[120ms]"
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {/* Session config fields */}
+                <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Session configuration
+                  </p>
+
+                  {/* Duration */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Duration
+                    </label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {DURATION_PILLS.map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => {
+                            setSessionConfig((prev) => ({
+                              ...prev,
+                              session_duration_minutes: d,
+                            }));
+                            setIsCustomDuration(false);
+                          }}
+                          className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                            !isCustomDuration &&
+                            sessionConfig.session_duration_minutes === d
+                              ? "bg-indigo-600 text-white border-indigo-600"
+                              : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          {d} min
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomDuration(true)}
+                        className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                          isCustomDuration
+                            ? "bg-indigo-600 text-white border-indigo-600"
+                            : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        Custom
+                      </button>
+                      {isCustomDuration && (
+                        <input
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={customDuration}
+                          onChange={(e) => setCustomDuration(e.target.value)}
+                          placeholder="20"
+                          autoFocus
+                          className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Textareas */}
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Session objective
+                      </label>
+                      <textarea
+                        value={sessionConfig.session_objective ?? ""}
+                        onChange={(e) =>
+                          setSessionConfig((prev) => ({
+                            ...prev,
+                            session_objective: e.target.value,
+                          }))
+                        }
+                        rows={2}
+                        placeholder="e.g. Conduct a rigorous oral examination on machine learning…"
+                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Agent role
+                      </label>
+                      <textarea
+                        value={sessionConfig.agent_role ?? ""}
+                        onChange={(e) =>
+                          setSessionConfig((prev) => ({
+                            ...prev,
+                            agent_role: e.target.value,
+                          }))
+                        }
+                        rows={2}
+                        placeholder="e.g. A rigorous oral examiner…"
+                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Participant role
+                      </label>
+                      <textarea
+                        value={sessionConfig.participant_role ?? ""}
+                        onChange={(e) =>
+                          setSessionConfig((prev) => ({
+                            ...prev,
+                            participant_role: e.target.value,
+                          }))
+                        }
+                        rows={2}
+                        placeholder="e.g. A postgraduate student…"
+                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Additional context
+                        <span className="ml-1.5 text-xs font-normal text-gray-400">
+                          (optional)
+                        </span>
+                      </label>
+                      <textarea
+                        value={sessionConfig.additional_context ?? ""}
+                        onChange={(e) =>
+                          setSessionConfig((prev) => ({
+                            ...prev,
+                            additional_context: e.target.value,
+                          }))
+                        }
+                        rows={2}
+                        placeholder="Extra context or constraints…"
+                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Communication style */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Communication style
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {COMM_STYLES.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() =>
+                            setSessionConfig((prev) => ({
+                              ...prev,
+                              communication_style: s,
+                            }))
+                          }
+                          className={`px-3 py-2 text-sm rounded-lg border transition-all duration-[120ms] ${
+                            sessionConfig.communication_style === s
+                              ? "bg-indigo-600 text-white border-indigo-600"
+                              : "border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Regenerate button */}
+                <button
+                  onClick={handleRecompileSession}
+                  disabled={recompileSessionLoading}
+                  className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-[120ms]"
+                >
+                  {recompileSessionLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Regenerating…
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      Regenerate Agent
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="px-6 md:px-8 py-6 space-y-5">
+                {/* No eval config notice */}
+                {!evalConfig && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800">
+                    This agent was created before eval config storage was added.
+                    Set your preferences below and click
+                    <span className="font-semibold"> Regenerate Eval</span>.
+                  </div>
+                )}
+
+                {/* Stale eval notice */}
+                <AnimatePresence>
+                  {evalStale && !evalStaleDismissed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-5 py-3">
+                        <div className="flex items-center gap-2 text-sm text-amber-800">
+                          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                          Eval config updated — regenerate to apply changes.
+                        </div>
+                        <button
+                          onClick={() => setEvalStaleDismissed(true)}
+                          className="text-amber-400 hover:text-amber-700 duration-[120ms]"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Eval config form */}
+                <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Evaluation configuration
+                  </p>
+
+                  {/* Mode selector */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCurrentEvalConfig((prev) => ({
+                          ...prev,
+                          mode: "auto",
+                        }))
+                      }
+                      className={`text-left border rounded-xl p-4 transition-all duration-[120ms] ${
+                        currentEvalConfig.mode === "auto"
+                          ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200"
+                          : "bg-white border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-sm font-medium text-gray-900">
+                          Auto-generate
+                        </p>
+                        <Sparkles
+                          size={14}
+                          className={
+                            currentEvalConfig.mode === "auto"
+                              ? "text-indigo-500"
+                              : "text-gray-300"
+                          }
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Based on session design
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCurrentEvalConfig((prev) => ({
+                          ...prev,
+                          mode: "custom",
+                        }))
+                      }
+                      className={`text-left border rounded-xl p-4 transition-all duration-[120ms] ${
+                        currentEvalConfig.mode === "custom"
+                          ? "bg-white border-indigo-300 ring-1 ring-indigo-200"
+                          : "bg-white border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-sm font-medium text-gray-900">
+                          Customize
+                        </p>
+                        <Brain
+                          size={14}
+                          className={
+                            currentEvalConfig.mode === "custom"
+                              ? "text-indigo-500"
+                              : "text-gray-300"
+                          }
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Define criteria manually
+                      </p>
+                    </button>
+                  </div>
+
+                  <AnimatePresence>
+                    {currentEvalConfig.mode === "custom" && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="overflow-hidden space-y-4"
+                      >
+                        {[
+                          {
+                            label: "What is being evaluated?",
+                            key: "competency" as const,
+                            placeholder: "e.g. Oral defence of research methodology",
+                          },
+                          {
+                            label: "Strong performance",
+                            key: "strong_performance" as const,
+                            placeholder: "e.g. Gives structured, well-reasoned answers…",
+                          },
+                          {
+                            label: "Weak performance",
+                            key: "weak_performance" as const,
+                            placeholder: "e.g. Gives vague answers without reasoning…",
+                          },
+                          {
+                            label: "Additional context",
+                            key: "additional" as const,
+                            placeholder: "Any other notes…",
+                          },
+                        ].map(({ label, key, placeholder }) => (
+                          <div key={key}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {label}
+                            </label>
+                            <textarea
+                              value={currentEvalConfig[key] ?? ""}
+                              onChange={(e) =>
+                                setCurrentEvalConfig((prev) => ({
+                                  ...prev,
+                                  [key]: e.target.value,
+                                }))
+                              }
+                              rows={2}
+                              placeholder={placeholder}
+                              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                            />
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Regenerate eval button */}
+                <button
+                  onClick={handleRecompileEval}
+                  disabled={recompileEvalLoading}
+                  className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-[120ms]"
+                >
+                  {recompileEvalLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Regenerating…
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      Regenerate Eval
+                    </>
+                  )}
+                </button>
+
+                {/* Metrics */}
+                {(editedMetrics.some((m) => m.name) || editedCuratorPrompt) && (
+                  <div className="space-y-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                      Evaluation metrics
+                    </p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {editedMetrics.map((metric, i) => (
+                        <div
+                          key={i}
+                          className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"
+                        >
+                          <input
+                            type="text"
+                            value={metric.name}
+                            onChange={(e) =>
+                              setEditedMetrics((prev) =>
+                                prev.map((m, idx) =>
+                                  idx === i ? { ...m, name: e.target.value } : m,
+                                ),
+                              )
+                            }
+                            placeholder={`Metric ${i + 1} name`}
+                            className="w-full px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                          />
+                          <textarea
+                            value={metric.definition}
+                            onChange={(e) =>
+                              setEditedMetrics((prev) =>
+                                prev.map((m, idx) =>
+                                  idx === i ? { ...m, definition: e.target.value } : m,
+                                ),
+                              )
+                            }
+                            placeholder="Definition"
+                            rows={2}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <textarea
+                              value={metric.strong}
+                              onChange={(e) =>
+                                setEditedMetrics((prev) =>
+                                  prev.map((m, idx) =>
+                                    idx === i ? { ...m, strong: e.target.value } : m,
+                                  ),
+                                )
+                              }
+                              placeholder="Strong (5/5)"
+                              rows={2}
+                              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                            />
+                            <textarea
+                              value={metric.weak}
+                              onChange={(e) =>
+                                setEditedMetrics((prev) =>
+                                  prev.map((m, idx) =>
+                                    idx === i ? { ...m, weak: e.target.value } : m,
+                                  ),
+                                )
+                              }
+                              placeholder="Weak (1/5)"
+                              rows={2}
+                              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Report curator */}
+                    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                        Report curator
+                      </p>
+                      <textarea
+                        value={editedCuratorPrompt}
+                        onChange={(e) => setEditedCuratorPrompt(e.target.value)}
+                        rows={4}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleSaveMetrics}
+                      className="w-full px-4 py-2.5 text-sm font-medium bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors duration-[120ms]"
+                    >
+                      Save metrics
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Output panel (right) — desktop only, session tab only ─────── */}
+          {activeTab === "session" && (
+          <div className="hidden lg:flex flex-col w-80 xl:w-96 shrink-0 border-l border-gray-100 overflow-y-auto bg-white">
+              <div className="px-5 py-6 space-y-5">
+                {/* Panel header */}
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Agent
+                  </p>
+                  {spec.session_context?.session_type && (
+                    <span className="text-[10px] font-medium text-gray-500 bg-gray-100 rounded-md px-2 py-0.5 capitalize">
+                      {spec.session_context.session_type}
+                    </span>
+                  )}
+                </div>
+
+                {/* Stale indicator */}
+                {sessionStale && !sessionStaleDismissed && (
+                  <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                    Showing last generated — regenerate to update
+                  </div>
+                )}
+
+                {/* Identity */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    Who I am
+                  </p>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {spec.identity_and_persona || (
+                      <span className="text-xs text-gray-400 italic">
+                        Not generated yet
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                {/* Session brief */}
+                {spec.session_context?.session_brief && (
+                  <div className="space-y-1.5 pt-4 border-t border-gray-100">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                      Session brief
+                    </p>
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      {spec.session_context.session_brief}
+                    </p>
+                  </div>
+                )}
+
+                {/* Behavior rules — collapsible */}
+                {spec.behavior_rules &&
+                  Object.keys(spec.behavior_rules).length > 0 && (
+                    <div className="pt-4 border-t border-gray-100">
+                      <button
+                        onClick={() => setBehaviorOpen((v) => !v)}
+                        className="flex items-center justify-between w-full mb-3 group"
+                      >
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                          Behavior
+                        </p>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-[120ms] ${behaviorOpen ? "" : "-rotate-90"}`}
+                        />
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {behaviorOpen && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="overflow-hidden space-y-4"
+                          >
+                            {[
+                              ...BEHAVIOR_RULE_ORDER.filter(
+                                (k) => k in spec.behavior_rules,
+                              ),
+                              ...Object.keys(spec.behavior_rules).filter(
+                                (k) => !BEHAVIOR_RULE_ORDER.includes(k),
+                              ),
+                            ].map((key) => (
+                              <div key={key} className="space-y-1">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                                  {key}
+                                </p>
+                                <p className="text-sm text-gray-700 leading-relaxed">
+                                  {spec.behavior_rules[key]}
+                                </p>
+                              </div>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
+                {/* Guardrails — collapsible, closed by default */}
+                {spec.guardrails?.length > 0 && (
+                  <div className="pt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => setGuardrailsOpen((v) => !v)}
+                      className="flex items-center justify-between w-full mb-3 group"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                        Guardrails
+                        <span className="ml-1.5 normal-case font-normal text-gray-300">
+                          ({spec.guardrails.length})
+                        </span>
+                      </p>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-[120ms] ${guardrailsOpen ? "" : "-rotate-90"}`}
+                      />
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {guardrailsOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                          className="overflow-hidden"
+                        >
+                          <ol className="space-y-2">
+                            {spec.guardrails.map((g, i) => (
+                              <li key={i} className="flex items-start gap-2">
+                                <span className="text-[10px] font-medium text-gray-400 mt-0.5 shrink-0 w-3.5 text-right">
+                                  {i + 1}.
+                                </span>
+                                <p className="text-xs text-gray-600 leading-relaxed">
+                                  {g}
+                                </p>
+                              </li>
+                            ))}
+                          </ol>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </div>
+          </div>
           )}
+
         </div>
       </div>
     </div>

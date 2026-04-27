@@ -1,5 +1,28 @@
 # Changelog
 
+## [75] qna-configure-profile-split-panel — 2026-04-27
+
+**Why:** After applying the split-panel layout to `AgentConfigureView`, the same pattern was missing from `QnAConfigureView`'s profile tab. The profile tab (names, session config, feedback mode, duration, communication style, regenerate) rendered full-width with no preview of the compiled agent output, making it hard to understand what the regenerated agent would look like without switching views.
+
+**What:** QnAConfigureView profile tab restructured to the same split-panel pattern as AgentConfigureView. The outer content wrapper changed to `flex flex-1 min-h-0 overflow-hidden` so all three tabs participate in the same flex layout. Questions and Evaluation tabs each gain their own `flex-1 overflow-y-auto` wrapper (no visual change). The profile tab renders as a fragment: left form panel (`flex-1 overflow-y-auto`) containing all existing form fields unchanged, and a right agent spec panel (`hidden lg:flex w-80 xl:w-96`) showing identity, session brief, behavior rules (collapsible, open by default), and guardrails (collapsible, closed by default, shows count badge). `QNA_BEHAVIOR_RULE_ORDER = ['opening', 'transition', 'closing']` added to order behavior rule display correctly for QnA agents. "Used in prompt" label corrected to "Used in agent".
+
+**Changes:**
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: added `QNA_BEHAVIOR_RULE_ORDER` constant; added `behaviorOpen` (default `true`) and `guardrailsOpen` (default `false`) state; content wrapper changed from `flex-1 overflow-y-auto` to `flex flex-1 min-h-0 overflow-hidden`; questions and evaluation tab content each wrapped in `flex-1 overflow-y-auto`; profile tab restructured to `<>` fragment with left form panel + right output panel; right panel shows identity, session brief, collapsible behavior rules (`AnimatePresence` + `motion.div height 0→auto`), collapsible guardrails with count badge; "Used in prompt" → "Used in agent" label fixed
+
+---
+
+## [74] agent-configure-session-split-panel — 2026-04-27
+
+**Why:** The session tab in `AgentConfigureView` showed only a form with no visibility into what the compiled agent actually looks like. Users had to regenerate and then navigate to the live session view to read the agent persona, behavior rules, and guardrails. The eval tab had a similar issue, but cramming editable metric cards into a narrow right column made them unusable.
+
+**What:** Session tab gains a right output panel showing the compiled agent spec. Eval tab reverts to full-width layout with metrics in the form panel. The content wrapper changed to `flex flex-1 min-h-0 overflow-hidden` to hold both panels. The right panel renders only when `activeTab === "session"` — it shows: session type badge (from `spec.session_context.session_type`), stale indicator when config was changed but not regenerated, identity, session brief, behavior rules in a collapsible drawer (open by default, ordered by `BEHAVIOR_RULE_ORDER`), and guardrails in a collapsible drawer (closed by default, shows count). Eval tab metrics section moved back into the eval form panel below the Regenerate Eval button, using a full-width `lg:grid-cols-2` grid for the 4 metric cards and a simple textarea for the curator prompt. `SessionContext` type in `api.ts` gains `session_type` and `feedback_mode` optional fields.
+
+**Changes:**
+- `src/lib/api.ts`: `SessionContext` interface gains `session_type?: string` and `feedback_mode?: string`
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: added `BEHAVIOR_RULE_ORDER` constant; added `behaviorOpen` (default `true`) and `guardrailsOpen` (default `false`) state; content wrapper changed to `flex flex-1 min-h-0 overflow-hidden`; right panel wrapped in `{activeTab === "session" && (...)}` — session content shows identity, session brief, collapsible behavior section (`AnimatePresence` + `motion.div`), collapsible guardrails with count badge; eval form panel gains metrics section: `lg:grid-cols-2` grid of 4 metric cards (each with name input + definition/strong/weak textareas), curator prompt textarea, and Save metrics button; old right-panel eval content with `openMetrics`/`curatorOpen` state removed entirely
+
+---
+
 ## [73] responsiveness-scroll-lock-and-brand-color-fixes — 2026-04-26
 
 **Why:** Six UI/UX issues accumulated across the frontend: (1) **Agent creation voice selection broke on mobile** — the voice card grid forced 4 columns on all screen sizes, cramming voice name + gender badge + a text-heavy "Preview" button into tiny cells. (2) **Create-agent popover was cramped on small screens** — the agent-type selection modal used a hard `grid-cols-2` with multi-line description text, producing tall narrow rectangles. (3) **Eval tab save button was black** — the "Save metrics" button in both configure views used `bg-gray-900` while every other primary action in the app used `bg-indigo-600`, creating a jarring inconsistency. (4) **Admin greens didn't match brand emerald** — several admin components used Tailwind `green-*` classes instead of the site's `emerald-*` brand palette. (5) **Background scroll was never locked when modals opened** — no modal, dialog, dropdown, or slide panel in the entire codebase prevented the underlying page from scrolling, causing a nuisance on mobile/touch devices. (6) **Two runtime/build regressions** — `selectedRun` was referenced outside its component scope after the scroll-lock integration, and Framer Motion `itemVariants` objects had untyped `ease: 'easeOut'` strings that failed strict TypeScript checking.
