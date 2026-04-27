@@ -275,7 +275,7 @@ function QuestionItem({ question, index, showCross, isDropTarget, onEdit, onDele
 
 export default function QnAConfigureView({ agent }: Props) {
   const { session } = useAuth()
-  const [activeTab, setActiveTab] = useState<Tab>('questions')
+  const [activeTab, setActiveTab] = useState<Tab>('profile')
   const [voiceModalOpen, setVoiceModalOpen] = useState(false)
   const [firstSpeaker, setFirstSpeaker] = useState<'agent' | 'user'>(
     (agent.agent_first_speaker as 'agent' | 'user') ?? 'agent',
@@ -491,7 +491,7 @@ export default function QnAConfigureView({ agent }: Props) {
   }
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'profile', label: 'Profile' },
+    { key: 'profile', label: 'Session' },
     { key: 'questions', label: 'Questions' },
     { key: 'evaluation', label: 'Evaluation' },
   ]
@@ -1056,11 +1056,6 @@ export default function QnAConfigureView({ agent }: Props) {
                     </div>
                   </div>
                 ))}
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Report curator prompt</label>
-                <textarea value={editedCuratorPrompt} onChange={e => setEditedCuratorPrompt(e.target.value)}
-                  rows={4} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
               </div>
               <button onClick={handleSaveMetrics}
                 className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-[120ms]">

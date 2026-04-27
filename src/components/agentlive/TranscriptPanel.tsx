@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TranscriptEntry } from '../../hooks/useAgentSession'
 
-function WordRevealText({ text }: { text: string }) {
+function WordRevealText({ text, onReveal }: { text: string; onReveal?: () => void }) {
   const [displayed, setDisplayed] = useState('')
   const wordPosRef = useRef(0)
 
@@ -17,11 +17,12 @@ function WordRevealText({ text }: { text: string }) {
     const timer = setInterval(() => {
       wordPosRef.current++
       setDisplayed(words.slice(0, wordPosRef.current).join(' '))
+      onReveal?.()
       if (wordPosRef.current >= words.length) clearInterval(timer)
     }, 120)
 
     return () => clearInterval(timer)
-  }, [text])
+  }, [text, onReveal])
 
   return <>{displayed}</>
 }
@@ -35,18 +36,23 @@ interface TranscriptPanelProps {
 
 function formatTime(ts: number): string {
   const d = new Date(ts)
-  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`
 }
 
 export default function TranscriptPanel({ transcript, agentName, streamingAgentText, partialUserText }: TranscriptPanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+  function scrollToBottom() {
+    scrollContainerRef.current?.scrollTo({ top: scrollContainerRef.current.scrollHeight, behavior: 'smooth' })
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [transcript.length])
 
   useEffect(() => {
-    if (streamingAgentText) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (streamingAgentText) scrollToBottom()
   }, [streamingAgentText])
 
   return (
@@ -57,7 +63,7 @@ export default function TranscriptPanel({ transcript, agentName, streamingAgentT
         </h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {transcript.length === 0 && !streamingAgentText && !partialUserText && (
           <p className="text-xs text-gray-500 text-center mt-6">
             Conversation will appear here…
@@ -89,7 +95,7 @@ export default function TranscriptPanel({ transcript, agentName, streamingAgentT
           <div className="flex flex-col gap-1 items-start">
             <span className="text-[10px] font-medium text-gray-400">{agentName}</span>
             <div className="max-w-[90%] px-3 py-2 rounded-xl text-xs leading-relaxed bg-gray-800 border border-gray-700 text-gray-100 rounded-bl-sm">
-              <WordRevealText text={streamingAgentText} />
+              <WordRevealText text={streamingAgentText} onReveal={scrollToBottom} />
             </div>
           </div>
         )}

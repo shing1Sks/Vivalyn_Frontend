@@ -157,7 +157,7 @@ function TranscriptBubble({ role, content, timestamp }: TranscriptMsg) {
         {text}
       </div>
       <span className="text-[10px] text-gray-400 px-1">
-        {new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+        {new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </span>
     </div>
   )

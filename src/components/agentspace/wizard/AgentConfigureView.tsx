@@ -1028,19 +1028,6 @@ export default function AgentConfigureView({
                       ))}
                     </div>
 
-                    {/* Report curator */}
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                        Report curator
-                      </p>
-                      <textarea
-                        value={editedCuratorPrompt}
-                        onChange={(e) => setEditedCuratorPrompt(e.target.value)}
-                        rows={4}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                      />
-                    </div>
-
                     <button
                       onClick={handleSaveMetrics}
                       className="w-full px-4 py-2.5 text-sm font-medium bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors duration-[120ms]"
