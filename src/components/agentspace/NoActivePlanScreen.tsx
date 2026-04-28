@@ -53,18 +53,35 @@ export default function NoActivePlanScreen({ subscription }: Props) {
       } else {
         const loaded = await loadRazorpayScript()
         if (!loaded) throw new Error('Failed to load Razorpay. Please try again.')
-        const rz = new window.Razorpay({
-          key: checkout.razorpay_key_id,
-          subscription_id: checkout.subscription_id,
-          name: 'Vivalyn',
-          description: checkout.description,
-          handler: (response) => {
-            navigate(`/payment/success?provider=razorpay&sub_id=${response.razorpay_subscription_id}`)
-          },
-          modal: { ondismiss: () => setPayingTier(null) },
-          theme: { color: '#4f46e5' },
-        })
-        rz.open()
+        if ('order_id' in checkout) {
+          const rz = new window.Razorpay({
+            key: checkout.razorpay_key_id,
+            order_id: checkout.order_id,
+            amount: checkout.amount,
+            currency: 'INR',
+            name: 'Vivalyn',
+            description: checkout.description,
+            handler: (response) => {
+              navigate(`/payment/success?provider=razorpay&order_id=${response.razorpay_order_id}`)
+            },
+            modal: { ondismiss: () => setPayingTier(null) },
+            theme: { color: '#4f46e5' },
+          })
+          rz.open()
+        } else {
+          const rz = new window.Razorpay({
+            key: checkout.razorpay_key_id,
+            subscription_id: checkout.subscription_id,
+            name: 'Vivalyn',
+            description: checkout.description,
+            handler: (response) => {
+              navigate(`/payment/success?provider=razorpay&sub_id=${response.razorpay_subscription_id}`)
+            },
+            modal: { ondismiss: () => setPayingTier(null) },
+            theme: { color: '#4f46e5' },
+          })
+          rz.open()
+        }
         setPayingTier(null)
       }
     } catch (err: unknown) {
