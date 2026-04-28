@@ -1079,7 +1079,14 @@ function AgentSpaceContent() {
                       .filter(a => !createdByFilter || a.created_by_name === createdByFilter)
                       .filter(a => {
                         if (!agentSearch.trim()) return true
-                        return a.agent_name.toLowerCase().includes(agentSearch.toLowerCase())
+                        const q = agentSearch.toLowerCase()
+                        const label = (a.agent_display_label || a.agent_name).toLowerCase()
+                        return (
+                          label.includes(q) ||
+                          a.agent_name.toLowerCase().includes(q) ||
+                          a.agent_language.toLowerCase().includes(q) ||
+                          (a.agent_type === 'qna' ? 'qna' : 'general').includes(q)
+                        )
                       })
 
                     const agentsPageSize = 10
