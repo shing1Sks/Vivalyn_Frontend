@@ -208,7 +208,9 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
     return Promise.all([
       compileQnAAgent(session!.access_token, { session_design: design }),
       generateQnAQuestions(session!.access_token, {
-        context: design.session_objective,
+        context: design.additional_context
+          ? `${design.session_objective}\n\n${design.additional_context}`
+          : design.session_objective,
         resource_text: design.resource_text || undefined,
         resource_images: design.resource_images?.length ? design.resource_images : undefined,
       }).then(r => r.questions),

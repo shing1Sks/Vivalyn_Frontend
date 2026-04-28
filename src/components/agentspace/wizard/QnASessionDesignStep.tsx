@@ -464,7 +464,10 @@ export default function QnASessionDesignStep({ language, initialValues, defaultA
 
           {/* File attachment */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Resource files <span className="text-xs font-normal text-gray-400">(optional)</span></label>
+            <div className="mb-1.5">
+              <label className="block text-sm font-medium text-gray-700">Source material <span className="text-xs font-normal text-gray-400">(optional)</span></label>
+              <p className="text-xs text-gray-400 mt-0.5">Questions are generated from this content — assignments, quizzes, notes, or any reference doc.</p>
+            </div>
             <div
               onDragEnter={e => { e.preventDefault(); setDragging(true) }}
               onDragOver={e => { e.preventDefault(); setDragging(true) }}
@@ -485,7 +488,7 @@ export default function QnASessionDesignStep({ language, initialValues, defaultA
               />
               <Upload className="w-4 h-4 text-gray-400 mx-auto mb-1" />
               <p className="text-sm text-gray-500">Drop files or click to browse</p>
-              <p className="text-xs text-gray-400 mt-0.5">PDF, .txt, images — max 3 files</p>
+              <p className="text-xs text-gray-400 mt-0.5">PDF, .txt, images — max 3 files · does not affect agent persona</p>
             </div>
 
             <AnimatePresence>
