@@ -185,6 +185,7 @@ export interface Invite {
   is_expired: boolean;
   created_at: string;
   expires_at: string;
+  last_sent_at: string | null;
 }
 
 export async function fetchAgentSpaceInvites(
@@ -229,6 +230,28 @@ export async function createInvite(
     const err = await res.json().catch(() => ({}));
     throw new ApiError(
       (err as { detail?: string }).detail ?? "Failed to send invite",
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export async function resendInvite(
+  accessToken: string,
+  agentspaceId: string,
+  inviteId: string,
+): Promise<Invite> {
+  const res = await fetch(
+    `${BASE}/api/v1/agentspaces/${agentspaceId}/invites/${inviteId}/resend`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(
+      (err as { detail?: string }).detail ?? "Failed to resend invite",
       res.status,
     );
   }

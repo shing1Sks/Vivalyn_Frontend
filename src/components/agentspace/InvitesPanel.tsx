@@ -1,16 +1,71 @@
 import { useEffect, useState } from 'react'
-import { Clock, Loader2, Send, X } from 'lucide-react'
+import { Clock, Loader2, RotateCcw, Send, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useAgentSpace } from '../../context/AgentSpaceContext'
 import {
   fetchAgentSpaceInvites,
   createInvite,
+  resendInvite,
   revokeInvite,
 } from '../../lib/api'
 import type { Invite } from '../../lib/api'
 import SlidePanel from './SlidePanel'
 
-function InviteRow({ invite, onRevoke }: { invite: Invite; onRevoke: (id: string) => void }) {
+const RESEND_COOLDOWN_SECONDS = 180
+
+function useCooldown(lastSentAt: string | null) {
+  const [remaining, setRemaining] = useState(0)
+
+  useEffect(() => {
+    if (!lastSentAt) { setRemaining(0); return }
+    const compute = () => {
+      const elapsed = (Date.now() - new Date(lastSentAt).getTime()) / 1000
+      return Math.max(0, Math.ceil(RESEND_COOLDOWN_SECONDS - elapsed))
+    }
+    setRemaining(compute())
+    const t = setInterval(() => {
+      const r = compute()
+      setRemaining(r)
+      if (r <= 0) clearInterval(t)
+    }, 1000)
+    return () => clearInterval(t)
+  }, [lastSentAt])
+
+  return remaining
+}
+
+function InviteRow({
+  invite,
+  onRevoke,
+  onResend,
+}: {
+  invite: Invite
+  onRevoke: (id: string) => void
+  onResend: (id: string) => Promise<void>
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [resentOk, setResentOk] = useState(false)
+  const [resendError, setResendError] = useState<string | null>(null)
+  const cooldownSecs = useCooldown(invite.last_sent_at)
+
+  const canResend = invite.status !== 'accepted' && invite.status !== 'revoked'
+
+  async function handleResend() {
+    setResending(true)
+    setResendError(null)
+    try {
+      await onResend(invite.id)
+      setResentOk(true)
+      setConfirming(false)
+      setTimeout(() => setResentOk(false), 3000)
+    } catch (e) {
+      setResendError(e instanceof Error ? e.message : 'Failed to resend')
+    } finally {
+      setResending(false)
+    }
+  }
+
   const badge = () => {
     if (invite.is_expired && invite.status === 'pending') {
       return <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-50 text-amber-700"><Clock className="w-3 h-3" />Expired</span>
@@ -19,23 +74,68 @@ function InviteRow({ invite, onRevoke }: { invite: Invite; onRevoke: (id: string
     if (invite.status === 'revoked') return <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Revoked</span>
     return <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">Pending</span>
   }
+
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-gray-100 last:border-0">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 truncate">{invite.invited_email}</p>
-        <p className="text-xs text-gray-400 mt-0.5">
-          {invite.role === 'admin' ? 'Admin' : 'Member'} · Sent {new Date(invite.created_at).toLocaleDateString()}
-        </p>
+    <div className="py-3 border-b border-gray-100 last:border-0">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-900 truncate">{invite.invited_email}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {invite.role === 'admin' ? 'Admin' : 'Member'} · Sent {new Date(invite.created_at).toLocaleDateString()}
+          </p>
+        </div>
+        {badge()}
+        {canResend && (
+          cooldownSecs > 0 ? (
+            <span className="text-xs text-gray-400 tabular-nums whitespace-nowrap">
+              {Math.floor(cooldownSecs / 60)}:{String(cooldownSecs % 60).padStart(2, '0')}
+            </span>
+          ) : resentOk ? (
+            <span className="text-xs text-emerald-600 whitespace-nowrap">Sent!</span>
+          ) : (
+            <button
+              onClick={() => { setConfirming((v) => !v); setResendError(null) }}
+              title="Resend invite"
+              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )
+        )}
+        {invite.status === 'pending' && !invite.is_expired && (
+          <button
+            onClick={() => onRevoke(invite.id)}
+            title="Revoke invite"
+            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
-      {badge()}
-      {invite.status === 'pending' && !invite.is_expired && (
-        <button
-          onClick={() => onRevoke(invite.id)}
-          title="Revoke invite"
-          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors duration-[120ms] cursor-pointer"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+      {confirming && (
+        <div className="mt-2 pl-0 pr-1">
+          <p className="text-xs text-gray-500 mb-2">
+            Check your spam folder first. If the invite is expired it will be extended by 7 days.
+          </p>
+          {resendError && <p className="text-xs text-red-500 mb-2">{resendError}</p>}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleResend}
+              disabled={resending}
+              className="flex items-center gap-1.5 py-1.5 px-3 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors duration-[120ms] cursor-pointer"
+            >
+              {resending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+              Resend
+            </button>
+            <button
+              onClick={() => { setConfirming(false); setResendError(null) }}
+              disabled={resending}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors duration-[120ms] cursor-pointer disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -100,6 +200,12 @@ export default function InvitesPanel({ open, onClose }: Props) {
     }
   }
 
+  async function handleResend(inviteId: string) {
+    if (!token || !spaceId) return
+    const updated = await resendInvite(token, spaceId, inviteId)
+    setInvites((prev) => prev.map((i) => i.id === inviteId ? updated : i))
+  }
+
   return (
     <SlidePanel open={open} onClose={onClose} title="Invites" subtitle={activeSpace?.name}>
       <div className="px-6 py-4">
@@ -151,7 +257,7 @@ export default function InvitesPanel({ open, onClose }: Props) {
           <>
             <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Sent invites</p>
             {invites.map((inv) => (
-              <InviteRow key={inv.id} invite={inv} onRevoke={handleRevoke} />
+              <InviteRow key={inv.id} invite={inv} onRevoke={handleRevoke} onResend={handleResend} />
             ))}
           </>
         )}
