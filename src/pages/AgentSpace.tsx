@@ -23,6 +23,7 @@ import {
   ToggleRight,
   User,
   X,
+  Zap,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useScrollLock } from '../hooks/useScrollLock'
@@ -39,6 +40,7 @@ import CreateAgentWizard from '../components/agentspace/CreateAgentWizard'
 import AgentConfigureView from '../components/agentspace/wizard/AgentConfigureView'
 import CreateQnAAgentWizard from '../components/agentspace/wizard/CreateQnAAgentWizard'
 import QnAConfigureView from '../components/agentspace/wizard/QnAConfigureView'
+import QuickQnAPanel from '../components/agentspace/QuickQnAPanel'
 import {
   exportAgentspaceRuns,
   fetchAgents,
@@ -779,6 +781,7 @@ function AgentSpaceContent() {
   const [typeSelectOpen, setTypeSelectOpen] = useState(false)
   const [createAgentOpen, setCreateAgentOpen] = useState(false)
   const [createQnAAgentOpen, setCreateQnAAgentOpen] = useState(false)
+  const [quickQnAOpen, setQuickQnAOpen] = useState(false)
   const [dashTab, setDashTab] = useState<DashTab>('agents')
 
   const [agents, setAgents] = useState<Agent[]>([])
@@ -971,20 +974,29 @@ function AgentSpaceContent() {
 
             {/* Tab bar */}
             <motion.div variants={fadeInUp}>
-              <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-                {(['agents', 'records'] as DashTab[]).map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setDashTab(t)}
-                    className={`px-4 py-1.5 text-sm font-medium rounded-md duration-[120ms] capitalize ${
-                      dashTab === t
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+              <div className="flex items-center gap-3">
+                <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+                  {(['agents', 'records'] as DashTab[]).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setDashTab(t)}
+                      className={`px-4 py-1.5 text-sm font-medium rounded-md duration-[120ms] capitalize ${
+                        dashTab === t
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setQuickQnAOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 hover:border-indigo-300 duration-[120ms]"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Doc to Session
+                </button>
               </div>
             </motion.div>
 
@@ -1299,6 +1311,16 @@ function AgentSpaceContent() {
           open={createQnAAgentOpen}
           agentspaceId={activeSpace.id}
           onClose={handleQnAWizardClose}
+        />
+      )}
+
+      {activeSpace && (
+        <QuickQnAPanel
+          open={quickQnAOpen}
+          agentspaceId={activeSpace.id}
+          onClose={() => setQuickQnAOpen(false)}
+          onCreated={agent => setAgents(prev => [agent, ...prev])}
+          onConfigure={agent => { setQuickQnAOpen(false); setConfiguringAgent(agent) }}
         />
       )}
 

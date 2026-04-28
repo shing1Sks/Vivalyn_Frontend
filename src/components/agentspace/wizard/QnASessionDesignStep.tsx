@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronDown, Clock, FileText, Globe, Image, Upload, X } from 'lucide-react'
+import { ChevronDown, Clock, FileText, Globe, Image, Loader2, Upload, X } from 'lucide-react'
 import type { QnASessionDesignRequest } from '../../../lib/api'
 import AutoExpandTextarea from './AutoExpandTextarea'
 
@@ -151,6 +151,7 @@ export default function QnASessionDesignStep({ language, initialValues, defaultA
 
   const [files, setFiles] = useState<AttachedFile[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
+  const [fileProcessing, setFileProcessing] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -194,6 +195,7 @@ export default function QnASessionDesignStep({ language, initialValues, defaultA
     const oversized = allowed.filter(f => f.size > (isImageFile(f) ? 2 * 1024 * 1024 : 5 * 1024 * 1024))
     if (oversized.length > 0) { setFileError(isImageFile(oversized[0]) ? 'Images must be under 2 MB.' : 'Files must be under 5 MB.'); return }
 
+    setFileProcessing(true)
     try {
       const results: AttachedFile[] = []
       for (const file of allowed) {
@@ -216,6 +218,8 @@ export default function QnASessionDesignStep({ language, initialValues, defaultA
       if (results.length > 0) setFiles(prev => [...prev, ...results])
     } catch {
       setFileError('Could not read file. Please try again.')
+    } finally {
+      setFileProcessing(false)
     }
   }
 
@@ -486,9 +490,18 @@ export default function QnASessionDesignStep({ language, initialValues, defaultA
                 className="hidden"
                 onChange={e => { if (e.target.files) handleFiles(Array.from(e.target.files)); e.target.value = '' }}
               />
-              <Upload className="w-4 h-4 text-gray-400 mx-auto mb-1" />
-              <p className="text-sm text-gray-500">Drop files or click to browse</p>
-              <p className="text-xs text-gray-400 mt-0.5">PDF, .txt, images — max 3 files · does not affect agent persona</p>
+              {fileProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 text-indigo-500 mx-auto mb-1 animate-spin" />
+                  <p className="text-sm text-indigo-600">Reading file…</p>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 text-gray-400 mx-auto mb-1" />
+                  <p className="text-sm text-gray-500">Drop files or click to browse</p>
+                  <p className="text-xs text-gray-400 mt-0.5">PDF, .txt, images — max 3 files · does not affect agent persona</p>
+                </>
+              )}
             </div>
 
             <AnimatePresence>

@@ -1,5 +1,19 @@
 # Changelog
 
+## [78] doc-to-session-quick-qna — 2026-04-28
+
+**Why:** The full QnA wizard is thorough but requires 7 steps — too slow when you just want to point an agent at a document or topic and start. Teachers, trainers, and assessors with content already in hand needed a one-shot path: drop a file, name the topic, click convert, and get a live agent. The existing wizard also silently discarded `additional_context` in the question-generation call, and the source material uploader had no loading state so users couldn't tell if a file had been accepted.
+
+**What:** New "Doc to Session" slide-over panel (`QuickQnAPanel`) mounted next to the agents/records tab bar. Accepts a topic, optional additional context, optional source files (PDF, images, .txt), language + voice selection, and feedback mode. On submit fires all LLM calls with maximum parallelism: question generation (A) and agent compile (B) run simultaneously; eval (C) chains off compile immediately; save (D) waits for A and C. A converting phase shows four real-status steps (pending → active → done → error) with no fake timers. The done phase renders the full deploy surface — display label (inline edit), live/test links, live toggle, first speaker segmented control, show-report toggle, and a questions accordion with per-question inline editing. Background scroll is locked while the panel is open. The `QnASessionDesignStep` source material uploader also gains a proper processing state with a spinner, and `additional_context` is now correctly forwarded to question generation.
+
+**Changes:**
+- `src/components/agentspace/QuickQnAPanel.tsx` *(new)*: slide-over panel (480px, `x: '100%' → 0` entrance); `useScrollLock(open)`; three phases — `form`, `converting`, `done`; `handleConvert` runs parallel A+B, chains C off B, awaits both for D; `fileProcessing` state shows spinner in drop zone during PDF/image extraction; full pdfjs + canvas + base64 extraction logic (text PDFs, scanned PDFs rendered to JPEG, images); compact inline language+voice picker; `DonePhase` with live/test copy-links, live toggle, display-label inline edit, first-speaker segmented control (`agent`/`human`), show-report toggle, collapsible questions accordion with per-question blur-save via `PATCH /agents/{id}/question-bank`; `ConvertingPhase` with four real-status step indicators; silent defaults injected: `agent_role`, `participant_role`, `communication_style`, `session_duration_minutes: 15`, `agent_first_speaker: 'agent'`
+- `src/pages/AgentSpace.tsx`: `QuickQnAPanel` imported; `Zap` added to lucide imports; `quickQnAOpen` state added; "Doc to Session" button with `Zap` icon added next to tab selector; `<QuickQnAPanel>` mounted with `onCreated`, `onClose`, and `onConfigure` (closes panel, opens full configure view)
+- `src/components/agentspace/wizard/QnASessionDesignStep.tsx`: source material label updated from "Resource files" to "Source material (optional)" with sub-label clarifying it drives question generation; drop zone footer gains "· does not affect agent persona" note; `fileProcessing` boolean state added — set on enter/finally in `handleFiles`; drop zone renders `Loader2` spinner + "Reading file…" while processing
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: `additional_context` now concatenated onto `context` in the `generateQnAQuestions` call so question generation receives the full domain framing, not just the session objective
+
+---
+
 ## [77] agent-show-report-flag — 2026-04-28
 
 **Why:** Paired with backend [93]. Agents needed a per-agent toggle to control whether the evaluation report is shown to the candidate after a session. Without it, the post-session screen had no way to distinguish "no report configured" from "report intentionally hidden". The default is off — creators explicitly opt in.
