@@ -1,5 +1,19 @@
 # Changelog
 
+## [79] trial-one-time-payment — 2026-04-28
+
+**Why:** Paired with backend [95]. The Razorpay checkout widget was always opened with `subscription_id`, which triggers the autopay mandate screen. For the trial plan this needed to switch to an order-based flow that shows a plain one-time payment screen.
+
+**What:** `handleRazorpayCheckout` in `PlanPanel` now branches on whether the backend returned an `order_id` or a `subscription_id`. Order-based checkout passes `order_id + amount + currency: "INR"` to the Razorpay widget; on success the handler navigates to `/payment/success?provider=razorpay&order_id=…`. Subscription checkout is unchanged. `PaymentSuccess` polls using `order_id` param as a fallback. Types updated in `razorpay.ts` and `api.ts`.
+
+**Changes:**
+- `src/lib/razorpay.ts`: `RazorpayOptions.subscription_id` made optional; `order_id`, `amount`, `currency` optional fields added; `RazorpayPaymentResponse` gains optional `razorpay_order_id` field (present for orders) alongside existing optional `razorpay_subscription_id`
+- `src/lib/api.ts`: `RazorpayOrderCheckoutData` interface added (`order_id`, `amount` in paise); `CheckoutData` union updated to include it
+- `src/components/agentspace/PlanPanel.tsx`: `handleRazorpayCheckout` restructured — if `checkout.order_id` present, opens Razorpay with `order_id/amount/currency` and navigates with `?order_id=`; else opens with `subscription_id` as before
+- `src/pages/PaymentSuccess.tsx`: `ref` resolution updated to `params.get("session_id") ?? params.get("sub_id") ?? params.get("order_id") ?? ""`
+
+---
+
 ## [78] doc-to-session-quick-qna — 2026-04-28
 
 **Why:** The full QnA wizard is thorough but requires 7 steps — too slow when you just want to point an agent at a document or topic and start. Teachers, trainers, and assessors with content already in hand needed a one-shot path: drop a file, name the topic, click convert, and get a live agent. The existing wizard also silently discarded `additional_context` in the question-generation call, and the source material uploader had no loading state so users couldn't tell if a file had been accepted.

@@ -1571,12 +1571,22 @@ export interface RazorpayCheckoutData {
   description: string;
 }
 
+export interface RazorpayOrderCheckoutData {
+  gateway: "razorpay";
+  razorpay_key_id: string;
+  order_id: string;      // one-time payment — no autopay mandate
+  plan_tier: string;
+  amount_display: string;
+  description: string;
+  amount: number;        // paise
+}
+
 export interface StripeCheckoutData {
   gateway: "stripe";
   checkout_url: string;
 }
 
-export type CheckoutData = RazorpayCheckoutData | StripeCheckoutData;
+export type CheckoutData = RazorpayCheckoutData | RazorpayOrderCheckoutData | StripeCheckoutData;
 
 export interface PaymentStatusResponse {
   found: boolean;

@@ -1,6 +1,10 @@
 export interface RazorpayOptions {
   key: string;
-  subscription_id: string;
+  // Provide either subscription_id (recurring) or order_id + amount + currency (one-time order)
+  subscription_id?: string;
+  order_id?: string;
+  amount?: number;
+  currency?: string;
   name: string;
   description: string;
   handler: (response: RazorpayPaymentResponse) => void;
@@ -11,7 +15,10 @@ export interface RazorpayOptions {
 
 export interface RazorpayPaymentResponse {
   razorpay_payment_id: string;
-  razorpay_subscription_id: string;
+  // Present for subscription payments
+  razorpay_subscription_id?: string;
+  // Present for order payments
+  razorpay_order_id?: string;
   razorpay_signature: string;
 }
 

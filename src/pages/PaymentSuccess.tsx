@@ -19,7 +19,7 @@ export default function PaymentSuccess() {
     if (!session) { navigate("/auth"); return; }
 
     const provider = params.get("provider") ?? "stripe";
-    const ref = params.get("session_id") ?? params.get("sub_id") ?? "";
+    const ref = params.get("session_id") ?? params.get("sub_id") ?? params.get("order_id") ?? "";
     if (!ref) { setPhase("timeout"); return; }
 
     const token = session.access_token;
