@@ -1,5 +1,16 @@
 # Changelog
 
+## [80] payment-safety-and-email-coverage — 2026-04-29
+
+**Why:** Paired with backend [96]. Immediate plan switches ("Upgrade now" / "Downgrade now") fired the API the instant the button was clicked — no warning that the current subscription would be cancelled immediately, that remaining minutes would be replaced, or that dismissing the next payment modal would leave the workspace without a plan.
+
+**What:** Added an inline confirmation step before any immediate switch. Clicking "Upgrade now" or "Downgrade now" now opens an amber warning panel inside the plan card showing the target plan name, a clear statement that the current plan cancels immediately, the incoming minute count, and a "Proceed to payment" / "Never mind" pair. Only confirming fires the API. The "At renewal" button is unchanged.
+
+**Changes:**
+- `src/components/agentspace/PlanPanel.tsx`: `switchConfirmTier: string | null` state added; "Upgrade now" / "Downgrade now" button sets `switchConfirmTier` instead of calling `handleSwitchNow` directly; when `switchConfirmTier === plan.tier` the button row is replaced by an amber confirmation panel with the minutes-reset warning and "Proceed to payment" / "Never mind" actions; `handleSwitchNow` clears `switchConfirmTier` at the start of execution
+
+---
+
 ## [79] trial-one-time-payment — 2026-04-28
 
 **Why:** Paired with backend [95]. The Razorpay checkout widget was always opened with `subscription_id`, which triggers the autopay mandate screen. For the trial plan this needed to switch to an order-based flow that shows a plain one-time payment screen.

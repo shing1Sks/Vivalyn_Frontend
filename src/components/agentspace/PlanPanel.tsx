@@ -82,6 +82,8 @@ export default function PlanPanel({ open, onClose }: Props) {
   const [switchLoadingKey, setSwitchLoadingKey] = useState<string | null>(null)  // `${tier}_now` or `${tier}_renewal`
   const [switchMessage, setSwitchMessage] = useState<string | null>(null)
   const [switchError, setSwitchError] = useState<string | null>(null)
+  // Confirm before immediate switch — shows minutes-reset warning
+  const [switchConfirmTier, setSwitchConfirmTier] = useState<string | null>(null)
 
   // Cancel confirmation
   const [cancelConfirm, setCancelConfirm] = useState<'now' | 'renewal' | null>(null)
@@ -187,6 +189,7 @@ export default function PlanPanel({ open, onClose }: Props) {
 
   async function handleSwitchNow(tier: string) {
     if (!token || !spaceId) return
+    setSwitchConfirmTier(null)
     const key = `${tier}_now`
     setSwitchLoadingKey(key)
     setSwitchError(null)
@@ -416,23 +419,52 @@ export default function PlanPanel({ open, onClose }: Props) {
                       </p>
 
                       {canSwitch && (
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={() => handleSwitchNow(plan.tier)}
-                            disabled={switchLoadingKey !== null}
-                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors duration-[120ms]"
-                          >
-                            {switchLoadingKey === `${plan.tier}_now` && <Loader2 className="w-3 h-3 animate-spin" />}
-                            {switchLabel} now
-                          </button>
-                          <button
-                            onClick={() => handleSwitchAtRenewal(plan.tier)}
-                            disabled={switchLoadingKey !== null}
-                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-60 transition-colors duration-[120ms]"
-                          >
-                            {switchLoadingKey === `${plan.tier}_renewal` && <Loader2 className="w-3 h-3 animate-spin" />}
-                            At renewal
-                          </button>
+                        <div>
+                          {switchConfirmTier === plan.tier ? (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                              <p className="text-xs font-medium text-amber-800">
+                                {switchLabel} to {plan.name}?
+                              </p>
+                              <p className="text-xs text-amber-700">
+                                Your current plan will be cancelled immediately. Your remaining minutes will be replaced by {plan.minutes.toLocaleString()} min from {plan.name}. You must complete the next payment or lose access.
+                              </p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleSwitchNow(plan.tier)}
+                                  disabled={switchLoadingKey !== null}
+                                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors duration-[120ms]"
+                                >
+                                  {switchLoadingKey === `${plan.tier}_now` && <Loader2 className="w-3 h-3 animate-spin" />}
+                                  Proceed to payment
+                                </button>
+                                <button
+                                  onClick={() => setSwitchConfirmTier(null)}
+                                  disabled={switchLoadingKey !== null}
+                                  className="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-60 transition-colors duration-[120ms]"
+                                >
+                                  Never mind
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => { setSwitchConfirmTier(plan.tier); setSwitchError(null); setSwitchMessage(null) }}
+                                disabled={switchLoadingKey !== null}
+                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors duration-[120ms]"
+                              >
+                                {switchLabel} now
+                              </button>
+                              <button
+                                onClick={() => handleSwitchAtRenewal(plan.tier)}
+                                disabled={switchLoadingKey !== null}
+                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-60 transition-colors duration-[120ms]"
+                              >
+                                {switchLoadingKey === `${plan.tier}_renewal` && <Loader2 className="w-3 h-3 animate-spin" />}
+                                At renewal
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
 
