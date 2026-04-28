@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, Copy,
-  FileText, Link2, Loader2, MessageSquare, Pencil, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
+  FileText, Link2, Loader2, MessageSquare, Pencil, Search, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useScrollLock } from '../../hooks/useScrollLock'
@@ -141,16 +141,37 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
 
   function handleTemplateSelect(t: AgentTemplate) {
     setSelectedTemplate(t)
-    setPendingSessionDesign(null)
+    resetDownstreamState()
     markDone('templates')
     setStep('voice-language')
   }
 
   function handleStartBlank() {
     setSelectedTemplate(null)
-    setPendingSessionDesign(null)
+    resetDownstreamState()
     markDone('templates')
     setStep('voice-language')
+  }
+
+  function resetDownstreamState() {
+    setSessionDesign(null)
+    setPendingSessionDesign(null)
+    setPendingLangVoice(null)
+    setPendingEvalResult(null)
+    setCompileResult(null)
+    setEvalResult(null)
+    setSavedAgent(null)
+    setConfiguredSpec(null)
+    setCompileError(null)
+    setCompileLoading(false)
+    setEvalLoading(false)
+    setSaveLoading(false)
+    setRegenerating(false)
+    setShowCompileSuccess(false)
+    setTestPhase('idle')
+    setShouldEndTest(false)
+    setError(null)
+    setIsSubscriptionError(false)
   }
 
   function handleLanguageVoiceContinue() {
@@ -573,13 +594,18 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
 
 // ── Templates step ────────────────────────────────────────────────────────────
 
-const FEATURED_TEMPLATES = GENERAL_TEMPLATES.slice(0, 3)
-
 const CATEGORY_COLORS: Record<string, string> = {
   academic: 'bg-violet-50 text-violet-700 border-violet-100',
   interview: 'bg-sky-50 text-sky-700 border-sky-100',
   corporate: 'bg-amber-50 text-amber-700 border-amber-100',
 }
+
+const GENERAL_CATEGORIES = [
+  { id: 'all', label: 'All' },
+  { id: 'academic', label: 'Academic' },
+  { id: 'interview', label: 'Interview' },
+  { id: 'corporate', label: 'Corporate' },
+] as const
 
 function TemplatesContent({
   onSelect,
@@ -588,47 +614,113 @@ function TemplatesContent({
   onSelect: (t: AgentTemplate) => void
   onStartBlank: () => void
 }) {
+  const [search, setSearch] = useState('')
+  const [activeCategory, setActiveCategory] = useState('all')
+
+  const filtered = GENERAL_TEMPLATES.filter(t => {
+    const matchesCategory = activeCategory === 'all' || t.category === activeCategory
+    const q = search.toLowerCase().trim()
+    const matchesSearch = !q || t.name.toLowerCase().includes(q) || t.session_objective.toLowerCase().includes(q)
+    return matchesCategory && matchesSearch
+  })
+
   return (
     <div className="max-w-5xl mx-auto px-8 py-12">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900 mb-2">Start with a template</h1>
-        <p className="text-sm text-gray-500">Choose a template to pre-fill your session design, or start from scratch.</p>
+        <p className="text-sm text-gray-500">Choose from {GENERAL_TEMPLATES.length} templates or build your own.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        {FEATURED_TEMPLATES.map(t => (
-          <button
-            key={t.id}
-            onClick={() => onSelect(t)}
-            className="text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 duration-[120ms] group"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <span className={`text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 ${CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                {t.category}
-              </span>
-              <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
-            </div>
-            <p className="text-base font-semibold text-gray-900 mb-1">{t.name}</p>
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <Clock className="w-3 h-3" />
-              <span>{t.duration} min · {t.style}</span>
-            </div>
-          </button>
-        ))}
+      {/* Start from scratch — compact top option */}
+      <button
+        onClick={onStartBlank}
+        className="w-full text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/20 duration-[120ms] group mb-6"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+            <Pencil className="w-4 h-4 text-indigo-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900">Start from scratch</p>
+            <p className="text-xs text-gray-500">Build your agent manually with full control.</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms] shrink-0" />
+        </div>
+      </button>
 
-        <button
-          onClick={onStartBlank}
-          className="text-left border border-dashed border-gray-300 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/20 duration-[120ms] group flex flex-col justify-between"
-        >
-          <div className="flex items-start justify-between mb-3">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Custom</span>
-            <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
-          </div>
-          <div>
-            <p className="text-base font-semibold text-gray-700 mb-1">Start from scratch</p>
-            <p className="text-xs text-gray-400">Fill in all session details manually.</p>
-          </div>
-        </button>
+      {/* Divider */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex-1 h-px bg-gray-200" />
+        <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">or pick a template</span>
+        <div className="flex-1 h-px bg-gray-200" />
+      </div>
+
+      {/* Search + Filters */}
+      <div className="mb-4 space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search templates…"
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-[120ms]"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {GENERAL_CATEGORIES.map(cat => {
+            const count = cat.id === 'all' ? GENERAL_TEMPLATES.length : GENERAL_TEMPLATES.filter(t => t.category === cat.id).length
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors duration-[120ms] ${
+                  activeCategory === cat.id
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+                }`}
+              >
+                {cat.label} <span className="opacity-70">({count})</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Template grid */}
+      <div
+        className="max-h-[360px] overflow-y-auto pr-1"
+        style={{ scrollbarWidth: 'thin' }}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filtered.map(t => (
+            <button
+              key={t.id}
+              onClick={() => onSelect(t)}
+              className="text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 duration-[120ms] group"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <span className={`text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 ${CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                  {t.category}
+                </span>
+                <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
+              </div>
+              <p className="text-base font-semibold text-gray-900 mb-1">{t.name}</p>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <Clock className="w-3 h-3" />
+                <span>{t.duration} min · {t.style}</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">
+                {t.session_objective}
+              </p>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="col-span-full text-center py-12 text-sm text-gray-400">
+              No templates match your search.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

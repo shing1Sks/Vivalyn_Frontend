@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Globe, Clock, ChevronDown } from 'lucide-react'
 import type { SessionDesignRequest } from '../../../lib/api'
-import { templateToSessionDesign, type AgentTemplate } from '../../../lib/agentTemplates'
-import TemplateBrowserModal from './TemplateBrowserModal'
 import AutoExpandTextarea from './AutoExpandTextarea'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -70,7 +68,6 @@ export default function SessionDesignStep({ language, initialValues, defaultAgen
   const [participantRole, setParticipantRole] = useState(() => initialValues?.participant_role ?? '')
   const [style, setStyle] = useState(() => initialValues?.communication_style ?? '')
   const [additionalContext, setAdditionalContext] = useState(() => initialValues?.additional_context ?? '')
-  const [templateModalOpen, setTemplateModalOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const objectiveRef = useRef<HTMLTextAreaElement>(null)
@@ -103,26 +100,6 @@ export default function SessionDesignStep({ language, initialValues, defaultAgen
     }, 10)
   }
 
-  function handleTemplateSelect(template: AgentTemplate) {
-    const design = templateToSessionDesign(template, template.suggested_name)
-    setAgentName(design.agent_name)
-    setSessionObjective(design.session_objective)
-    setAgentRole(design.agent_role)
-    setParticipantRole(design.participant_role)
-    setStyle(design.communication_style)
-    const d = design.session_duration_minutes
-    if (DURATION_PILLS.includes(d as typeof DURATION_PILLS[number])) {
-      setDuration(d)
-      setIsCustomDuration(false)
-      setCustomDuration('')
-    } else {
-      setDuration(null)
-      setIsCustomDuration(true)
-      setCustomDuration(String(d))
-    }
-    setTemplateModalOpen(false)
-  }
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!canContinue || effectiveDuration === null) { onChange(null); return }
@@ -141,35 +118,20 @@ export default function SessionDesignStep({ language, initialValues, defaultAgen
   const summaryFilled = agentName.trim() || agentRole.trim() || participantRole.trim() || effectiveDuration || style || sessionObjective.trim()
 
   return (
-    <>
-      {templateModalOpen && (
-        <TemplateBrowserModal
-          type="general"
-          onSelect={handleTemplateSelect}
-          onClose={() => setTemplateModalOpen(false)}
-        />
-      )}
-
-      <div className="max-w-5xl mx-auto px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            {language && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full border border-gray-200">
-                <Globe size={11} />
-                {language}
-              </span>
-            )}
-            <button
-              onClick={() => setTemplateModalOpen(true)}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors duration-[120ms]"
-            >
-              Browse templates
-            </button>
+    <div className="max-w-5xl mx-auto px-8 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        {language && (
+          <div className="mb-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full border border-gray-200">
+              <Globe size={11} />
+              {language}
+            </span>
           </div>
-          <h2 className="text-2xl font-semibold text-gray-900">Design your session</h2>
-          <p className="text-sm text-gray-500 mt-1">Define who the agent is and what the session should accomplish.</p>
-        </div>
+        )}
+        <h2 className="text-2xl font-semibold text-gray-900">Design your session</h2>
+        <p className="text-sm text-gray-500 mt-1">Define who the agent is and what the session should accomplish.</p>
+      </div>
 
         {/* Two-column layout */}
         <div className="grid grid-cols-1 md:grid-cols-[1fr_360px] gap-8 items-start">
@@ -441,6 +403,5 @@ export default function SessionDesignStep({ language, initialValues, defaultAgen
 
         </div>
       </div>
-    </>
   )
 }
