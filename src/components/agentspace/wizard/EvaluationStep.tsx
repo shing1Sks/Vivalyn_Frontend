@@ -165,17 +165,6 @@ export default function EvaluationStep({ evalResult, regenerating, onResultChang
             </div>
           ))}
 
-          <div className="lg:col-span-2 space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-              Report curator prompt
-            </label>
-            <textarea
-              value={editedCuratorPrompt}
-              onChange={e => setEditedCuratorPrompt(e.target.value)}
-              rows={5}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-            />
-          </div>
         </div>
       )}
 
@@ -213,10 +202,6 @@ export default function EvaluationStep({ evalResult, regenerating, onResultChang
                   </div>
                 </div>
               ))}
-            </div>
-            <div className="mt-4 space-y-1.5">
-              <div className="h-3 w-40 bg-gray-200 rounded animate-pulse" />
-              <div className="h-32 bg-gray-100 rounded-lg animate-pulse" />
             </div>
           </div>
         </div>
