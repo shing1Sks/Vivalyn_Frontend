@@ -862,6 +862,7 @@ export interface RunRecord {
   transcript?: Array<{ role: string; content: string | Record<string, unknown>; timestamp: string }>;
   evaluation_report: EvaluationReport | null;
   is_test: boolean;
+  access_link_id?: string | null;
 }
 
 export async function fetchLatestRunRecord(
@@ -886,6 +887,7 @@ export async function fetchAgentspaceRuns(
     search?: string;
     isTest?: boolean;
     includeTranscript?: boolean;
+    accessLinkId?: string;
   },
 ): Promise<{ runs: RunRecord[]; total: number }> {
   const params = new URLSearchParams();
@@ -895,6 +897,7 @@ export async function fetchAgentspaceRuns(
   if (filters?.search) params.set("search", filters.search);
   if (filters?.isTest !== undefined) params.set("is_test", String(filters.isTest));
   if (filters?.includeTranscript) params.set("include_transcript", "true");
+  if (filters?.accessLinkId) params.set("access_link_id", filters.accessLinkId);
 
   const res = await fetch(
     `${BASE}/api/v1/agentspaces/${agentspaceId}/runs?${params.toString()}`,
@@ -1266,11 +1269,11 @@ export async function verifyOtp(data: { email: string; otp: string }): Promise<v
 
 // ── Live session OTP ──────────────────────────────────────────────────────────
 
-export async function requestSessionOtp(email: string): Promise<void> {
+export async function requestSessionOtp(email: string, accessLinkToken?: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/live/otp/request`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, ...(accessLinkToken ? { access_link_token: accessLinkToken } : {}) }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -1288,6 +1291,80 @@ export async function verifySessionOtp(email: string, otp: string): Promise<void
     const body = await res.json().catch(() => ({}));
     throw new ApiError(body.detail ?? 'Verification failed', res.status);
   }
+}
+
+// ── Access Links ──────────────────────────────────────────────────────────────
+
+export interface AccessLink {
+  id: string;
+  agent_id: string;
+  name: string;
+  token: string | null;       // null for the default link
+  is_live: boolean;
+  show_report: boolean;
+  one_per_email: boolean;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface AccessLinkPublicConfig {
+  agent_id: string;
+  link_id: string;
+  link_name: string;
+  agent_name: string;
+  agent_language: string;
+  agent_status: string;
+  agent_first_speaker: string;
+  show_report: boolean;
+}
+
+export async function fetchAccessLinkPublicConfig(linkToken: string): Promise<AccessLinkPublicConfig> {
+  const res = await fetch(`${BASE}/api/v1/access-links/${encodeURIComponent(linkToken)}/public-config`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body.detail ?? 'Link not found', res.status);
+  }
+  return res.json();
+}
+
+export async function fetchAccessLinks(accessToken: string, agentId: string): Promise<AccessLink[]> {
+  const res = await fetch(`${BASE}/api/v1/agents/${agentId}/access-links`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new ApiError('Failed to fetch access links', res.status);
+  return res.json();
+}
+
+export async function createAccessLink(accessToken: string, agentId: string, name: string): Promise<AccessLink> {
+  const res = await fetch(`${BASE}/api/v1/agents/${agentId}/access-links`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new ApiError('Failed to create access link', res.status);
+  return res.json();
+}
+
+export async function updateAccessLink(
+  accessToken: string,
+  linkId: string,
+  updates: Partial<Pick<AccessLink, 'name' | 'is_live' | 'show_report' | 'one_per_email'>>,
+): Promise<AccessLink> {
+  const res = await fetch(`${BASE}/api/v1/access-links/${linkId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new ApiError('Failed to update access link', res.status);
+  return res.json();
+}
+
+export async function deleteAccessLink(accessToken: string, linkId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/access-links/${linkId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new ApiError('Failed to delete access link', res.status);
 }
 
 // ── Subscription (member-facing) ──────────────────────────────────────────────

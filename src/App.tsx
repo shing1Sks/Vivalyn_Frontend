@@ -4,6 +4,7 @@ import Auth from "./pages/Auth";
 import AgentSpace from "./pages/AgentSpace";
 import InviteAccept from "./pages/InviteAccept";
 import AgentLive from "./pages/AgentLive";
+import AgentAccessLink from "./pages/AgentAccessLink";
 import AdminDashboard from "./pages/AdminDashboard";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/agent-space" element={<AgentSpace />} />
         <Route path="/invite/:inviteId" element={<InviteAccept />} />
         <Route path="/agent/:agentId" element={<AgentLive />} />
+        <Route path="/a/:linkToken" element={<AgentAccessLink />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />

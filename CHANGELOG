@@ -1,5 +1,22 @@
 # Changelog
 
+## [81] access-links — 2026-05-02
+
+**Why:** Paired with backend [97]. Creators needed a UI to manage per-agent access links, each with independent live/report/one-per-email toggles. The public-facing session flow needed to resolve a link token at page load and pass it through OTP verification and the WebSocket so runs are correctly tagged. The records tab needed per-link filtering to analyse cohort-level results.
+
+**What:** New `AccessLinksPanel` slide-over per agent with deploy toggle, test link, and full link management. New public page `/a/:linkToken` that resolves the link before showing the entry screen. `useAgentSession` and `EntryScreen` thread `accessLinkToken` through to OTP and WebSocket. Records tab gains an agent dropdown with inline search + creation date, and a per-link filter row that animates in when a specific agent is selected.
+
+**Changes:**
+- `src/pages/AgentAccessLink.tsx` *(new)*: public page at `/a/:linkToken`; fetches `fetchAccessLinkPublicConfig(linkToken)` on mount; state machine `loading → entry → session → ended → report / error`; own `ActiveSession` component using `useAgentSession` with `accessLinkToken`; `show_report` read from link config; fallback report polling matches `AgentLive`
+- `src/components/agentspace/AccessLinksPanel.tsx` *(new)*: `SlidePanel` wrapper; deploy toggle at top — green when `agent_status === "live"`, gray when idle, calls `toggleAgentStatus` and fires `onAgentUpdate` to sync the row; amber "Test link" row always visible and copyable regardless of deploy state; access link rows muted (`opacity-50`) when agent is idle with an explanatory banner; each `LinkRow` has inline name editing (click name to rename, Enter/Escape/blur to save), URL copy button, three grouped toggles (Live / Report / 1/email) each with loading state, and a "···" dropdown for rename/copy URL/open/delete; default link cannot be deleted; "Add labeled link" dashed button with inline create form
+- `src/lib/api.ts`: `AccessLink` and `AccessLinkPublicConfig` interfaces added; `fetchAccessLinkPublicConfig`, `fetchAccessLinks`, `createAccessLink`, `updateAccessLink`, `deleteAccessLink` functions added; `requestSessionOtp` updated to accept optional `accessLinkToken` and include it in the request body; `access_link_id?: string | null` added to `RunRecord`; `accessLinkId` filter added to `fetchAgentspaceRuns`
+- `src/hooks/useAgentSession.ts`: `accessLinkToken?: string` added to `UseAgentSessionOptions`; appended as `access_link_token` query param on the WebSocket URL when present
+- `src/components/agentlive/EntryScreen.tsx`: `accessLinkToken?: string` prop added; passed to `requestSessionOtp` in both `handleFormSubmit` and `handleResend`
+- `src/pages/AgentSpace.tsx`: `AccessLinksPanel` and `fetchAccessLinks` imported; `accessLinksAgent: Agent | null` state added to `AgentSpaceContent`; `AgentRow` gains `onAccessLinks` prop — renders a `Link2` icon button in both mobile action row and a new "Access" desktop column (grid updated from 9 to 10 columns); `AccessLinksPanel` rendered with `onAgentUpdate` syncing back to agent list and `accessLinksAgent` state; `RecordsTab` `agentOptions` rebuilt as `{id, name, createdAt}` objects; agent dropdown trigger widened to `w-52`, panel to `w-72`, list items show agent name + formatted creation date on two lines; search input auto-focuses on dropdown open; link filter moved to a separate animated row (`opacity + y` fade-in) below the toolbar so it never shifts the Export button; link filter row highlights trigger in indigo when a specific link is active with an inline Clear button
+- `src/App.tsx`: `<Route path="/a/:linkToken" element={<AgentAccessLink />} />` added
+
+---
+
 ## [80] payment-safety-and-email-coverage — 2026-04-29
 
 **Why:** Paired with backend [96]. Immediate plan switches ("Upgrade now" / "Downgrade now") fired the API the instant the button was clicked — no warning that the current subscription would be cancelled immediately, that remaining minutes would be replaced, or that dismissing the next payment modal would leave the workspace without a plan.

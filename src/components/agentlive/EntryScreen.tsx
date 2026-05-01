@@ -9,6 +9,7 @@ interface EntryScreenProps {
   prefillEmail?: string
   onJoin: (email: string, name: string) => void
   error?: string | null
+  accessLinkToken?: string
 }
 
 export default function EntryScreen({
@@ -17,6 +18,7 @@ export default function EntryScreen({
   prefillEmail,
   onJoin,
   error,
+  accessLinkToken,
 }: EntryScreenProps) {
   const [email, setEmail] = useState(prefillEmail ?? '')
   const [name, setName] = useState('')
@@ -43,7 +45,7 @@ export default function EntryScreen({
     if (!email.trim()) return
     setLoading(true)
     try {
-      await requestSessionOtp(email.trim())
+      await requestSessionOtp(email.trim(), accessLinkToken)
       setStep('otp')
     } catch (err) {
       setFieldError(err instanceof ApiError ? err.message : 'Failed to send code. Try again.')
@@ -72,7 +74,7 @@ export default function EntryScreen({
     setOtp('')
     setLoading(true)
     try {
-      await requestSessionOtp(email.trim())
+      await requestSessionOtp(email.trim(), accessLinkToken)
     } catch (err) {
       setFieldError(err instanceof ApiError ? err.message : 'Failed to resend code.')
     } finally {

@@ -38,6 +38,7 @@ interface UseAgentSessionOptions {
   mode: 'live' | 'test'
   token?: string
   agentFirstSpeaker?: string
+  accessLinkToken?: string
 }
 
 interface UseAgentSessionReturn {
@@ -55,7 +56,7 @@ interface UseAgentSessionReturn {
 }
 
 export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionReturn {
-  const { agentId, email, name, mode, token, agentFirstSpeaker } = opts
+  const { agentId, email, name, mode, token, agentFirstSpeaker, accessLinkToken } = opts
 
   const [phase, setPhase] = useState<SessionPhase>('connecting')
   const [agentState, setAgentState] = useState<AgentState>('listening')
@@ -183,6 +184,7 @@ export function useAgentSession(opts: UseAgentSessionOptions): UseAgentSessionRe
     const wsBase = BASE_URL.replace(/^http/, 'ws')
     const params = new URLSearchParams({ email, name, mode })
     if (mode === 'test' && token) params.set('token', token)
+    if (accessLinkToken) params.set('access_link_token', accessLinkToken)
     const ws = new WebSocket(`${wsBase}/ws/agent/${agentId}/session?${params}`)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
