@@ -117,7 +117,7 @@ function PricingCard({
 
       {/* Discount badge for Growth/Pro */}
       {isContact && (
-        <p className="text-xs text-indigo-600 text-center mb-3">
+        <p className="text-xs text-indigo-600 text-center mb-3" onClick={() => onAction(plan.tier)} style={{ cursor: 'pointer' }}>
           Reach out for better pricing →
         </p>
       )}
