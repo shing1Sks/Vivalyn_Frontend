@@ -143,12 +143,19 @@ export default function NoActivePlanScreen({ subscription }: Props) {
             return (
               <div
                 key={plan.tier}
-                className={`bg-white rounded-xl border p-5 flex flex-col ${
-                  plan.tier === 'starter'
+                className={`relative bg-white rounded-xl border p-5 flex flex-col ${
+                  plan.tier === 'growth'
                     ? 'border-indigo-200 ring-1 ring-indigo-100'
                     : 'border-gray-200'
                 }`}
               >
+                {/* Founder pricing header strip — hidden on trial */}
+                {plan.tier !== 'trial' && (
+                  <div className="-mx-5 -mt-5 mb-4 rounded-t-xl bg-indigo-600 px-4 py-1.5 text-center text-[10px] font-bold tracking-widest uppercase text-white">
+                    {plan.tier === 'growth' ? 'Most Popular · Founder Pricing' : 'Founder Pricing'}
+                  </div>
+                )}
+
                 {/* Header */}
                 <div className="flex items-center justify-between mb-3">
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${tierBadgeClass(plan.tier)}`}>
@@ -197,7 +204,7 @@ export default function NoActivePlanScreen({ subscription }: Props) {
                     onClick={() => handlePayClick(plan.tier)}
                     disabled={isPaying || payingTier !== null}
                     className={`w-full py-2 px-4 text-sm font-medium rounded-lg text-center transition-colors duration-[120ms] inline-flex items-center justify-center gap-2 disabled:opacity-60 ${
-                      plan.tier === 'starter'
+                      plan.tier === 'growth'
                         ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                         : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
                     }`}

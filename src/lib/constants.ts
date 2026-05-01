@@ -280,19 +280,19 @@ export async function getAllPlansIntl(): Promise<PricingPlan[]> {
   return config.plans.map(e => entryToPricingPlan(e, 'intl', true))
 }
 
-/** Trial + Starter only in INR — landing page / public pricing. */
+/** Trial + Starter + Growth in INR — landing page / public pricing. */
 export async function getPricingPlansIn(): Promise<PricingPlan[]> {
   const config = await getPlanConfig()
   return config.plans
-    .filter(e => e.tier === 'trial' || e.tier === 'starter')
+    .filter(e => e.tier === 'trial' || e.tier === 'starter' || e.tier === 'growth')
     .map(e => entryToPricingPlan(e, 'inr'))
 }
 
-/** Trial + Starter only in USD — landing page / public pricing. */
+/** Trial + Starter + Growth in USD — landing page / public pricing. */
 export async function getPricingPlansIntl(): Promise<PricingPlan[]> {
   const config = await getPlanConfig()
   return config.plans
-    .filter(e => e.tier === 'trial' || e.tier === 'starter')
+    .filter(e => e.tier === 'trial' || e.tier === 'starter' || e.tier === 'growth')
     .map(e => entryToPricingPlan(e, 'intl'))
 }
 

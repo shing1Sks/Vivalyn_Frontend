@@ -49,20 +49,22 @@ function PricingCard({
 }) {
   const isTrial = plan.tier === 'trial'
   const isStarter = plan.tier === 'starter'
-  const isContact = plan.tier === 'growth' || plan.tier === 'pro'
+  const isGrowth = plan.tier === 'growth'
+  const isContact = plan.tier === 'pro'
 
   return (
     <div
       className={`relative flex flex-col rounded-xl border p-6 transition-all duration-[120ms] h-full ${
-        isStarter
+        isGrowth
           ? 'border-indigo-600 shadow-md ring-1 ring-indigo-600'
           : 'border-gray-200 shadow-sm'
       }`}
     >
-      {isStarter && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center bg-indigo-600 text-white text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap">
-          Most Popular
-        </span>
+      {/* Founder pricing header strip — hidden on trial */}
+      {!isTrial && (
+        <div className="-mx-6 -mt-6 mb-5 rounded-t-xl bg-indigo-600 px-4 py-1.5 text-center text-[10px] font-bold tracking-widest uppercase text-white">
+          {isGrowth ? 'Most Popular · Founder Pricing' : 'Founder Pricing'}
+        </div>
       )}
 
       {/* Plan name + price */}
@@ -93,7 +95,7 @@ function PricingCard({
             <span className="text-gray-500"> included</span>
           </span>
         </div>
-        {isStarter && (
+        {!isTrial && (
           <div className="flex items-start gap-2.5">
             <Check size={15} strokeWidth={2} className="text-indigo-600 shrink-0 mt-0.5" />
             <span className="text-sm text-gray-700">Monthly reset, no rollover</span>
@@ -133,9 +135,17 @@ function PricingCard({
         >
           Talk to us
         </Button>
-      ) : (
+      ) : isGrowth ? (
         <Button
           variant="primary"
+          className="w-full justify-center"
+          onClick={() => onAction(plan.tier)}
+        >
+          Get Started
+        </Button>
+      ) : (
+        <Button
+          variant="secondary"
           className="w-full justify-center"
           onClick={() => onAction(plan.tier)}
         >
@@ -167,7 +177,7 @@ export default function Pricing() {
   }, [])
 
   const handleAction = async (tier: string) => {
-    if (tier === 'growth' || tier === 'pro') { setModalOpen(true); return }
+    if (tier === 'pro') { setModalOpen(true); return }
     const { data: { session } } = await supabase.auth.getSession()
     if (session) navigate('/agent-space')
     else navigate('/auth')
