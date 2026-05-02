@@ -48,7 +48,6 @@ function PricingCard({
   onAction: (tier: string) => void
 }) {
   const isTrial = plan.tier === 'trial'
-  const isStarter = plan.tier === 'starter'
   const isGrowth = plan.tier === 'growth'
   const isContact = plan.tier === 'pro'
 
@@ -169,7 +168,6 @@ export default function Pricing() {
   const [plansLoading, setPlansLoading] = useState(true)
 
   useEffect(() => {
-    setPlansLoading(true)
     getAllPlansIn()
       .then(setPlans)
       .catch(() => {})
