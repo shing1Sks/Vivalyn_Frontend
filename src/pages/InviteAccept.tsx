@@ -33,9 +33,9 @@ export default function InviteAccept() {
     setAccepting(true)
     setAcceptError(null)
     try {
-      await acceptInvite(session.access_token, inviteId)
+      const { agentspace_id } = await acceptInvite(session.access_token, inviteId)
       setAccepted(true)
-      setTimeout(() => navigate('/agent-space', { replace: true }), 2000)
+      setTimeout(() => navigate(`/agent-space?joined=${agentspace_id}`, { replace: true }), 2000)
     } catch (e) {
       setAcceptError(e instanceof Error ? e.message : 'Failed to accept invite')
     } finally {

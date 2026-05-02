@@ -48,6 +48,8 @@ interface Props {
     agent_voice?: string;
     agent_first_speaker?: string;
   }) => void;
+  initialTab?: Tab
+  onTabChange?: (tab: Tab) => void
 }
 
 const COMM_STYLES = ["Conversational", "Formal", "Coaching", "Strict"] as const;
@@ -71,9 +73,12 @@ export default function AgentConfigureView({
   evalConfig,
   onSaved,
   onAgentUpdated,
+  initialTab,
+  onTabChange,
 }: Props) {
   const { session } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("session");
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "session");
+  function switchTab(t: Tab) { setActiveTab(t); onTabChange?.(t); }
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const tabMenuRef = useRef<HTMLDivElement>(null);
 
@@ -348,7 +353,7 @@ export default function AgentConfigureView({
                   <button
                     key={t}
                     onClick={() => {
-                      setActiveTab(t);
+                      switchTab(t);
                       setTabMenuOpen(false);
                     }}
                     className={`w-full text-left px-3 py-2 text-xs font-medium duration-[120ms] capitalize ${
@@ -498,7 +503,7 @@ export default function AgentConfigureView({
           {(["session", "evaluation"] as Tab[]).map((t) => (
             <button
               key={t}
-              onClick={() => setActiveTab(t)}
+              onClick={() => switchTab(t)}
               className={`w-full text-left px-3 py-2 text-sm font-medium rounded-lg transition-all duration-[120ms] capitalize ${
                 activeTab === t
                   ? "bg-indigo-50 text-indigo-700"
@@ -667,7 +672,7 @@ export default function AgentConfigureView({
                             session_objective: e.target.value,
                           }))
                         }
-                        rows={2}
+                        rows={4}
                         placeholder="e.g. Conduct a rigorous oral examination on machine learning…"
                         className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                       />
@@ -684,7 +689,7 @@ export default function AgentConfigureView({
                             agent_role: e.target.value,
                           }))
                         }
-                        rows={2}
+                        rows={4}
                         placeholder="e.g. A rigorous oral examiner…"
                         className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                       />
@@ -701,7 +706,7 @@ export default function AgentConfigureView({
                             participant_role: e.target.value,
                           }))
                         }
-                        rows={2}
+                        rows={4}
                         placeholder="e.g. A postgraduate student…"
                         className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                       />
@@ -721,7 +726,7 @@ export default function AgentConfigureView({
                             additional_context: e.target.value,
                           }))
                         }
-                        rows={2}
+                        rows={4}
                         placeholder="Extra context or constraints…"
                         className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                       />
@@ -928,7 +933,7 @@ export default function AgentConfigureView({
                                   [key]: e.target.value,
                                 }))
                               }
-                              rows={2}
+                              rows={4}
                               placeholder={placeholder}
                               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                             />
@@ -993,7 +998,7 @@ export default function AgentConfigureView({
                               )
                             }
                             placeholder="Definition"
-                            rows={2}
+                            rows={3}
                             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                           />
                           <div className="grid grid-cols-2 gap-2">
@@ -1007,7 +1012,7 @@ export default function AgentConfigureView({
                                 )
                               }
                               placeholder="Strong (5/5)"
-                              rows={2}
+                              rows={3}
                               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                             />
                             <textarea
@@ -1020,7 +1025,7 @@ export default function AgentConfigureView({
                                 )
                               }
                               placeholder="Weak (1/5)"
-                              rows={2}
+                              rows={3}
                               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                             />
                           </div>

@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle,
   ArrowLeft,
   Bot,
   Check,
+  CheckCircle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -900,9 +901,36 @@ function EmptyAgentsState({ onCreate }: { onCreate: () => void }) {
 type DashTab = 'agents' | 'records'
 
 function AgentSpaceContent() {
-  const { activeSpace, spaces, spacesLoading, spacesError, refetchSpaces } = useAgentSpace()
+  const { activeSpace, spaces, spacesLoading, spacesError, refetchSpaces, switchSpace } = useAgentSpace()
   const { signOut, session } = useAuth()
   const navigate = useNavigate()
+  const [, setSearchParams] = useSearchParams()
+
+  // Read URL params once at mount for state initialization
+  const urlParamsRef = useRef(new URLSearchParams(window.location.search))
+  const setParam = useCallback((key: string, value: string | null) => {
+    setSearchParams(prev => {
+      const current = prev.get(key)
+      if (current === value) return prev
+      const next = new URLSearchParams(prev)
+      if (value === null) next.delete(key)
+      else next.set(key, value)
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+
+  // Pending refs: configure + links need agents to load before resolving
+  const pendingConfigureId = useRef<string | null>(urlParamsRef.current.get('configure'))
+  const pendingLinksId = useRef<string | null>(urlParamsRef.current.get('links'))
+  // Skip-first refs: prevent sync effects from clearing URL params on first render
+  const isFirstConfigureRun = useRef(true)
+  const isFirstLinksRun = useRef(true)
+  // Joined space: read once, auto-switch and show banner
+  const initialJoinedSpaceId = urlParamsRef.current.get('joined')
+  const joinedSpaceSwitched = useRef(false)
+  // ?space= param: switch to a specific space on first load
+  const initialSpaceId = urlParamsRef.current.get('space')
+  const hasAppliedInitialSpace = useRef(false)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [membersOpen, setMembersOpen] = useState(false)
@@ -911,14 +939,19 @@ function AgentSpaceContent() {
   const [billingOpen, setBillingOpen] = useState(false)
   const [inboxOpen, setInboxOpen] = useState(false)
   const [typeSelectOpen, setTypeSelectOpen] = useState(false)
-  const [createAgentOpen, setCreateAgentOpen] = useState(false)
-  const [createQnAAgentOpen, setCreateQnAAgentOpen] = useState(false)
+  // Initialize wizard open state from URL so deep links work on first load
+  const [createAgentOpen, setCreateAgentOpen] = useState(urlParamsRef.current.get('create') === 'general')
+  const [createQnAAgentOpen, setCreateQnAAgentOpen] = useState(urlParamsRef.current.get('create') === 'qna')
   const [quickQnAOpen, setQuickQnAOpen] = useState(false)
-  const [dashTab, setDashTab] = useState<DashTab>('agents')
+  const [dashTab, setDashTab] = useState<DashTab>(urlParamsRef.current.get('tab') === 'records' ? 'records' : 'agents')
+  const [joinedBannerVisible, setJoinedBannerVisible] = useState(!!initialJoinedSpaceId)
 
   const [agents, setAgents] = useState<Agent[]>([])
   const [agentsLoading, setAgentsLoading] = useState(false)
   const [configuringAgent, setConfiguringAgent] = useState<Agent | null>(null)
+  const [configureTab, setConfigureTab] = useState<'session' | 'evaluation'>(
+    urlParamsRef.current.get('ctab') === 'evaluation' ? 'evaluation' : 'session'
+  )
   const [accessLinksAgent, setAccessLinksAgent] = useState<Agent | null>(null)
   const [agentSearch, setAgentSearch] = useState('')
   const [agentFilter, setAgentFilter] = useState<'all' | 'live' | 'idle'>('all')
@@ -994,6 +1027,87 @@ function AgentSpaceContent() {
       .finally(() => setSubscriptionLoading(false))
   }, [spaceId, spaceToken])
 
+  // Resolve pending configure/links once agents load
+  useEffect(() => {
+    if (agentsLoading || agents.length === 0) return
+    if (pendingConfigureId.current) {
+      const agent = agents.find(a => a.id === pendingConfigureId.current)
+      if (agent) setConfiguringAgent(agent)
+      pendingConfigureId.current = null
+    }
+    if (pendingLinksId.current) {
+      const agent = agents.find(a => a.id === pendingLinksId.current)
+      if (agent) setAccessLinksAgent(agent)
+      pendingLinksId.current = null
+    }
+  }, [agents, agentsLoading])
+
+  function openConfigure(agent: Agent) {
+    setConfiguringAgent(agent)
+    setConfigureTab('session')
+  }
+
+  // Auto-switch to joined space (once) when spaces load
+  useEffect(() => {
+    if (!initialJoinedSpaceId || joinedSpaceSwitched.current) return
+    if (spaces.some(s => s.id === initialJoinedSpaceId)) {
+      switchSpace(initialJoinedSpaceId)
+      joinedSpaceSwitched.current = true
+    }
+  }, [spaces, initialJoinedSpaceId, switchSpace])
+
+  // Apply ?space= param on first load (once)
+  useEffect(() => {
+    if (hasAppliedInitialSpace.current || spacesLoading) return
+    hasAppliedInitialSpace.current = true
+    if (initialSpaceId && spaces.some(s => s.id === initialSpaceId)) {
+      switchSpace(initialSpaceId)
+    }
+  }, [spaces, spacesLoading, initialSpaceId, switchSpace])
+
+  // Auto-dismiss joined banner after 5 s
+  useEffect(() => {
+    if (!joinedBannerVisible) return
+    const t = setTimeout(() => {
+      setJoinedBannerVisible(false)
+      setParam('joined', null)
+    }, 5000)
+    return () => clearTimeout(t)
+  }, [joinedBannerVisible, setParam])
+
+  // ── URL sync: state → URL (one-way after mount) ───────────────────────────
+  useEffect(() => {
+    setParam('tab', dashTab === 'records' ? 'records' : null)
+  }, [dashTab, setParam])
+
+  useEffect(() => {
+    if (isFirstConfigureRun.current) { isFirstConfigureRun.current = false; return }
+    setParam('configure', configuringAgent?.id ?? null)
+  }, [configuringAgent, setParam])
+
+  useEffect(() => {
+    if (isFirstLinksRun.current) { isFirstLinksRun.current = false; return }
+    setParam('links', accessLinksAgent?.id ?? null)
+  }, [accessLinksAgent, setParam])
+
+  useEffect(() => {
+    if (createAgentOpen) setParam('create', 'general')
+    else if (createQnAAgentOpen) setParam('create', 'qna')
+    else setParam('create', null)
+  }, [createAgentOpen, createQnAAgentOpen, setParam])
+
+  // Sync active space to URL
+  useEffect(() => {
+    if (!activeSpace) return
+    setParam('space', activeSpace.id)
+  }, [activeSpace, setParam])
+
+  // Sync configure tab to URL
+  useEffect(() => {
+    if (isFirstConfigureRun.current) return
+    setParam('ctab', configuringAgent ? configureTab : null)
+  }, [configuringAgent, configureTab, setParam])
+
   async function handleSignOut() {
     await signOut()
     navigate('/')
@@ -1001,6 +1115,7 @@ function AgentSpaceContent() {
 
   function handleWizardClose() {
     setCreateAgentOpen(false)
+    setParam('step', null)
     if (activeSpace && session) {
       fetchAgents(session.access_token, activeSpace.id).then(setAgents).catch(() => {})
     }
@@ -1008,48 +1123,16 @@ function AgentSpaceContent() {
 
   function handleQnAWizardClose() {
     setCreateQnAAgentOpen(false)
+    setParam('step', null)
     if (activeSpace && session) {
       fetchAgents(session.access_token, activeSpace.id).then(setAgents).catch(() => {})
     }
   }
 
-  if (spacesLoading) {
-    return (
-      <>
-        <AgentSpaceHeader
-          onSignOut={handleSignOut}
-          onCreateSpaceClick={() => setCreateOpen(true)}
-          onMembersClick={() => setMembersOpen(true)}
-          onInvitesClick={() => setInvitesOpen(true)}
-          onPlanClick={() => setPlanOpen(true)}
-          onBillingClick={() => setBillingOpen(true)}
-          onInboxClick={() => setInboxOpen(true)}
-        />
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
-        </div>
-      </>
-    )
-  }
-
-  if (spacesError) {
-    return (
-      <>
-        <AgentSpaceHeader
-          onSignOut={handleSignOut}
-          onCreateSpaceClick={() => setCreateOpen(true)}
-          onMembersClick={() => setMembersOpen(true)}
-          onInvitesClick={() => setInvitesOpen(true)}
-          onPlanClick={() => setPlanOpen(true)}
-          onBillingClick={() => setBillingOpen(true)}
-          onInboxClick={() => setInboxOpen(true)}
-        />
-        <div className="flex-1 flex items-center justify-center px-6">
-          <p className="text-sm text-red-500">{spacesError}</p>
-        </div>
-      </>
-    )
-  }
+  const joinedSpace = spaces.find(s => s.id === initialJoinedSpaceId)
+  // Initial step for wizards opened from URL (applied only once)
+  const initialCreate = urlParamsRef.current.get('create')
+  const initialWizardStep = initialCreate ? urlParamsRef.current.get('step') : null
 
   return (
     <>
@@ -1063,15 +1146,50 @@ function AgentSpaceContent() {
         onInboxClick={() => setInboxOpen(true)}
       />
 
+      {/* Joined space toast — shown after accepting an invite */}
+      <AnimatePresence>
+        {joinedBannerVisible && joinedSpace && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.2 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 bg-white border border-gray-200 shadow-md rounded-xl px-4 py-3 max-w-sm w-full"
+          >
+            <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="text-sm text-gray-700 flex-1 truncate">
+              You joined <span className="font-semibold">{joinedSpace.name}</span>
+            </span>
+            <button
+              onClick={() => { setJoinedBannerVisible(false); setParam('joined', null) }}
+              className="text-gray-300 hover:text-gray-500 duration-[120ms] shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <main className="flex-1 px-4 md:px-6 py-4 md:py-6">
-        {activeSpace ? (
-          subscriptionLoading ? (
-            <div className="flex items-center justify-center min-h-[50vh]">
-              <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
-            </div>
-          ) : !subscription?.has_subscription || subscription.status !== 'active' ? (
-            <NoActivePlanScreen subscription={subscription} />
-          ) : (
+        {spacesLoading ? (
+          <div className="flex items-center justify-center min-h-[50vh]">
+            <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+          </div>
+        ) : spacesError ? (
+          <div className="flex items-center justify-center min-h-[50vh] px-6">
+            <p className="text-sm text-red-500">{spacesError}</p>
+          </div>
+        ) : !activeSpace ? (
+          <div className="flex items-center justify-center min-h-[50vh]">
+            <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+          </div>
+        ) : subscriptionLoading ? (
+          <div className="flex items-center justify-center min-h-[50vh]">
+            <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+          </div>
+        ) : !subscription?.has_subscription || subscription.status !== 'active' ? (
+          <NoActivePlanScreen subscription={subscription} />
+        ) : (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="flex flex-col gap-5">
 
             {/* Expiring-soon warning */}
@@ -1290,7 +1408,7 @@ function AgentSpaceContent() {
                                 key={agent.id}
                                 agent={agent}
                                 token={session?.access_token ?? ''}
-                                onConfigure={() => setConfiguringAgent(agent)}
+                                onConfigure={() => openConfigure(agent)}
                                 onAccessLinks={() => setAccessLinksAgent(agent)}
                                 onStatusChange={updated =>
                                   setAgents(prev => prev.map(a => a.id === updated.id ? updated : a))
@@ -1337,19 +1455,6 @@ function AgentSpaceContent() {
               )}
             </motion.div>
 
-          </motion.div>
-          )
-        ) : (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.2 }}
-            className="flex items-center justify-center min-h-[60vh]"
-          >
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
-              <p className="text-sm text-gray-500">Setting up your agentspace…</p>
-            </div>
           </motion.div>
         )}
       </main>
@@ -1448,6 +1553,9 @@ function AgentSpaceContent() {
           open={createAgentOpen}
           agentspaceId={activeSpace.id}
           onClose={handleWizardClose}
+          orgAgents={agents.filter(a => a.agent_type === 'general' && a.session_design_config != null)}
+          initialStep={initialCreate === 'general' ? (initialWizardStep ?? undefined) : undefined}
+          onStepChange={step => step ? setParam('step', step) : setParam('step', null)}
         />
       )}
 
@@ -1456,6 +1564,9 @@ function AgentSpaceContent() {
           open={createQnAAgentOpen}
           agentspaceId={activeSpace.id}
           onClose={handleQnAWizardClose}
+          orgAgents={agents.filter(a => a.agent_type === 'qna' && a.session_design_config != null)}
+          initialStep={initialCreate === 'qna' ? (initialWizardStep ?? undefined) : undefined}
+          onStepChange={step => step ? setParam('step', step) : setParam('step', null)}
         />
       )}
 
@@ -1465,7 +1576,7 @@ function AgentSpaceContent() {
           agentspaceId={activeSpace.id}
           onClose={() => setQuickQnAOpen(false)}
           onCreated={agent => setAgents(prev => [agent, ...prev])}
-          onConfigure={agent => { setQuickQnAOpen(false); setConfiguringAgent(agent) }}
+          onConfigure={agent => { setQuickQnAOpen(false); openConfigure(agent) }}
         />
       )}
 
@@ -1514,6 +1625,8 @@ function AgentSpaceContent() {
                   evaluationMetrics={configuringAgent.transcript_evaluation_metrics}
                   sessionDesignConfig={configuringAgent.session_design_config}
                   evalConfig={configuringAgent.eval_config}
+                  initialTab={configureTab}
+                  onTabChange={t => setConfigureTab(t)}
                   onSaved={spec => {
                     setConfiguringAgent(prev => prev ? { ...prev, agent_prompt: spec } : null)
                     setAgents(prev =>
@@ -1548,13 +1661,8 @@ export default function AgentSpace() {
     }
   }, [user, loading, navigate])
 
-  if (loading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
-      </div>
-    )
-  }
+  // While redirecting to auth, render nothing
+  if (!loading && !user) return null
 
   return (
     <AgentSpaceProvider>

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, Copy,
-  FileText, Link2, Loader2, MessageSquare, Pencil, Search, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
+  AlertTriangle, Building2, Check, CheckCircle2, ChevronRight, Clock, Copy,
+  FileText, Link2, Loader2, MessageSquare, Pencil, RotateCcw, Search, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../../../context/AuthContext'
 import { useScrollLock } from '../../../hooks/useScrollLock'
@@ -21,7 +21,7 @@ import {
   type QnAQuestionBank,
   type QnASessionDesignRequest,
 } from '../../../lib/api'
-import { QNA_TEMPLATES, type QnAAgentTemplate } from '../../../lib/agentTemplates'
+import { agentToQnATemplate, QNA_TEMPLATES, type QnAAgentTemplate } from '../../../lib/agentTemplates'
 import LanguageVoiceSelector from './LanguageVoiceSelector'
 import QnASessionDesignStep from './QnASessionDesignStep'
 import EvaluationStep from './EvaluationStep'
@@ -88,20 +88,52 @@ function MorphingStepText({ phases, active }: { phases: string[]; active: boolea
   )
 }
 
+// ── Draft persistence ─────────────────────────────────────────────────────────
+
+interface QnAWizardDraft {
+  step: QnAWizardStep
+  language: string
+  voicePref: string
+  voiceName: string
+  templateId: string | null
+  pendingSessionDesign: QnASessionDesignRequest | null
+  sessionDesign: QnASessionDesignRequest | null
+  compileResult: QnACompileResponse | null
+  evalResult: EvaluationMetrics | null
+  generatedQuestions: Array<{ text: string; type: 'fixed' | 'randomized'; cross_question_enabled: boolean }> | null
+  pendingBank: QnAQuestionBank | null
+  savedAgent: Agent | null
+}
+
+type QnAAutoTrigger =
+  | { type: 'compile'; design: QnASessionDesignRequest }
+  | { type: 'eval-save'; compileRes: QnACompileResponse; design: QnASessionDesignRequest; bank: QnAQuestionBank }
+  | null
+
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean
   agentspaceId: string
   onClose: () => void
+  orgAgents?: Agent[]
+  initialStep?: string
+  onStepChange?: (step: string | null) => void
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Props) {
+export default function CreateQnAAgentWizard({ open, agentspaceId, onClose, orgAgents, initialStep, onStepChange }: Props) {
   useScrollLock(open)
   const { session } = useAuth()
 
+  const DRAFT_KEY = `vivalyn_qna_wizard_draft_${agentspaceId}`
+  const draftRef = useRef<QnAWizardDraft | null>(null)
+  const hasAppliedInitialStep = useRef(false)
+  const wasOpenRef = useRef(false)
+
+  const [hasDraft, setHasDraft] = useState(false)
+  const [autoTrigger, setAutoTrigger] = useState<QnAAutoTrigger>(null)
   const [step, setStep] = useState<QnAWizardStep>('templates')
   const [completedSteps, setCompletedSteps] = useState<Set<QnAWizardStep>>(new Set())
   const [maxReachedIdx, setMaxReachedIdx] = useState(0)
@@ -137,34 +169,170 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
 
   useEffect(() => {
     if (open) {
-      setStep('templates')
-      setCompletedSteps(new Set())
-      setMaxReachedIdx(0)
-      setSelectedTemplate(null)
-      setSessionDesign(null)
-      setCompileResult(null)
-      setGeneratedQuestions([])
-      setEvalResult(null)
-      setSavedAgent(null)
-      setPendingSessionDesign(null)
-      setPendingLangVoice(null)
-      setPendingEvalResult(null)
-      setPendingBank(null)
-      setCompileLoading(false)
-      setCompileError(null)
-      setEvalLoading(false)
-      setSaveLoading(false)
-      setRegenerating(false)
-      setShowCompileSuccess(false)
-      setTestPhase('idle')
-      setShouldEndTest(false)
-      setError(null)
-      setIsSubscriptionError(false)
+      wasOpenRef.current = true
+      let loadedDraft: QnAWizardDraft | null = null
+      try { loadedDraft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? 'null') } catch { /* ignore */ }
+      const hasMeaningful = !!(loadedDraft?.pendingSessionDesign || loadedDraft?.sessionDesign || loadedDraft?.savedAgent)
+
+      if (hasMeaningful && loadedDraft) {
+        draftRef.current = loadedDraft
+        setHasDraft(true)
+        if (loadedDraft.pendingSessionDesign) {
+          setPendingSessionDesign(loadedDraft.pendingSessionDesign)
+          setPendingLangVoice({ lang: loadedDraft.language, pref: loadedDraft.voicePref, voiceName: loadedDraft.voiceName })
+        }
+        setStep('templates')
+        setCompletedSteps(new Set())
+        setMaxReachedIdx(0)
+        setSelectedTemplate(null)
+        setSessionDesign(null)
+        setCompileResult(null)
+        setGeneratedQuestions([])
+        setEvalResult(null)
+        setSavedAgent(null)
+        setPendingEvalResult(null)
+        setPendingBank(null)
+        setCompileLoading(false)
+        setCompileError(null)
+        setEvalLoading(false)
+        setSaveLoading(false)
+        setRegenerating(false)
+        setShowCompileSuccess(false)
+        setTestPhase('idle')
+        setShouldEndTest(false)
+        setError(null)
+        setIsSubscriptionError(false)
+      } else {
+        draftRef.current = null
+        setHasDraft(false)
+        const stepToUse = (!hasAppliedInitialStep.current && initialStep) ? initialStep as QnAWizardStep : 'templates'
+        hasAppliedInitialStep.current = true
+        setStep(stepToUse)
+        setCompletedSteps(new Set())
+        setMaxReachedIdx(0)
+        setSelectedTemplate(null)
+        setSessionDesign(null)
+        setCompileResult(null)
+        setGeneratedQuestions([])
+        setEvalResult(null)
+        setSavedAgent(null)
+        setPendingSessionDesign(null)
+        setPendingLangVoice(null)
+        setPendingEvalResult(null)
+        setPendingBank(null)
+        setCompileLoading(false)
+        setCompileError(null)
+        setEvalLoading(false)
+        setSaveLoading(false)
+        setRegenerating(false)
+        setShowCompileSuccess(false)
+        setTestPhase('idle')
+        setShouldEndTest(false)
+        setError(null)
+        setIsSubscriptionError(false)
+      }
     }
   }, [open])
 
   function markDone(s: QnAWizardStep) {
     setCompletedSteps(prev => new Set([...prev, s]))
+  }
+
+  // Save draft throughout the pipeline (including after agent is saved, so restore works at all steps)
+  useEffect(() => {
+    if (!open) return
+    if (!pendingSessionDesign && !sessionDesign && !savedAgent) return
+    const draft: QnAWizardDraft = {
+      step: step === 'configure' ? 'deploy' : step,
+      language: pendingLangVoice?.lang ?? '',
+      voicePref: pendingLangVoice?.pref ?? '',
+      voiceName: pendingLangVoice?.voiceName ?? '',
+      templateId: selectedTemplate?.id ?? null,
+      pendingSessionDesign,
+      sessionDesign,
+      compileResult,
+      evalResult,
+      generatedQuestions: generatedQuestions.length > 0 ? generatedQuestions : null,
+      pendingBank,
+      savedAgent,
+    }
+    draftRef.current = draft
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)) } catch { /* ignore */ }
+  }, [open, step, pendingLangVoice, selectedTemplate, pendingSessionDesign, sessionDesign, compileResult, evalResult, generatedQuestions, pendingBank, savedAgent])
+
+  // Clear draft on close
+  useEffect(() => {
+    if (!open && wasOpenRef.current) {
+      wasOpenRef.current = false
+      draftRef.current = null
+      setHasDraft(false)
+      try { sessionStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+    }
+  }, [open])
+
+  // Auto-retrigger in-flight async work after draft restore
+  useEffect(() => {
+    if (!autoTrigger || !open || !session) return
+    const trigger = autoTrigger
+    setAutoTrigger(null)
+    if (trigger.type === 'compile') {
+      markDone('session-design')
+      setStep('questions')
+      runCompileAndQuestions(trigger.design)
+        .then(() => {
+          setSessionDesign(trigger.design)
+          setShowCompileSuccess(true)
+          setTimeout(() => setShowCompileSuccess(false), 1200)
+        })
+        .catch(() => {})
+    } else if (trigger.type === 'eval-save') {
+      runQnAEvalAndSave(trigger.compileRes, trigger.design, trigger.bank)
+    }
+  }, [autoTrigger, open, session])
+
+  // Notify parent of step changes
+  useEffect(() => {
+    if (!open) return
+    onStepChange?.(step === 'templates' ? null : step)
+  }, [open, step])
+
+  function handleRestoreDraft() {
+    const d = draftRef.current
+    if (!d) return
+    setHasDraft(false)
+
+    if (d.language || d.voicePref) {
+      setPendingLangVoice({ lang: d.language, pref: d.voicePref, voiceName: d.voiceName })
+    }
+    if (d.sessionDesign) setSessionDesign(d.sessionDesign)
+    if (d.pendingSessionDesign) setPendingSessionDesign(d.pendingSessionDesign)
+    if (d.compileResult) setCompileResult(d.compileResult)
+    if (d.generatedQuestions) setGeneratedQuestions(d.generatedQuestions)
+    if (d.pendingBank) setPendingBank(d.pendingBank)
+    if (d.evalResult) { setEvalResult(d.evalResult); setPendingEvalResult(d.evalResult) }
+    if (d.savedAgent) setSavedAgent(d.savedAgent)
+
+    // If agent was saved but step was still 'evaluation' (save happened in background), advance to 'test'
+    const effectiveStep: QnAWizardStep = (d.savedAgent && d.step === 'evaluation') ? 'test' : d.step
+
+    const stepOrder: QnAWizardStep[] = ['templates', 'voice-language', 'session-design', 'questions', 'evaluation', 'test', 'deploy']
+    const targetIdx = stepOrder.indexOf(effectiveStep)
+    setCompletedSteps(new Set(stepOrder.slice(0, Math.max(0, targetIdx)) as QnAWizardStep[]))
+    setMaxReachedIdx(Math.max(0, targetIdx))
+    setStep(effectiveStep)
+
+    // Schedule async retrigger for work that was in-flight at refresh time
+    if (!d.compileResult && d.sessionDesign) {
+      setAutoTrigger({ type: 'compile', design: d.sessionDesign })
+    } else if (d.compileResult && !d.savedAgent && d.sessionDesign && d.pendingBank) {
+      setAutoTrigger({ type: 'eval-save', compileRes: d.compileResult, design: d.sessionDesign, bank: d.pendingBank })
+    }
+  }
+
+  function handleDiscardDraft() {
+    draftRef.current = null
+    setHasDraft(false)
+    try { sessionStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
   }
 
   function getStepStatus(s: QnAWizardStep): 'upcoming' | 'current' | 'done' | 'loading' {
@@ -292,28 +460,15 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
     runCompileAndQuestions(sessionDesign).catch(() => {})
   }
 
-  function handleQuestionsContinue() {
-    if (!pendingBank || !compileResult || !session || !sessionDesign) return
-
-    const bank = pendingBank
-    markDone('questions')
-    setStep('evaluation')
-
-    // If already saved (user went back and changed questions), just update the bank
-    if (savedAgent) {
-      const spec: QnAPromptSpec = { ...compileResult.spec, question_bank: bank }
-      updateAgent(session.access_token, savedAgent.id, { agent_prompt: spec }).catch(() => {})
-      return
-    }
-
-    // First time — trigger eval → save chain
+  function runQnAEvalAndSave(compileRes: QnACompileResponse, design: QnASessionDesignRequest, bank: QnAQuestionBank) {
     setEvalLoading(true)
-    const ctx = compileResult.spec.session_context
+    setError(null)
+    const ctx = compileRes.spec.session_context
     const sessionBrief = ctx?.session_brief ?? ''
     const additionalContext = ctx
       ? [`Agent role: ${ctx.agent_role}`, `Participant: ${ctx.participant_role}`, `Objective: ${ctx.session_objective}`, `Style: ${ctx.communication_style}`, `Duration: ${ctx.session_duration_minutes} min`].join('\n')
       : ''
-    generateEvaluationCriteria(session.access_token, {
+    generateEvaluationCriteria(session!.access_token, {
       session_brief: sessionBrief,
       competency: '', strong_performance: '', weak_performance: '', additional: additionalContext,
     })
@@ -322,16 +477,16 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
         setPendingEvalResult(metrics)
         setEvalLoading(false)
         setSaveLoading(true)
-        const spec: QnAPromptSpec = { ...compileResult.spec, question_bank: bank }
+        const spec: QnAPromptSpec = { ...compileRes.spec, question_bank: bank }
         try {
-          const agent = await saveQnAAgent(session.access_token, agentspaceId, {
-            agent_name: sessionDesign.agent_name,
-            agent_display_label: compileResult.agent_display_label || undefined,
+          const agent = await saveQnAAgent(session!.access_token, agentspaceId, {
+            agent_name: design.agent_name,
+            agent_display_label: compileRes.agent_display_label || undefined,
             agent_prompt: spec,
             agent_language: pendingLangVoice?.lang ?? '',
             agent_voice: pendingLangVoice?.voiceName ?? '',
             transcript_evaluation_metrics: metrics,
-            session_design_config: sessionDesign,
+            session_design_config: design,
             eval_config: { mode: 'auto' },
           })
           setSavedAgent(agent)
@@ -347,6 +502,23 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
         }
       })
       .catch(() => setEvalLoading(false))
+  }
+
+  function handleQuestionsContinue() {
+    if (!pendingBank || !compileResult || !session || !sessionDesign) return
+
+    const bank = pendingBank
+    markDone('questions')
+    setStep('evaluation')
+
+    // If already saved (user went back and changed questions), just update the bank
+    if (savedAgent) {
+      const spec: QnAPromptSpec = { ...compileResult.spec, question_bank: bank }
+      updateAgent(session.access_token, savedAgent.id, { agent_prompt: spec }).catch(() => {})
+      return
+    }
+
+    runQnAEvalAndSave(compileResult, sessionDesign, bank)
   }
 
   async function handleEvalContinue() {
@@ -489,7 +661,14 @@ export default function CreateQnAAgentWizard({ open, agentspaceId, onClose }: Pr
             <div className="flex-1 min-h-0 flex flex-col">
               <div className="flex-1 overflow-y-auto">
                 {step === 'templates' && (
-                  <QnATemplatesContent onSelect={handleTemplateSelect} onStartBlank={handleStartBlank} />
+                  <QnATemplatesContent
+                    onSelect={handleTemplateSelect}
+                    onStartBlank={handleStartBlank}
+                    orgAgents={orgAgents}
+                    hasDraft={hasDraft}
+                    onRestoreDraft={handleRestoreDraft}
+                    onDiscardDraft={handleDiscardDraft}
+                  />
                 )}
 
                 {step === 'voice-language' && (
@@ -670,27 +849,70 @@ const QNA_CATEGORIES = [
   { id: 'academic', label: 'Academic' },
   { id: 'professional', label: 'Professional' },
   { id: 'language', label: 'Language' },
+  { id: 'org', label: 'From Your Org' },
 ] as const
 
 function QnATemplatesContent({
   onSelect,
   onStartBlank,
+  orgAgents,
+  hasDraft,
+  onRestoreDraft,
+  onDiscardDraft,
 }: {
   onSelect: (t: QnAAgentTemplate) => void
   onStartBlank: () => void
+  orgAgents?: Agent[]
+  hasDraft?: boolean
+  onRestoreDraft?: () => void
+  onDiscardDraft?: () => void
 }) {
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
+  const [orgLoading, setOrgLoading] = useState(false)
+
+  useEffect(() => {
+    if (activeCategory === 'org') {
+      setOrgLoading(true)
+      const t = setTimeout(() => setOrgLoading(false), 350)
+      return () => clearTimeout(t)
+    }
+  }, [activeCategory])
+
+  const q = search.toLowerCase().trim()
+
+  const validOrg = (orgAgents ?? []).filter(a => a.session_design_config != null)
+  const filteredOrg = validOrg.filter(a => {
+    if (!q) return true
+    const label = (a.agent_display_label || a.agent_name).toLowerCase()
+    return label.includes(q) || a.session_design_config!.session_objective.toLowerCase().includes(q)
+  })
 
   const filtered = QNA_TEMPLATES.filter(t => {
     const matchesCategory = activeCategory === 'all' || t.category === activeCategory
-    const q = search.toLowerCase().trim()
     const matchesSearch = !q || t.name.toLowerCase().includes(q) || t.session_objective.toLowerCase().includes(q)
     return matchesCategory && matchesSearch
   })
 
   return (
     <div className="max-w-5xl mx-auto px-8 py-12">
+
+      {hasDraft && (
+        <div className="mb-6 border border-indigo-200 bg-indigo-50 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <RotateCcw className="w-4 h-4 text-indigo-600 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-gray-900">You have an unsaved draft</p>
+              <p className="text-xs text-gray-500 mt-0.5">Resume where you left off.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={onDiscardDraft} className="text-xs text-gray-400 hover:text-gray-600 duration-[120ms] px-2 py-1">Discard</button>
+            <button onClick={onRestoreDraft} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 px-3 py-1.5 border border-indigo-200 bg-white rounded-lg duration-[120ms]">Restore</button>
+          </div>
+        </div>
+      )}
+
       <div className="mb-8">
         <span className="text-xs font-semibold uppercase tracking-wider text-indigo-500 bg-indigo-50 rounded-full px-2.5 py-1">
           QnA Agent
@@ -702,7 +924,7 @@ function QnATemplatesContent({
       {/* Start from scratch — compact top option */}
       <button
         onClick={onStartBlank}
-        className="w-full text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/20 duration-[120ms] group mb-6"
+        className="w-full text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/20 duration-[120ms] group mb-5"
       >
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
@@ -716,79 +938,123 @@ function QnATemplatesContent({
         </div>
       </button>
 
-      {/* Divider */}
-      <div className="flex items-center gap-4 mb-6">
-        <div className="flex-1 h-px bg-gray-200" />
-        <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">or pick a template</span>
-        <div className="flex-1 h-px bg-gray-200" />
+      {/* Search */}
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={activeCategory === 'org' ? 'Search your org\'s agents…' : 'Search templates…'}
+          className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-[120ms]"
+        />
       </div>
 
-      {/* Search + Filters */}
-      <div className="mb-4 space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search templates…"
-            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-[120ms]"
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {QNA_CATEGORIES.map(cat => {
-            const count = cat.id === 'all' ? QNA_TEMPLATES.length : QNA_TEMPLATES.filter(t => t.category === cat.id).length
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors duration-[120ms] ${
-                  activeCategory === cat.id
-                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
-                }`}
+      {/* Category filters */}
+      <div className="flex flex-wrap gap-2 mb-4 items-center">
+        {QNA_CATEGORIES.filter(c => c.id !== 'org').map(cat => {
+          const count = cat.id === 'all' ? QNA_TEMPLATES.length
+            : QNA_TEMPLATES.filter(t => t.category === cat.id).length
+          return (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors duration-[120ms] ${
+                activeCategory === cat.id
+                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+              }`}
               >
                 {cat.label} <span className="opacity-70">({count})</span>
               </button>
             )
           })}
-        </div>
+        <div className="w-px h-5 bg-gray-200 mx-1" />
+        <button
+          onClick={() => setActiveCategory('org')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors duration-[120ms] ${
+            activeCategory === 'org'
+              ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+          }`}
+        >
+          <Building2 className="w-3 h-3" />
+          From Your Org <span className="opacity-70">({filteredOrg.length})</span>
+        </button>
       </div>
 
-      {/* Template grid */}
-      <div
-        className="max-h-[360px] overflow-y-auto pr-1"
-        style={{ scrollbarWidth: 'thin' }}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map(t => (
-            <button
-              key={t.id}
-              onClick={() => onSelect(t)}
-              className="text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 duration-[120ms] group"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <span className={`text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 ${QNA_CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                  {t.category}
-                </span>
-                <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
-              </div>
-              <p className="text-base font-semibold text-gray-900 mb-1">{t.name}</p>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <Clock className="w-3 h-3" />
-                <span>{t.duration} min · {t.style}</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">
-                {t.session_objective}
-              </p>
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <div className="col-span-full text-center py-12 text-sm text-gray-400">
-              No templates match your search.
+      {/* Content area */}
+      <div className="pr-1">
+        {activeCategory === 'org' ? (
+          orgAgents === undefined || orgLoading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+              <p className="text-sm text-gray-500">Loading org agents…</p>
             </div>
-          )}
-        </div>
+          ) : filteredOrg.length === 0 ? (
+            <div className="text-center py-12 text-sm text-gray-400">
+              {q ? 'No org agents match your search.' : 'No org agents with session config found.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredOrg.map(agent => {
+                const sdc = agent.session_design_config!
+                const label = agent.agent_display_label || agent.agent_name
+                return (
+                  <button
+                    key={agent.id}
+                    onClick={() => onSelect(agentToQnATemplate(agent))}
+                    className="text-left border border-gray-200 border-l-[3px] border-l-indigo-400 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 duration-[120ms] group bg-white"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 bg-indigo-50 text-indigo-700 border-indigo-100">
+                        Your org
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
+                    </div>
+                    <p className="text-base font-semibold text-gray-900 mb-1">{label}</p>
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <span>{agent.agent_language.toUpperCase()} · {agent.agent_voice} · {sdc.session_duration_minutes} min · {sdc.communication_style}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">
+                      {sdc.session_objective}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filtered.map(t => (
+              <button
+                key={t.id}
+                onClick={() => onSelect(t)}
+                className="text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 duration-[120ms] group"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <span className={`text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 ${QNA_CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                    {t.category}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
+                </div>
+                <p className="text-base font-semibold text-gray-900 mb-1">{t.name}</p>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <Clock className="w-3 h-3" />
+                  <span>{t.duration} min · {t.style}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">
+                  {t.session_objective}
+                </p>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="col-span-full text-center py-12 text-sm text-gray-400">
+                No templates match your search.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

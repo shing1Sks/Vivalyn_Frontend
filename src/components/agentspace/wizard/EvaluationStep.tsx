@@ -138,7 +138,7 @@ export default function EvaluationStep({ evalResult, regenerating, onResultChang
                 <textarea
                   value={metric.definition}
                   onChange={e => updateMetric(i, 'definition', e.target.value)}
-                  rows={2}
+                  rows={3}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                 />
               </div>
@@ -148,7 +148,7 @@ export default function EvaluationStep({ evalResult, regenerating, onResultChang
                   <textarea
                     value={metric.strong}
                     onChange={e => updateMetric(i, 'strong', e.target.value)}
-                    rows={2}
+                    rows={3}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                   />
                 </div>
@@ -157,7 +157,7 @@ export default function EvaluationStep({ evalResult, regenerating, onResultChang
                   <textarea
                     value={metric.weak}
                     onChange={e => updateMetric(i, 'weak', e.target.value)}
-                    rows={2}
+                    rows={3}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                   />
                 </div>

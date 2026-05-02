@@ -759,7 +759,7 @@ export default function QnAConfigureView({ agent }: Props) {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Session objective</label>
                 <textarea value={sessionConfig.session_objective ?? ''}
                   onChange={e => setSessionConfig(prev => ({ ...prev, session_objective: e.target.value }))}
-                  rows={2} placeholder="e.g. Test the participant's knowledge on…"
+                  rows={4} placeholder="e.g. Test the participant's knowledge on…"
                   className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
               </div>
 
@@ -768,7 +768,7 @@ export default function QnAConfigureView({ agent }: Props) {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Agent role</label>
                 <textarea value={sessionConfig.agent_role ?? ''}
                   onChange={e => setSessionConfig(prev => ({ ...prev, agent_role: e.target.value }))}
-                  rows={2} placeholder="e.g. A knowledgeable interviewer…"
+                  rows={4} placeholder="e.g. A knowledgeable interviewer…"
                   className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
               </div>
 
@@ -777,7 +777,7 @@ export default function QnAConfigureView({ agent }: Props) {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Participant role</label>
                 <textarea value={sessionConfig.participant_role ?? ''}
                   onChange={e => setSessionConfig(prev => ({ ...prev, participant_role: e.target.value }))}
-                  rows={2} placeholder="e.g. A student being assessed on…"
+                  rows={4} placeholder="e.g. A student being assessed on…"
                   className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
               </div>
 
@@ -789,7 +789,7 @@ export default function QnAConfigureView({ agent }: Props) {
                 </label>
                 <textarea value={sessionConfig.additional_context ?? ''}
                   onChange={e => setSessionConfig(prev => ({ ...prev, additional_context: e.target.value }))}
-                  rows={2} placeholder="Extra context or constraints…"
+                  rows={4} placeholder="Extra context or constraints…"
                   className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
               </div>
             </div>
@@ -1013,7 +1013,7 @@ export default function QnAConfigureView({ agent }: Props) {
                       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
                       <textarea value={currentEvalConfig[key] ?? ''}
                         onChange={e => setCurrentEvalConfig(prev => ({ ...prev, [key]: e.target.value }))}
-                        rows={2} placeholder={placeholder}
+                        rows={4} placeholder={placeholder}
                         className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
                     </div>
                   ))}
@@ -1042,16 +1042,16 @@ export default function QnAConfigureView({ agent }: Props) {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
                     <textarea value={metric.definition}
                       onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, definition: e.target.value } : m))}
-                      placeholder="Definition" rows={2}
+                      placeholder="Definition" rows={3}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
                     <div className="grid grid-cols-2 gap-2">
                       <textarea value={metric.strong}
                         onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, strong: e.target.value } : m))}
-                        placeholder="Strong (5/5)" rows={2}
+                        placeholder="Strong (5/5)" rows={3}
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
                       <textarea value={metric.weak}
                         onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, weak: e.target.value } : m))}
-                        placeholder="Weak (1/5)" rows={2}
+                        placeholder="Weak (1/5)" rows={3}
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
                     </div>
                   </div>

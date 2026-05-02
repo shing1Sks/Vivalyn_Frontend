@@ -1,5 +1,43 @@
 # Changelog
 
+## [84] url-state-deep-linking — 2026-05-02
+
+**Why:** Every panel, wizard, tab, and view in the agent space was pure in-memory React state. Refreshing the page lost your place. Sharing a link to a specific agent's config, its access links panel, or the records tab was impossible. Invite accept also silently dropped users on the dashboard with no confirmation they had joined the right workspace.
+
+**What:** Full bidirectional URL ↔ state sync using `useSearchParams`. State changes push clean query params (replace, not push — no history spam). URL params seed initial state on mount so deep links work even after a hard refresh. A `?joined={spaceId}` param triggers an auto-switch to the new workspace and shows a green welcome banner that dismisses itself after 5 s.
+
+**Changes:**
+- `src/pages/AgentSpace.tsx`: added `useSearchParams` + `setParam` helper (debounced replace-mode setter); `urlParamsRef` reads all params once at mount; initial state for `dashTab`, `createAgentOpen`, `createQnAAgentOpen`, `configureTab` now seeded from URL (`tab`, `create`, `ctab`); `pendingConfigureId` and `pendingLinksId` refs resolve `?configure=` and `?links=` to actual agent objects once `agents` load; `openConfigure()` helper resets configure tab to `'session'`; `?joined=` triggers `switchSpace()` once + `joinedBannerVisible` banner; `?space=` triggers `switchSpace()` to a specific agentspace on first load; five `useEffect` syncers push state → URL (`tab`, `configure`, `links`, `create`, `space`, `ctab`); `AgentSpaceHeader` shown during `spacesLoading` instead of a blank loader page
+- `src/pages/InviteAccept.tsx`: after successful `acceptInvite`, navigates to `/agent-space?joined={agentspace_id}` instead of plain `/agent-space`
+
+---
+
+## [83] agent-config-textarea-heights — 2026-05-02
+
+**Why:** The session objective, agent role, participant role, additional context, and eval criteria textareas in both configure views were all locked to `rows={2}`. For any prompt longer than ~1.5 lines this forced constant internal scrolling inside a tiny box, making the editing experience cramped and frustrating.
+
+**What:** All descriptive textareas bumped to `rows={4}` (session fields and custom eval criteria) or `rows={3}` (metric card definition/strong/weak). This gives enough vertical space to read multi-sentence prompts without scrolling, while still keeping the layout compact.
+
+**Changes:**
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: `session_objective`, `agent_role`, `participant_role`, `additional_context` — `rows={2}` → `rows={4}`; custom eval criteria fields (`competency`, `strong_performance`, `weak_performance`, `additional`) — `rows={2}` → `rows={4}`; metric card `definition`, `strong`, `weak` textareas — `rows={2}` → `rows={3}`
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: same session field row bumps (`rows={2}` → `rows={4}`); same custom eval criteria bumps; same metric card bumps
+- `src/components/agentspace/wizard/EvaluationStep.tsx`: metric card `definition`, `strong`, `weak` — `rows={2}` → `rows={3}`
+
+---
+
+## [82] org-agent-templates-tab — 2026-05-02
+
+**Why:** The template selection step in both wizards showed hardcoded library templates only. Users had no way to reuse an existing agent from their own workspace as a starting point. The `session_design_config` field already stored the exact data a template needs — it just wasn't surfaced in the UI.
+
+**What:** A new "From Your Org" tab appears in both General and QnA wizard template steps. Org agents with a stored `session_design_config` are converted on-the-fly to template shapes via new converter functions and rendered with a distinct left-accent card style. The tab is visually separated from library tabs by a thin vertical divider, and its cards match library card dimensions exactly so switching tabs produces no layout jump.
+
+**Changes:**
+- `src/lib/agentTemplates.ts`: added `Agent` import; added `agentToTemplate(agent)` — converts General agent `session_design_config` → `AgentTemplate` with `id: org-{agentId}` and `category: "corporate"`; added `agentToQnATemplate(agent)` — converts QnA agent → `QnAAgentTemplate` with `category: "professional"` and `feedback_mode` pass-through
+- `src/components/agentspace/CreateAgentWizard.tsx`: removed standalone "From Your Org" floating section + "or from our library" divider; `GENERAL_CATEGORIES` gains `{ id: 'org', label: 'From Your Org' }`; tab bar renders library tabs (`all`, `academic`, `interview`, `corporate`) followed by a `w-px h-5 bg-gray-200` divider, then the "From Your Org" tab with `Building2` icon and `filteredOrg.length` count; org tab active state uses `border-indigo-300` (slightly stronger than library tabs); content area branches on `activeCategory === 'org'` — shows `Loader2` spinner briefly on first click, then org cards in a `grid grid-cols-1 md:grid-cols-2 gap-4`; org card layout standardized to match library cards exactly: badge row (`"Your org"` pill + `ChevronRight`) + `text-base font-semibold` title + metadata line + `line-clamp-2` description; removed `max-h-[360px] overflow-y-auto` inner scroll trap on template grid
+- `src/components/agentspace/wizard/CreateQnAAgentWizard.tsx`: same changes as General wizard for `QNA_CATEGORIES` (`all`, `academic`, `professional`, `language` + `org`); same tab bar divider + org tab styling; same org card layout standardization; same scroll trap removal
+
+---
+
 ## [81] access-links — 2026-05-02
 
 **Why:** Paired with backend [97]. Creators needed a UI to manage per-agent access links, each with independent live/report/one-per-email toggles. The public-facing session flow needed to resolve a link token at page load and pass it through OTP verification and the WebSocket so runs are correctly tagged. The records tab needed per-link filtering to analyse cohort-level results.

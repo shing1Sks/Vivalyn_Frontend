@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  AlertTriangle, Check, CheckCircle2, ChevronRight, Clock, Copy,
-  FileText, Link2, Loader2, MessageSquare, Pencil, Search, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
+  AlertTriangle, Building2, Check, CheckCircle2, ChevronRight, Clock, Copy,
+  FileText, Link2, Loader2, MessageSquare, Pencil, RotateCcw, Search, Settings2, Tag, ToggleLeft, ToggleRight, X, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useScrollLock } from '../../hooks/useScrollLock'
@@ -19,7 +19,7 @@ import {
   type EvaluationMetrics,
   type SessionDesignRequest,
 } from '../../lib/api'
-import { GENERAL_TEMPLATES, type AgentTemplate } from '../../lib/agentTemplates'
+import { agentToTemplate, GENERAL_TEMPLATES, type AgentTemplate } from '../../lib/agentTemplates'
 import LanguageVoiceSelector from './wizard/LanguageVoiceSelector'
 import SessionDesignStep from './wizard/SessionDesignStep'
 import EvaluationStep from './wizard/EvaluationStep'
@@ -46,18 +46,48 @@ const NAV_STEPS: { key: WizardStep; label: string }[] = [
   { key: 'deploy',         label: 'Deploy' },
 ]
 
+// ── Draft persistence ─────────────────────────────────────────────────────────
+
+interface WizardDraft {
+  step: WizardStep
+  language: string
+  voicePref: string
+  voiceName: string
+  templateId: string | null
+  pendingSessionDesign: SessionDesignRequest | null
+  sessionDesign: SessionDesignRequest | null
+  compileResult: CompileResponse | null
+  evalResult: EvaluationMetrics | null
+  savedAgent: Agent | null
+}
+
+type AutoTrigger =
+  | { type: 'compile'; design: SessionDesignRequest; lang: string; voiceName: string }
+  | { type: 'eval-save'; compileRes: CompileResponse; design: SessionDesignRequest; lang: string; voiceName: string }
+  | null
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean
   agentspaceId: string
   onClose: () => void
+  orgAgents?: Agent[]
+  initialStep?: string
+  onStepChange?: (step: string | null) => void
 }
 
-export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props) {
+export default function CreateAgentWizard({ open, agentspaceId, onClose, orgAgents, initialStep, onStepChange }: Props) {
   useScrollLock(open)
   const { session } = useAuth()
 
+  const DRAFT_KEY = `vivalyn_wizard_draft_${agentspaceId}`
+  const draftRef = useRef<WizardDraft | null>(null)
+  const hasAppliedInitialStep = useRef(false)
+  const wasOpenRef = useRef(false)
+
+  const [hasDraft, setHasDraft] = useState(false)
+  const [autoTrigger, setAutoTrigger] = useState<AutoTrigger>(null)
   const [step, setStep] = useState<WizardStep>('templates')
   const [completedSteps, setCompletedSteps] = useState<Set<WizardStep>>(new Set())
   const [maxReachedIdx, setMaxReachedIdx] = useState(0)
@@ -94,35 +124,169 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
 
   useEffect(() => {
     if (open) {
-      setStep('templates')
-      setCompletedSteps(new Set())
-      setMaxReachedIdx(0)
-      setSelectedLanguage('')
-      setSelectedVoiceName('')
-      setSelectedTemplate(null)
-      setSessionDesign(null)
-      setPendingSessionDesign(null)
-      setPendingLangVoice(null)
-      setPendingEvalResult(null)
-      setCompileResult(null)
-      setEvalResult(null)
-      setSavedAgent(null)
-      setConfiguredSpec(null)
-      setCompileLoading(false)
-      setCompileError(null)
-      setEvalLoading(false)
-      setSaveLoading(false)
-      setRegenerating(false)
-      setShowCompileSuccess(false)
-      setTestPhase('idle')
-      setShouldEndTest(false)
-      setError(null)
-      setIsSubscriptionError(false)
+      wasOpenRef.current = true
+      let loadedDraft: WizardDraft | null = null
+      try { loadedDraft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? 'null') } catch { /* ignore */ }
+      const hasMeaningful = !!(loadedDraft?.pendingSessionDesign || loadedDraft?.sessionDesign || loadedDraft?.savedAgent)
+
+      if (hasMeaningful && loadedDraft) {
+        draftRef.current = loadedDraft
+        setHasDraft(true)
+        setSelectedLanguage(loadedDraft.language)
+        setSelectedVoiceName(loadedDraft.voiceName)
+        if (loadedDraft.pendingSessionDesign) {
+          setPendingSessionDesign(loadedDraft.pendingSessionDesign)
+          setPendingLangVoice({ lang: loadedDraft.language, pref: loadedDraft.voicePref, voiceName: loadedDraft.voiceName })
+        }
+        setStep('templates')
+        setCompletedSteps(new Set())
+        setMaxReachedIdx(0)
+        setSessionDesign(null)
+        setPendingEvalResult(null)
+        setCompileResult(null)
+        setEvalResult(null)
+        setSavedAgent(null)
+        setConfiguredSpec(null)
+        setCompileLoading(false)
+        setCompileError(null)
+        setEvalLoading(false)
+        setSaveLoading(false)
+        setRegenerating(false)
+        setShowCompileSuccess(false)
+        setTestPhase('idle')
+        setShouldEndTest(false)
+        setError(null)
+        setIsSubscriptionError(false)
+      } else {
+        draftRef.current = null
+        setHasDraft(false)
+        const stepToUse = (!hasAppliedInitialStep.current && initialStep) ? initialStep as WizardStep : 'templates'
+        hasAppliedInitialStep.current = true
+        setStep(stepToUse)
+        setCompletedSteps(new Set())
+        setMaxReachedIdx(0)
+        setSelectedLanguage('')
+        setSelectedVoiceName('')
+        setSelectedTemplate(null)
+        setSessionDesign(null)
+        setPendingSessionDesign(null)
+        setPendingLangVoice(null)
+        setPendingEvalResult(null)
+        setCompileResult(null)
+        setEvalResult(null)
+        setSavedAgent(null)
+        setConfiguredSpec(null)
+        setCompileLoading(false)
+        setCompileError(null)
+        setEvalLoading(false)
+        setSaveLoading(false)
+        setRegenerating(false)
+        setShowCompileSuccess(false)
+        setTestPhase('idle')
+        setShouldEndTest(false)
+        setError(null)
+        setIsSubscriptionError(false)
+      }
     }
   }, [open])
 
   function markDone(s: WizardStep) {
     setCompletedSteps(prev => new Set([...prev, s]))
+  }
+
+  // Save draft throughout the pipeline (including after agent is saved, so restore works at all steps)
+  useEffect(() => {
+    if (!open) return
+    if (step === 'templates' && !selectedTemplate && !pendingLangVoice) return
+    const draft: WizardDraft = {
+      step: step === 'configure' ? 'deploy' : step,
+      language: selectedLanguage,
+      voicePref: pendingLangVoice?.pref ?? '',
+      voiceName: selectedVoiceName,
+      templateId: selectedTemplate?.id ?? null,
+      pendingSessionDesign,
+      sessionDesign,
+      compileResult,
+      evalResult,
+      savedAgent,
+    }
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)) } catch { /* ignore */ }
+  }, [open, step, selectedLanguage, selectedVoiceName, pendingLangVoice, selectedTemplate, pendingSessionDesign, sessionDesign, compileResult, evalResult, savedAgent, DRAFT_KEY])
+
+  // Clear draft when wizard closes (cancel from any step, or done from deploy)
+  useEffect(() => {
+    if (!open && wasOpenRef.current) {
+      wasOpenRef.current = false
+      try { sessionStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+    }
+  }, [open, DRAFT_KEY])
+
+  // Auto-retrigger in-flight async work after draft restore
+  useEffect(() => {
+    if (!autoTrigger || !open || !session) return
+    const trigger = autoTrigger
+    setAutoTrigger(null)
+    if (trigger.type === 'compile') {
+      runCompileChain(trigger.design, trigger.lang, trigger.voiceName)
+        .then(() => {
+          setSessionDesign(trigger.design)
+          setShowCompileSuccess(true)
+          setTimeout(() => { setShowCompileSuccess(false); setStep('evaluation') }, 1200)
+        })
+        .catch(() => {})
+    } else if (trigger.type === 'eval-save') {
+      runEvalAndSave(trigger.compileRes, trigger.design, trigger.lang, trigger.voiceName)
+    }
+  }, [autoTrigger, open, session])
+
+  // Notify parent of step changes for URL sync
+  useEffect(() => {
+    if (!open) return
+    onStepChange?.(step === 'configure' || step === 'templates' ? null : step)
+  }, [step, open])
+
+  function handleRestoreDraft() {
+    const draft = draftRef.current
+    if (!draft) return
+    setHasDraft(false)
+
+    // Restore all captured state
+    setSelectedLanguage(draft.language)
+    setSelectedVoiceName(draft.voiceName)
+    setPendingLangVoice({ lang: draft.language, pref: draft.voicePref, voiceName: draft.voiceName })
+    if (draft.pendingSessionDesign) setPendingSessionDesign(draft.pendingSessionDesign)
+    if (draft.sessionDesign) setSessionDesign(draft.sessionDesign)
+    if (draft.compileResult) setCompileResult(draft.compileResult)
+    if (draft.evalResult) { setEvalResult(draft.evalResult); setPendingEvalResult(draft.evalResult) }
+    if (draft.savedAgent) { setSavedAgent(draft.savedAgent); setConfiguredSpec(draft.savedAgent.agent_prompt) }
+
+    // If agent was saved but step was still 'evaluation' (save happened in background), advance to 'test'
+    const effectiveStep: WizardStep = (draft.savedAgent && draft.step === 'evaluation') ? 'test' : draft.step as WizardStep
+
+    const stepOrder: WizardStep[] = ['templates', 'voice-language', 'session-design', 'evaluation', 'test', 'deploy']
+    const targetIdx = stepOrder.indexOf(effectiveStep)
+    setCompletedSteps(new Set(stepOrder.slice(0, Math.max(0, targetIdx)) as WizardStep[]))
+    setMaxReachedIdx(Math.max(0, targetIdx))
+    setStep(effectiveStep)
+
+    // Schedule async retrigger for work that was in-flight at refresh time
+    if (!draft.compileResult && draft.sessionDesign) {
+      // Refresh happened mid-compile: re-run the full compile→eval→save chain
+      setAutoTrigger({ type: 'compile', design: draft.sessionDesign, lang: draft.language, voiceName: draft.voiceName })
+    } else if (draft.compileResult && !draft.savedAgent && draft.sessionDesign) {
+      // Refresh happened after compile but before save: re-run eval→save
+      setAutoTrigger({ type: 'eval-save', compileRes: draft.compileResult, design: draft.sessionDesign, lang: draft.language, voiceName: draft.voiceName })
+    }
+  }
+
+  function handleDiscardDraft() {
+    sessionStorage.removeItem(DRAFT_KEY)
+    setHasDraft(false)
+    draftRef.current = null
+    setSelectedLanguage('')
+    setSelectedVoiceName('')
+    setPendingSessionDesign(null)
+    setPendingLangVoice(null)
   }
 
   function getStepStatus(s: WizardStep): 'upcoming' | 'current' | 'done' | 'loading' {
@@ -182,6 +346,50 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
     setStep('session-design')
   }
 
+  function runEvalAndSave(compileRes: CompileResponse, design: SessionDesignRequest, lang: string, voiceName: string) {
+    setEvalLoading(true)
+    setError(null)
+    const ctx = compileRes.spec.session_context
+    const sessionBrief = ctx?.session_brief ?? ''
+    const additionalContext = ctx
+      ? [`Agent role: ${ctx.agent_role}`, `Participant: ${ctx.participant_role}`, `Objective: ${ctx.session_objective}`, `Style: ${ctx.communication_style}`, `Duration: ${ctx.session_duration_minutes} min`].join('\n')
+      : ''
+    generateEvaluationCriteria(session!.access_token, {
+      session_brief: sessionBrief,
+      competency: '', strong_performance: '', weak_performance: '', additional: additionalContext,
+    })
+      .then(async metrics => {
+        setEvalResult(metrics)
+        setPendingEvalResult(metrics)
+        setEvalLoading(false)
+        setSaveLoading(true)
+        try {
+          const agent = await saveAgent(session!.access_token, agentspaceId, {
+            agent_name: design.agent_name,
+            agent_display_label: compileRes.agent_display_label || undefined,
+            agent_prompt: compileRes.spec,
+            agent_language: lang,
+            agent_voice: voiceName,
+            transcript_evaluation_metrics: metrics,
+            session_design_config: design,
+            eval_config: { mode: 'auto' },
+          })
+          setSavedAgent(agent)
+          setConfiguredSpec(compileRes.spec)
+        } catch (e: unknown) {
+          if (e instanceof ApiError && e.status === 403) {
+            setIsSubscriptionError(true)
+            setError('Your plan has expired. Renew to continue creating agents.')
+          } else {
+            setError(e instanceof Error ? e.message : 'Failed to save agent. Please try again.')
+          }
+        } finally {
+          setSaveLoading(false)
+        }
+      })
+      .catch(() => setEvalLoading(false))
+  }
+
   function runCompileChain(design: SessionDesignRequest, lang: string, voiceName: string) {
     setCompileLoading(true)
     setCompileError(null)
@@ -194,46 +402,7 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
       .then(compileRes => {
         setCompileResult(compileRes)
         setCompileLoading(false)
-        setEvalLoading(true)
-        const ctx = compileRes.spec.session_context
-        const sessionBrief = ctx?.session_brief ?? ''
-        const additionalContext = ctx
-          ? [`Agent role: ${ctx.agent_role}`, `Participant: ${ctx.participant_role}`, `Objective: ${ctx.session_objective}`, `Style: ${ctx.communication_style}`, `Duration: ${ctx.session_duration_minutes} min`].join('\n')
-          : ''
-        generateEvaluationCriteria(session!.access_token, {
-          session_brief: sessionBrief,
-          competency: '', strong_performance: '', weak_performance: '', additional: additionalContext,
-        })
-          .then(async metrics => {
-            setEvalResult(metrics)
-            setPendingEvalResult(metrics)
-            setEvalLoading(false)
-            setSaveLoading(true)
-            try {
-              const agent = await saveAgent(session!.access_token, agentspaceId, {
-                agent_name: design.agent_name,
-                agent_display_label: compileRes.agent_display_label || undefined,
-                agent_prompt: compileRes.spec,
-                agent_language: lang,
-                agent_voice: voiceName,
-                transcript_evaluation_metrics: metrics,
-                session_design_config: design,
-                eval_config: { mode: 'auto' },
-              })
-              setSavedAgent(agent)
-              setConfiguredSpec(compileRes.spec)
-            } catch (e: unknown) {
-              if (e instanceof ApiError && e.status === 403) {
-                setIsSubscriptionError(true)
-                setError('Your plan has expired. Renew to continue creating agents.')
-              } else {
-                setError(e instanceof Error ? e.message : 'Failed to save agent. Please try again.')
-              }
-            } finally {
-              setSaveLoading(false)
-            }
-          })
-          .catch(() => setEvalLoading(false))
+        runEvalAndSave(compileRes, design, lang, voiceName)
       })
       .catch(() => {
         setCompileError('Compilation failed. Please try again.')
@@ -421,7 +590,14 @@ export default function CreateAgentWizard({ open, agentspaceId, onClose }: Props
             <div className="flex-1 min-h-0 flex flex-col">
               <div className="flex-1 overflow-y-auto">
                 {step === 'templates' && (
-                  <TemplatesContent onSelect={handleTemplateSelect} onStartBlank={handleStartBlank} />
+                  <TemplatesContent
+                    onSelect={handleTemplateSelect}
+                    onStartBlank={handleStartBlank}
+                    orgAgents={orgAgents}
+                    hasDraft={hasDraft}
+                    onRestoreDraft={handleRestoreDraft}
+                    onDiscardDraft={handleDiscardDraft}
+                  />
                 )}
 
                 {step === 'voice-language' && (
@@ -605,27 +781,74 @@ const GENERAL_CATEGORIES = [
   { id: 'academic', label: 'Academic' },
   { id: 'interview', label: 'Interview' },
   { id: 'corporate', label: 'Corporate' },
+  { id: 'org', label: 'From Your Org' },
 ] as const
 
 function TemplatesContent({
   onSelect,
   onStartBlank,
+  orgAgents,
+  hasDraft,
+  onRestoreDraft,
+  onDiscardDraft,
 }: {
   onSelect: (t: AgentTemplate) => void
   onStartBlank: () => void
+  orgAgents?: Agent[]
+  hasDraft?: boolean
+  onRestoreDraft?: () => void
+  onDiscardDraft?: () => void
 }) {
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
+  const [orgLoading, setOrgLoading] = useState(false)
+
+  useEffect(() => {
+    if (activeCategory === 'org') {
+      setOrgLoading(true)
+      const t = setTimeout(() => setOrgLoading(false), 350)
+      return () => clearTimeout(t)
+    }
+  }, [activeCategory])
+
+  const q = search.toLowerCase().trim()
+
+  const validOrg = (orgAgents ?? []).filter(a => a.session_design_config != null)
+  const filteredOrg = validOrg.filter(a => {
+    if (!q) return true
+    const label = (a.agent_display_label || a.agent_name).toLowerCase()
+    return label.includes(q) || a.session_design_config!.session_objective.toLowerCase().includes(q)
+  })
 
   const filtered = GENERAL_TEMPLATES.filter(t => {
     const matchesCategory = activeCategory === 'all' || t.category === activeCategory
-    const q = search.toLowerCase().trim()
     const matchesSearch = !q || t.name.toLowerCase().includes(q) || t.session_objective.toLowerCase().includes(q)
     return matchesCategory && matchesSearch
   })
 
   return (
     <div className="max-w-5xl mx-auto px-8 py-12">
+      {/* Draft restore banner */}
+      {hasDraft && (
+        <div className="mb-6 border border-indigo-200 bg-indigo-50 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <RotateCcw className="w-4 h-4 text-indigo-600 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-gray-900">You have an unsaved draft</p>
+              <p className="text-xs text-gray-500 mt-0.5">Resume where you left off.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={onDiscardDraft} className="text-xs text-gray-400 hover:text-gray-600 duration-[120ms] px-2 py-1">
+              Discard
+            </button>
+            <button onClick={onRestoreDraft} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 px-3 py-1.5 border border-indigo-200 bg-white rounded-lg duration-[120ms]">
+              Restore
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900 mb-2">Start with a template</h1>
         <p className="text-sm text-gray-500">Choose from {GENERAL_TEMPLATES.length} templates or build your own.</p>
@@ -634,7 +857,7 @@ function TemplatesContent({
       {/* Start from scratch — compact top option */}
       <button
         onClick={onStartBlank}
-        className="w-full text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/20 duration-[120ms] group mb-6"
+        className="w-full text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/20 duration-[120ms] group mb-5"
       >
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
@@ -648,79 +871,123 @@ function TemplatesContent({
         </div>
       </button>
 
-      {/* Divider */}
-      <div className="flex items-center gap-4 mb-6">
-        <div className="flex-1 h-px bg-gray-200" />
-        <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">or pick a template</span>
-        <div className="flex-1 h-px bg-gray-200" />
+      {/* Search */}
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={activeCategory === 'org' ? 'Search your org\'s agents…' : 'Search templates…'}
+          className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-[120ms]"
+        />
       </div>
 
-      {/* Search + Filters */}
-      <div className="mb-4 space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search templates…"
-            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-[120ms]"
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {GENERAL_CATEGORIES.map(cat => {
-            const count = cat.id === 'all' ? GENERAL_TEMPLATES.length : GENERAL_TEMPLATES.filter(t => t.category === cat.id).length
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors duration-[120ms] ${
-                  activeCategory === cat.id
-                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
-                }`}
-              >
-                {cat.label} <span className="opacity-70">({count})</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Template grid */}
-      <div
-        className="max-h-[360px] overflow-y-auto pr-1"
-        style={{ scrollbarWidth: 'thin' }}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map(t => (
+      {/* Category filters */}
+      <div className="flex flex-wrap gap-2 mb-4 items-center">
+        {GENERAL_CATEGORIES.filter(c => c.id !== 'org').map(cat => {
+          const count = cat.id === 'all' ? GENERAL_TEMPLATES.length
+            : GENERAL_TEMPLATES.filter(t => t.category === cat.id).length
+          return (
             <button
-              key={t.id}
-              onClick={() => onSelect(t)}
-              className="text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 duration-[120ms] group"
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors duration-[120ms] ${
+                activeCategory === cat.id
+                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+              }`}
             >
-              <div className="flex items-start justify-between mb-3">
-                <span className={`text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 ${CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                  {t.category}
-                </span>
-                <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
-              </div>
-              <p className="text-base font-semibold text-gray-900 mb-1">{t.name}</p>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <Clock className="w-3 h-3" />
-                <span>{t.duration} min · {t.style}</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">
-                {t.session_objective}
-              </p>
+              {cat.label} <span className="opacity-70">({count})</span>
             </button>
-          ))}
-          {filtered.length === 0 && (
-            <div className="col-span-full text-center py-12 text-sm text-gray-400">
-              No templates match your search.
+          )
+        })}
+        <div className="w-px h-5 bg-gray-200 mx-1" />
+        <button
+          onClick={() => setActiveCategory('org')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors duration-[120ms] ${
+            activeCategory === 'org'
+              ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+          }`}
+        >
+          <Building2 className="w-3 h-3" />
+          From Your Org <span className="opacity-70">({filteredOrg.length})</span>
+        </button>
+      </div>
+
+      {/* Content area */}
+      <div className="pr-1">
+        {activeCategory === 'org' ? (
+          orgAgents === undefined || orgLoading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+              <p className="text-sm text-gray-500">Loading org agents…</p>
             </div>
-          )}
-        </div>
+          ) : filteredOrg.length === 0 ? (
+            <div className="text-center py-12 text-sm text-gray-400">
+              {q ? 'No org agents match your search.' : 'No org agents with session config found.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredOrg.map(agent => {
+                const sdc = agent.session_design_config!
+                const label = agent.agent_display_label || agent.agent_name
+                return (
+                  <button
+                    key={agent.id}
+                    onClick={() => onSelect(agentToTemplate(agent))}
+                    className="text-left border border-gray-200 border-l-[3px] border-l-indigo-400 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 duration-[120ms] group bg-white"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 bg-indigo-50 text-indigo-700 border-indigo-100">
+                        Your org
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
+                    </div>
+                    <p className="text-base font-semibold text-gray-900 mb-1">{label}</p>
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <span>{agent.agent_language.toUpperCase()} · {agent.agent_voice} · {sdc.session_duration_minutes} min · {sdc.communication_style}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">
+                      {sdc.session_objective}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filtered.map(t => (
+              <button
+                key={t.id}
+                onClick={() => onSelect(t)}
+                className="text-left border border-gray-200 rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 duration-[120ms] group"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <span className={`text-[10px] font-semibold uppercase tracking-wider border rounded-full px-2 py-0.5 ${CATEGORY_COLORS[t.category] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                    {t.category}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 duration-[120ms]" />
+                </div>
+                <p className="text-base font-semibold text-gray-900 mb-1">{t.name}</p>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <Clock className="w-3 h-3" />
+                  <span>{t.duration} min · {t.style}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">
+                  {t.session_objective}
+                </p>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="col-span-full text-center py-12 text-sm text-gray-400">
+                No templates match your search.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

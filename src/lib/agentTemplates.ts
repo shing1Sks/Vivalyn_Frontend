@@ -1,4 +1,4 @@
-import type { SessionDesignRequest, QnASessionDesignRequest } from "./api";
+import type { Agent, SessionDesignRequest, QnASessionDesignRequest } from "./api";
 
 export interface AgentTemplate {
   id: string;
@@ -62,6 +62,41 @@ export function qnaTemplateToSessionDesign(
     communication_style: t.style,
     session_duration_minutes: t.duration,
     feedback_mode: t.feedback_mode,
+  };
+}
+
+// ── Org agent → template converters ──────────────────────────────────────────
+
+export function agentToTemplate(agent: Agent): AgentTemplate {
+  const sdc = agent.session_design_config!;
+  return {
+    id: `org-${agent.id}`,
+    name: agent.agent_display_label || agent.agent_name,
+    category: "corporate",
+    meta: `${sdc.session_duration_minutes} min · ${sdc.communication_style}`,
+    suggested_name: agent.agent_name,
+    duration: sdc.session_duration_minutes,
+    session_objective: sdc.session_objective,
+    agent_role: sdc.agent_role,
+    participant_role: sdc.participant_role,
+    style: sdc.communication_style,
+  };
+}
+
+export function agentToQnATemplate(agent: Agent): QnAAgentTemplate {
+  const sdc = agent.session_design_config as QnASessionDesignRequest;
+  return {
+    id: `org-${agent.id}`,
+    name: agent.agent_display_label || agent.agent_name,
+    category: "professional",
+    meta: `${sdc.session_duration_minutes} min · ${sdc.communication_style}`,
+    suggested_name: agent.agent_name,
+    duration: sdc.session_duration_minutes,
+    session_objective: sdc.session_objective,
+    agent_role: sdc.agent_role,
+    participant_role: sdc.participant_role,
+    style: sdc.communication_style,
+    feedback_mode: (sdc as QnASessionDesignRequest).feedback_mode ?? "silent",
   };
 }
 
