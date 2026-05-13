@@ -304,7 +304,6 @@ function ActivateModal({
   const [planTier, setPlanTier] = useState<string>(existing?.plan_tier ?? 'trial')
   const [currency, setCurrency] = useState<'INR' | 'USD'>(existing?.currency as 'INR' | 'USD' ?? 'INR')
   const [planMinutes, setPlanMinutes] = useState<Record<string, number>>({})
-  const [requesterEmail, setRequesterEmail] = useState(existing?.requester_email ?? '')
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -335,7 +334,6 @@ function ActivateModal({
         agentspace_id: agentspaceId.trim(),
         plan_tier: planTier,
         currency,
-        requester_email: requesterEmail || undefined,
         notes: notes || undefined,
       })
       onSuccess()
@@ -425,15 +423,6 @@ function ActivateModal({
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Requester email */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Requester email <span className="text-gray-400 font-normal">(for trial dedup)</span></label>
-              <input value={requesterEmail} onChange={e => setRequesterEmail(e.target.value)}
-                placeholder="user@example.com"
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
             </div>
 
             {/* Notes */}
