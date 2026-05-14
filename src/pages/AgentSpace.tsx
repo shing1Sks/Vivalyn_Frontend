@@ -1192,30 +1192,40 @@ function AgentSpaceContent() {
         ) : (
           <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="flex flex-col gap-5">
 
-            {/* Expiring-soon warning */}
+            {/* Expiring-soon / renews-soon banner */}
             {(() => {
               if (!subscription?.period_end || expiryBannerDismissed) return null
               const msLeft = new Date(subscription.period_end).getTime() - Date.now()
               const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24))
               if (daysLeft > 7 || daysLeft < 0) return null
               const dateLabel = new Date(subscription.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+              const isManual = !subscription.gateway_name
               return (
-                <motion.div variants={fadeInUp} className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between gap-4">
+                <motion.div
+                  variants={fadeInUp}
+                  className={`border rounded-xl px-4 py-3 flex items-center justify-between gap-4 ${isManual ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}
+                >
                   <div className="flex items-center gap-3 min-w-0">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <p className="text-sm text-amber-800 truncate">
-                      Your plan expires on <span className="font-semibold">{dateLabel}</span>.{' '}
-                      <a
-                        href={`mailto:hello@vivalyn.in?subject=${encodeURIComponent('Plan Renewal — ' + (subscription.plan_tier ?? 'Vivalyn'))}`}
-                        className="underline underline-offset-2 hover:text-amber-900 duration-[120ms]"
-                      >
-                        Contact us to renew.
-                      </a>
+                    <AlertTriangle className={`w-4 h-4 shrink-0 ${isManual ? 'text-amber-600' : 'text-gray-400'}`} />
+                    <p className={`text-sm truncate ${isManual ? 'text-amber-800' : 'text-gray-500'}`}>
+                      {isManual ? (
+                        <>Your free plan expires on <span className="font-semibold">{dateLabel}</span> — purchase a plan to continue your usage.</>
+                      ) : (
+                        <>Your plan auto-renews on <span className="font-semibold">{dateLabel}</span>.</>
+                      )}
                     </p>
+                    {isManual && (
+                      <button
+                        onClick={() => setPlanOpen(true)}
+                        className="shrink-0 text-xs font-medium text-amber-700 underline underline-offset-2 hover:text-amber-900 duration-[120ms] whitespace-nowrap"
+                      >
+                        View plans
+                      </button>
+                    )}
                   </div>
                   <button
                     onClick={() => setExpiryBannerDismissed(true)}
-                    className="text-amber-500 hover:text-amber-800 shrink-0 duration-[120ms]"
+                    className={`shrink-0 duration-[120ms] ${isManual ? 'text-amber-500 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`}
                   >
                     <X className="w-4 h-4" />
                   </button>

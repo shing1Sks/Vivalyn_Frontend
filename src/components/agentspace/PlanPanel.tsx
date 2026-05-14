@@ -8,6 +8,7 @@ import {
   FlaskConical,
   Loader2,
   Mail,
+  RefreshCw,
   Zap,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -15,12 +16,13 @@ import { useAgentSpace } from '../../context/AgentSpaceContext'
 import { useTokenBalance } from '../../context/TokenContext'
 import {
   fetchAgentspaceSubscription,
+  fetchPlanConfig,
   fetchTokenTransactions,
   initiatePayment,
   cancelSubscription,
   switchPlan,
 } from '../../lib/api'
-import type { AgentspaceSubscription } from '../../lib/api'
+import type { AgentspaceSubscription, PlanConfigEntry } from '../../lib/api'
 import { getAllPlansIn } from '../../lib/constants'
 import type { PricingPlan } from '../../lib/constants'
 import { loadRazorpayScript } from '../../lib/razorpay'
@@ -69,6 +71,7 @@ export default function PlanPanel({ open, onClose }: Props) {
   const [subLoading, setSubLoading] = useState(false)
   const [subError, setSubError] = useState<string | null>(null)
   const [allPlansIn, setAllPlansIn] = useState<PricingPlan[]>([])
+  const [planConfigs, setPlanConfigs] = useState<PlanConfigEntry[]>([])
 
   // Token history (top 10)
   const [txRows, setTxRows] = useState<Array<{ id: string; created_at: string; delta: number; balance_after: number; reason: string }>>([])
@@ -96,6 +99,7 @@ export default function PlanPanel({ open, onClose }: Props) {
 
   useEffect(() => {
     getAllPlansIn().then(setAllPlansIn).catch(() => {})
+    fetchPlanConfig().then(r => setPlanConfigs(r.plans)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -294,6 +298,38 @@ export default function PlanPanel({ open, onClose }: Props) {
                     </p>
                   )}
 
+                  {subscription.status === 'active' && subscription.period_end && (
+                    subscription.gateway_name ? (
+                      <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                        <RefreshCw className="w-3 h-3" />
+                        Auto-renews {new Date(subscription.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        Expires {new Date(subscription.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} — not auto-renewing
+                      </div>
+                    )
+                  )}
+
+                  {/* Pending overage */}
+                  {subscription.overflow_minutes > 0 && subscription.scaling_enabled && subscription.gateway_name && (() => {
+                    const config = planConfigs.find(p => p.tier === subscription.plan_tier)
+                    const rate = config?.scaling_rate_inr ?? null
+                    if (!rate) return null
+                    const overageInr = Math.round(subscription.overflow_minutes * rate * 100) / 100
+                    return (
+                      <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2.5 space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-indigo-700">Pending overage</span>
+                          <span className="text-xs font-semibold text-indigo-700 tabular-nums">₹{overageInr.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <p className="text-[11px] text-indigo-500">
+                          {subscription.overflow_minutes} min × ₹{rate}/min — charged with next renewal
+                        </p>
+                      </div>
+                    )
+                  })()}
 
                   {/* Stats */}
                   <div className="grid grid-cols-2 gap-2 pt-1">
@@ -369,6 +405,18 @@ export default function PlanPanel({ open, onClose }: Props) {
             {/* All Plans */}
             <div>
               <p className="text-xs font-medium text-gray-700 mb-2.5">All Plans</p>
+
+              {/* Manual plan expiry nudge */}
+              {!subscription.gateway_name && subscription.status === 'active' && subscription.period_end && (() => {
+                const daysLeft = Math.ceil((new Date(subscription.period_end).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                if (daysLeft > 7 || daysLeft < 0) return null
+                return (
+                  <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+                    Your free plan expires in <span className="font-semibold">{daysLeft} day{daysLeft !== 1 ? 's' : ''}</span>. Purchase a plan below to keep your usage running.
+                  </div>
+                )
+              })()}
+
               {switchError && (
                 <p className="text-xs text-red-600 mb-2">{switchError}</p>
               )}
@@ -385,6 +433,7 @@ export default function PlanPanel({ open, onClose }: Props) {
                   const canSwitch = isAdmin && subscription.status === 'active' && !isCurrent && SELF_SERVE_TIERS.has(plan.tier)
                   const canSubscribe = isAdmin && !subscription.has_subscription && SELF_SERVE_TIERS.has(plan.tier)
                   const canRenew = isAdmin && isExpiredOrCancelled && SELF_SERVE_TIERS.has(plan.tier)
+                  const canKeepSame = isAdmin && subscription.status === 'active' && isCurrent && !subscription.gateway_name && plan.tier !== 'trial' && SELF_SERVE_TIERS.has(plan.tier)
                   const currentRank = _TIER_RANK[subscription.plan_tier ?? ''] ?? 0
                   const planRank = _TIER_RANK[plan.tier] ?? 0
                   const switchLabel = planRank > currentRank ? 'Upgrade' : 'Downgrade'
@@ -496,6 +545,22 @@ export default function PlanPanel({ open, onClose }: Props) {
                           >
                             {renewPayingTier === plan.tier && <Loader2 className="w-3 h-3 animate-spin" />}
                             Get {plan.name}
+                          </button>
+                        </div>
+                      )}
+
+                      {canKeepSame && (
+                        <div>
+                          {renewPayError && renewPayingTier === plan.tier && (
+                            <p className="text-xs text-red-600 mb-1.5">{renewPayError}</p>
+                          )}
+                          <button
+                            onClick={() => handleRenewClick(plan.tier)}
+                            disabled={renewPayingTier !== null}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors duration-[120ms]"
+                          >
+                            {renewPayingTier === plan.tier && <Loader2 className="w-3 h-3 animate-spin" />}
+                            Keep {plan.name}
                           </button>
                         </div>
                       )}

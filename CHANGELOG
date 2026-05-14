@@ -1,5 +1,30 @@
 # Changelog
 
+## [86] subscription-plan-ux — 2026-05-14
+
+**Why:** The expiry banner said "Contact us to renew" for all plans — wrong for Razorpay/Stripe customers whose subscriptions auto-renew, and misleading for admin-gifted (free) plans where the correct action is to buy a plan. The Plans panel had no way to keep the same tier if you were on a free plan, showed no renewal date info, and gave no visibility into pending overage charges.
+
+**What:** Expiry banner split into two modes based on `gateway_name`. Free/manual plans get an amber warning with a "View plans" button. Gateway plans get a quiet gray "Auto-renews on [date]" notice. Plans panel gains a renewal/expiry info line in the current plan card, an amber callout for expiring manual plans, a "Keep [plan]" button for manual active subs so they can buy in before expiry, and a pending overage card showing accumulated overflow minutes and the projected charge for gateway scaling users.
+
+**Changes:**
+- `src/lib/api.ts`: `gateway_name: string | null` added to `AgentspaceSubscription` interface
+- `src/pages/AgentSpace.tsx`: expiry banner replaced with two-tone logic — `gateway_name` present → gray `bg-gray-50` "auto-renews" info with no CTA; `gateway_name` null → amber warning "free plan expires on [date]" with inline "View plans" button that opens `PlanPanel`
+- `src/components/agentspace/PlanPanel.tsx`: `fetchPlanConfig` and `PlanConfigEntry` imported; `planConfigs` state added, fetched alongside `allPlansIn`; current plan card gains renewal/expiry line (`RefreshCw` icon + date for gateway, `AlertCircle` + "not auto-renewing" for manual); pending overage card added — shows only when `overflow_minutes > 0 && scaling_enabled && gateway_name`, displays `X min × ₹Y/min — charged with next renewal` with total amount; manual expiry callout added above All Plans when expiry ≤ 7 days; `canKeepSame` condition added for active manual (no gateway) subs — shows "Keep [plan]" button on the current tier card; `RefreshCw` added to lucide imports
+
+---
+
+## [85] eval-config-ui-parity — 2026-05-14
+
+**Why:** The wizard's EvaluationStep had colored labels — green for "Strong (5/5)", red for "Weak (1/5)", plus explicit field labels for Name and Definition — that made the purpose of each input immediately clear. Both configure views (General and QnA) used plain placeholder text with no labels, making the metric cards and custom eval criteria fields ambiguous.
+
+**What:** Both configure views now match the wizard's label treatment exactly. Metric cards get the full structure: "Metric N" header, labeled Name / Definition fields, and color-coded Strong/Weak textareas. Custom eval criteria fields get colored labels for strong and weak performance inputs.
+
+**Changes:**
+- `src/components/agentspace/wizard/AgentConfigureView.tsx`: custom eval config field array gains `labelClass` per item — `text-emerald-600` for `strong_performance`, `text-red-500` for `weak_performance`, `text-gray-700` for the rest; label element uses dynamic `labelClass`; metrics section refactored from bare inputs to labeled `space-y-1.5` wrappers — "Metric N" header badge, `text-gray-500` "Name" and "Definition" labels, `text-emerald-600` "Strong (5/5)" label, `text-red-500` "Weak (1/5)" label; `gap-2` → `gap-3` on the strong/weak grid
+- `src/components/agentspace/wizard/QnAConfigureView.tsx`: same `labelClass` treatment on custom eval criteria fields; same full metrics card restructure with header badge and colored labels; metric card border `border-gray-100` → `border-gray-200` and `p-3` → `p-4` for visual consistency with the wizard
+
+---
+
 ## [84] url-state-deep-linking — 2026-05-02
 
 **Why:** Every panel, wizard, tab, and view in the agent space was pure in-memory React state. Refreshing the page lost your place. Sharing a link to a specific agent's config, its access links panel, or the records tab was impossible. Invite accept also silently dropped users on the dashboard with no confirmation they had joined the right workspace.

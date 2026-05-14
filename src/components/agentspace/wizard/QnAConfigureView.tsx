@@ -1004,13 +1004,13 @@ export default function QnAConfigureView({ agent }: Props) {
                   className="overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-4"
                 >
                   {[
-                    { label: 'What is being evaluated?', key: 'competency' as const, placeholder: 'e.g. Knowledge of subject matter' },
-                    { label: 'Strong performance', key: 'strong_performance' as const, placeholder: 'e.g. Answers accurately and completely…' },
-                    { label: 'Weak performance', key: 'weak_performance' as const, placeholder: 'e.g. Answers are vague or incorrect…' },
-                    { label: 'Additional context', key: 'additional' as const, placeholder: 'Any other notes…' },
-                  ].map(({ label, key, placeholder }) => (
+                    { label: 'What is being evaluated?', key: 'competency' as const, placeholder: 'e.g. Knowledge of subject matter', labelClass: 'text-gray-700' },
+                    { label: 'Strong performance', key: 'strong_performance' as const, placeholder: 'e.g. Answers accurately and completely…', labelClass: 'text-emerald-600' },
+                    { label: 'Weak performance', key: 'weak_performance' as const, placeholder: 'e.g. Answers are vague or incorrect…', labelClass: 'text-red-500' },
+                    { label: 'Additional context', key: 'additional' as const, placeholder: 'Any other notes…', labelClass: 'text-gray-700' },
+                  ].map(({ label, key, placeholder, labelClass }) => (
                     <div key={key}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                      <label className={`block text-sm font-medium ${labelClass} mb-1`}>{label}</label>
                       <textarea value={currentEvalConfig[key] ?? ''}
                         onChange={e => setCurrentEvalConfig(prev => ({ ...prev, [key]: e.target.value }))}
                         rows={4} placeholder={placeholder}
@@ -1034,25 +1034,38 @@ export default function QnAConfigureView({ agent }: Props) {
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Current metrics</p>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {editedMetrics.map((metric, i) => (
-                  <div key={i} className="border border-gray-100 rounded-xl p-3 space-y-2.5">
-                    <p className="text-xs font-semibold text-gray-400">Metric {i + 1}</p>
-                    <input type="text" value={metric.name}
-                      onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, name: e.target.value } : m))}
-                      placeholder="Name"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
-                    <textarea value={metric.definition}
-                      onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, definition: e.target.value } : m))}
-                      placeholder="Definition" rows={3}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <textarea value={metric.strong}
-                        onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, strong: e.target.value } : m))}
-                        placeholder="Strong (5/5)" rows={3}
+                  <div key={i} className="border border-gray-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Metric {i + 1}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-gray-500">Name</label>
+                      <input type="text" value={metric.name}
+                        onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, name: e.target.value } : m))}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-gray-500">Definition</label>
+                      <textarea value={metric.definition}
+                        onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, definition: e.target.value } : m))}
+                        rows={3}
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
-                      <textarea value={metric.weak}
-                        onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, weak: e.target.value } : m))}
-                        placeholder="Weak (1/5)" rows={3}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-emerald-600">Strong (5/5)</label>
+                        <textarea value={metric.strong}
+                          onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, strong: e.target.value } : m))}
+                          rows={3}
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-red-500">Weak (1/5)</label>
+                        <textarea value={metric.weak}
+                          onChange={e => setEditedMetrics(prev => prev.map((m, idx) => idx === i ? { ...m, weak: e.target.value } : m))}
+                          rows={3}
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent" />
+                      </div>
                     </div>
                   </div>
                 ))}

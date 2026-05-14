@@ -1381,6 +1381,7 @@ export interface AgentspaceSubscription {
   overflow_minutes: number;
   balance: number;
   cancel_at_period_end?: boolean;
+  gateway_name: string | null;
   had_trial: boolean;
 }
 

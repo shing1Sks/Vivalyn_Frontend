@@ -904,25 +904,29 @@ export default function AgentConfigureView({
                             label: "What is being evaluated?",
                             key: "competency" as const,
                             placeholder: "e.g. Oral defence of research methodology",
+                            labelClass: "text-gray-700",
                           },
                           {
                             label: "Strong performance",
                             key: "strong_performance" as const,
                             placeholder: "e.g. Gives structured, well-reasoned answers…",
+                            labelClass: "text-emerald-600",
                           },
                           {
                             label: "Weak performance",
                             key: "weak_performance" as const,
                             placeholder: "e.g. Gives vague answers without reasoning…",
+                            labelClass: "text-red-500",
                           },
                           {
                             label: "Additional context",
                             key: "additional" as const,
                             placeholder: "Any other notes…",
+                            labelClass: "text-gray-700",
                           },
-                        ].map(({ label, key, placeholder }) => (
+                        ].map(({ label, key, placeholder, labelClass }) => (
                           <div key={key}>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className={`block text-sm font-medium ${labelClass} mb-1`}>
                               {label}
                             </label>
                             <textarea
@@ -975,59 +979,70 @@ export default function AgentConfigureView({
                           key={i}
                           className="bg-white border border-gray-200 rounded-xl p-4 space-y-3"
                         >
-                          <input
-                            type="text"
-                            value={metric.name}
-                            onChange={(e) =>
-                              setEditedMetrics((prev) =>
-                                prev.map((m, idx) =>
-                                  idx === i ? { ...m, name: e.target.value } : m,
-                                ),
-                              )
-                            }
-                            placeholder={`Metric ${i + 1} name`}
-                            className="w-full px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                          />
-                          <textarea
-                            value={metric.definition}
-                            onChange={(e) =>
-                              setEditedMetrics((prev) =>
-                                prev.map((m, idx) =>
-                                  idx === i ? { ...m, definition: e.target.value } : m,
-                                ),
-                              )
-                            }
-                            placeholder="Definition"
-                            rows={3}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
-                          />
-                          <div className="grid grid-cols-2 gap-2">
-                            <textarea
-                              value={metric.strong}
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Metric {i + 1}</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-gray-500">Name</label>
+                            <input
+                              type="text"
+                              value={metric.name}
                               onChange={(e) =>
                                 setEditedMetrics((prev) =>
                                   prev.map((m, idx) =>
-                                    idx === i ? { ...m, strong: e.target.value } : m,
+                                    idx === i ? { ...m, name: e.target.value } : m,
                                   ),
                                 )
                               }
-                              placeholder="Strong (5/5)"
-                              rows={3}
-                              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                             />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-gray-500">Definition</label>
                             <textarea
-                              value={metric.weak}
+                              value={metric.definition}
                               onChange={(e) =>
                                 setEditedMetrics((prev) =>
                                   prev.map((m, idx) =>
-                                    idx === i ? { ...m, weak: e.target.value } : m,
+                                    idx === i ? { ...m, definition: e.target.value } : m,
                                   ),
                                 )
                               }
-                              placeholder="Weak (1/5)"
                               rows={3}
                               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
                             />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-emerald-600">Strong (5/5)</label>
+                              <textarea
+                                value={metric.strong}
+                                onChange={(e) =>
+                                  setEditedMetrics((prev) =>
+                                    prev.map((m, idx) =>
+                                      idx === i ? { ...m, strong: e.target.value } : m,
+                                    ),
+                                  )
+                                }
+                                rows={3}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-red-500">Weak (1/5)</label>
+                              <textarea
+                                value={metric.weak}
+                                onChange={(e) =>
+                                  setEditedMetrics((prev) =>
+                                    prev.map((m, idx) =>
+                                      idx === i ? { ...m, weak: e.target.value } : m,
+                                    ),
+                                  )
+                                }
+                                rows={3}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
+                              />
+                            </div>
                           </div>
                         </div>
                       ))}
