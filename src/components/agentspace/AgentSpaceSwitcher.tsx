@@ -101,7 +101,7 @@ export default function AgentSpaceSwitcher({ onCreateClick }: AgentSpaceSwitcher
           {isAdmin && (
             <button
               onClick={startEditing}
-              className="ml-0.5 p-1 text-indigo-400 hover:text-indigo-600 rounded cursor-pointer opacity-0 group-hover/switcher:opacity-100 transition-opacity duration-[120ms]"
+              className="ml-0.5 p-1 text-indigo-400 hover:text-indigo-600 rounded cursor-pointer transition-colors duration-[120ms]"
               title="Rename"
             >
               <Pencil className="w-3 h-3" />
