@@ -18,60 +18,57 @@ interface Scenario {
 }
 
 const SCENARIOS: Scenario[] = [
-  {
-    badge: "Sales",
-    title: "Mock Sales Call — Round 3",
-    score: 87,
-    criteria: [
-      { label: "Content Knowledge", score: 92 },
-      { label: "Objection Handling", score: 78 },
-      // { label: "Communication", score: 88 },
-      { label: "Closing Technique", score: 81 },
-    ],
-    recommendation:
-      'Strengthen objection handling by acknowledging concerns before redirecting. Practice the "feel-felt-found" framework.',
-    transcript: {
-      agent: {
-        label: "Rep",
-        text: '"I understand your concern about pricing. Let me walk you through the ROI we\'ve seen..."',
-      },
-      user: {
-        label: "Customer",
-        text: "\"That's helpful, but we've been burned by similar platforms before...\"",
-      },
-    },
-  },
-  {
-    badge: "Support",
-    title: "Customer Escalation — Tier 2",
-    score: 74,
-    criteria: [
-      { label: "Empathy & Tone", score: 82 },
-      { label: "Issue Resolution", score: 68 },
-      // { label: "De-escalation", score: 71 },
-      { label: "Follow-up Actions", score: 76 },
-    ],
-    recommendation:
-      "Lead with empathy before jumping to solutions. Mirror the customer's frustration, then transition to resolution steps.",
-    transcript: {
-      agent: {
-        label: "Agent",
-        text: "\"I'm really sorry you're dealing with this. Let me look into your account right away...\"",
-      },
-      user: {
-        label: "Customer",
-        text: '"I\'ve called three times already and nobody has fixed this issue!"',
-      },
-    },
-  },
+  // {
+  //   badge: "Sales",
+  //   title: "Mock Sales Call — Round 3",
+  //   score: 87,
+  //   criteria: [
+  //     { label: "Content Knowledge", score: 92 },
+  //     { label: "Objection Handling", score: 78 },
+  //     { label: "Closing Technique", score: 81 },
+  //   ],
+  //   recommendation:
+  //     'Strengthen objection handling by acknowledging concerns before redirecting. Practice the "feel-felt-found" framework.',
+  //   transcript: {
+  //     agent: {
+  //       label: "Rep",
+  //       text: '"I understand your concern about pricing. Let me walk you through the ROI we\'ve seen..."',
+  //     },
+  //     user: {
+  //       label: "Customer",
+  //       text: "\"That's helpful, but we've been burned by similar platforms before...\"",
+  //     },
+  //   },
+  // },
+  // {
+  //   badge: "Support",
+  //   title: "Customer Escalation — Tier 2",
+  //   score: 74,
+  //   criteria: [
+  //     { label: "Empathy & Tone", score: 82 },
+  //     { label: "Issue Resolution", score: 68 },
+  //     { label: "Follow-up Actions", score: 76 },
+  //   ],
+  //   recommendation:
+  //     "Lead with empathy before jumping to solutions. Mirror the customer's frustration, then transition to resolution steps.",
+  //   transcript: {
+  //     agent: {
+  //       label: "Agent",
+  //       text: "\"I'm really sorry you're dealing with this. Let me look into your account right away...\"",
+  //     },
+  //     user: {
+  //       label: "Customer",
+  //       text: '"I\'ve called three times already and nobody has fixed this issue!"',
+  //     },
+  //   },
+  // },
   {
     badge: "Education",
-    title: "Viva Assessment — CS Module",
+    title: "Viva Assessment — CS",
     score: 91,
     criteria: [
       { label: "Conceptual Clarity", score: 95 },
       { label: "Problem Solving", score: 88 },
-      // { label: "Communication", score: 92 },
       { label: "Critical Thinking", score: 89 },
     ],
     recommendation:
@@ -83,7 +80,51 @@ const SCENARIOS: Scenario[] = [
       },
       user: {
         label: "Examiner",
-        text: '"Good. Now what happens in the worst case?"',
+        text: '"Good. Now what happens in the worst case? And when would you choose a hash table over a BST?"',
+      },
+    },
+  },
+  {
+    badge: "DSA",
+    title: "Coding Interview — Arrays & Hashing",
+    score: 83,
+    criteria: [
+      { label: "Correctness", score: 90 },
+      { label: "Time Complexity", score: 76 },
+      { label: "Code Clarity", score: 84 },
+    ],
+    recommendation:
+      "Solution is correct but brute-force. Walk through the hash map approach upfront — state your intended complexity before coding.",
+    transcript: {
+      agent: {
+        label: "Candidate",
+        text: '"I\'ll use a hash map to store seen values so each lookup is O(1), giving us O(n) overall..."',
+      },
+      user: {
+        label: "Interviewer",
+        text: '"Good. What\'s the space complexity, and how to handle duplicates in the inputs?"',
+      },
+    },
+  }, 
+  {
+    badge: "HR",
+    title: "Behavioural Round — Final",
+    score: 78,
+    criteria: [
+      { label: "Communication", score: 84 },
+      { label: "Self-Awareness", score: 72 },
+      { label: "Cultural Alignment", score: 79 },
+    ],
+    recommendation:
+      "Answers lack structure. Use the STAR format consistently — situation and task were clear but action steps and measurable results were thin.",
+    transcript: {
+      agent: {
+        label: "Candidate",
+        text: '"The project was behind, so I took ownership of the timeline and realigned the team around three key deliverables..."',
+      },
+      user: {
+        label: "Interviewer",
+        text: '"What was the measurable outcome, and what would you do differently?"',
       },
     },
   },

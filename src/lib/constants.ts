@@ -174,7 +174,7 @@ export const FAQ_ITEMS = [
   {
     question: 'What\'s the pricing model?',
     answer:
-      'We offer monthly subscriptions based on your usage needs. Trial (150 mins), Starter (1,500 mins/mo), Growth (4,000 mins/mo + optional scaling), and Pro (8,000 mins/mo + scaling at a better per-minute rate). Contact us to explore custom plans and pricing.',
+      'We offer four usage-based plans — Trial (₹299 one-time, 150 mins), Starter (₹3,999/mo, 2,000 mins), Growth (₹9,999/mo, 5,000 mins + ₹1.9/min scaling), and Pro (₹18,999/mo, 10,000 mins + ₹1.8/min scaling). All prices shown are Founder Pricing. See the pricing section for full details.',
   },
 ]
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Orbit, ListChecks, Volume2, Link as LinkIcon } from 'lucide-react'
+import { Check, Orbit, ListChecks, Volume2, Link as LinkIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const STEPS = [
   {
@@ -53,7 +53,7 @@ const STEPS = [
   },
 ]
 
-const SCROLL_STEP = 600 // px of scroll to advance one step
+const SCROLL_STEP = 600
 
 // ─── Window Chrome wrapper ────────────────────────────────────────────────────
 
@@ -433,32 +433,59 @@ const slideVariants = {
   exit: (dir: number) => ({ x: dir * -28, opacity: 0 }),
 }
 
-const slideTransition = { duration: 0.22, ease: 'easeOut' as const }
+const slideTransition = { duration: 0.28, ease: 'easeOut' as const }
+
+const mobileSlideVariants = {
+  enter: (dir: number) => ({ x: dir * 72, opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit: (dir: number) => ({ x: dir * -72, opacity: 0 }),
+}
+const mobileSlideTransition = { duration: 0.24, ease: 'easeOut' as const }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function HowItWorks() {
   const [active, setActive] = useState(0)
   const [direction, setDirection] = useState(1)
+  const [cardStep, setCardStep] = useState(0)
+  const [cardDir, setCardDir] = useState(1)
   const stickyZoneRef = useRef<HTMLDivElement>(null)
   const activeRef = useRef(0)
+  const lineRefs = useRef<(HTMLDivElement | null)[]>([])
+  const rafRef = useRef<number | null>(null)
 
-  // Scroll → step
   useEffect(() => {
+    const updateLines = (progress: number) => {
+      lineRefs.current.forEach((el, i) => {
+        if (!el) return
+        const pct = Math.min(1, Math.max(0, (progress - i * SCROLL_STEP) / SCROLL_STEP))
+        el.style.width = `${pct * 100}%`
+      })
+    }
+
     const onScroll = () => {
       if (!stickyZoneRef.current) return
-      const rect = stickyZoneRef.current.getBoundingClientRect()
-      const progress = -rect.top
-      if (progress < 0) return
-      const next = Math.min(Math.floor(progress / SCROLL_STEP), STEPS.length - 1)
-      if (next !== activeRef.current) {
-        setDirection(next > activeRef.current ? 1 : -1)
-        activeRef.current = next
-        setActive(next)
-      }
+      if (rafRef.current !== null) return
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null
+        if (!stickyZoneRef.current) return
+        const rect = stickyZoneRef.current.getBoundingClientRect()
+        const progress = Math.max(0, -rect.top)
+        updateLines(progress)
+        const next = Math.min(Math.floor(progress / SCROLL_STEP), STEPS.length - 1)
+        if (next !== activeRef.current) {
+          setDirection(next > activeRef.current ? 1 : -1)
+          activeRef.current = next
+          setActive(next)
+        }
+      })
     }
+
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    }
   }, [])
 
   // Click step circle → smooth scroll to that step's position
@@ -471,9 +498,9 @@ export default function HowItWorks() {
   const step = STEPS[active]
 
   return (
-    <section id="how-it-works" className="scroll-mt-[40px] bg-white">
-      {/* Section header — scrolls normally */}
-      <div className="max-w-[1100px] mx-auto px-6 pt-16 md:pt-24 text-center">
+    <section id="how-it-works" className="scroll-mt-[40px] bg-white hidden lg:block">
+      {/* Section header — desktop only */}
+      <div className="hidden lg:block max-w-275 mx-auto px-6 pt-24 text-center">
         <p className="text-xs font-medium uppercase tracking-wide text-indigo-600 mb-4">
           Simple Setup
         </p>
@@ -485,7 +512,8 @@ export default function HowItWorks() {
         </p>
       </div>
 
-      {/* Scroll zone — sticky card lives here */}
+      {/* ── Desktop: sticky scroll zone ─────────────────────────────── */}
+      <div className="hidden lg:block">
       <div
         ref={stickyZoneRef}
         style={{ height: `calc(${STEPS.length * SCROLL_STEP}px + 100vh)` }}
@@ -499,24 +527,24 @@ export default function HowItWorks() {
               {/* Step Bar */}
               <div className="flex items-center px-8 py-4 border-b border-gray-100 bg-white">
                 {STEPS.map((s, i) => (
-                  <div key={i} className="flex items-center flex-1 last:flex-none">
+                  <div key={i} className="flex items-start flex-1 last:flex-none">
                     <button
                       onClick={() => scrollToStep(i)}
                       className="flex flex-col items-center cursor-pointer"
                     >
                       <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-[120ms] ${
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${
                           i === active
-                            ? 'bg-indigo-600 text-white ring-4 ring-indigo-100'
+                            ? 'bg-indigo-600 text-white ring-4 ring-indigo-100 scale-110'
                             : i < active
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-gray-100 text-gray-400'
+                            ? 'bg-indigo-600 text-white scale-100'
+                            : 'bg-gray-100 text-gray-400 scale-100'
                         }`}
                       >
                         {i < active ? <Check className="w-4 h-4" /> : s.number}
                       </div>
                       <span
-                        className={`text-[11px] font-medium mt-1.5 whitespace-nowrap hidden sm:block transition-colors duration-[120ms] ${
+                        className={`text-[11px] font-medium mt-1.5 whitespace-nowrap hidden sm:block transition-colors duration-300 ${
                           i <= active ? 'text-gray-700' : 'text-gray-400'
                         }`}
                       >
@@ -524,11 +552,13 @@ export default function HowItWorks() {
                       </span>
                     </button>
                     {i < STEPS.length - 1 && (
-                      <div
-                        className={`flex-1 h-px mx-2 transition-colors duration-300 ${
-                          i < active ? 'bg-indigo-300' : 'bg-gray-200'
-                        }`}
-                      />
+                      <div className="flex-1 h-[3px] mx-2 mt-3.5 bg-gray-100 rounded-full relative overflow-hidden">
+                        <div
+                          ref={el => { lineRefs.current[i] = el }}
+                          className="absolute inset-y-0 left-0 bg-indigo-500 rounded-full"
+                          style={{ width: '0%' }}
+                        />
+                      </div>
                     )}
                   </div>
                 ))}
@@ -593,8 +623,101 @@ export default function HowItWorks() {
         </div>
       </div>
 
-      {/* Bottom padding so next section doesn't immediately follow */}
-      <div className="pb-16 md:pb-24" />
+      </div>{/* end desktop wrapper */}
+
+      {/* ── Mobile: viewport-filling carousel ───────────────────────── */}
+      <div
+        className="lg:hidden flex flex-col px-5 pb-5"
+        style={{ height: 'calc(100dvh - 72px)' }}
+      >
+        {/* Carousel fill */}
+        <div className="flex-1 min-h-0 overflow-hidden relative pt-4">
+          <AnimatePresence mode="wait" custom={cardDir}>
+            <motion.div
+              key={cardStep}
+              custom={cardDir}
+              variants={mobileSlideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={mobileSlideTransition}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.12}
+              onDragEnd={(_, info) => {
+                if (info.offset.x < -50 && cardStep < STEPS.length - 1) {
+                  setCardDir(1)
+                  setCardStep(s => s + 1)
+                } else if (info.offset.x > 50 && cardStep > 0) {
+                  setCardDir(-1)
+                  setCardStep(s => s - 1)
+                }
+              }}
+              style={{ touchAction: 'pan-y' }}
+              className="h-full flex flex-col"
+            >
+              {/* Mockup — grows to fill available space */}
+              <div className="flex-1 min-h-0 rounded-xl overflow-hidden border border-gray-200 shadow-sm mb-3">
+                {MOCKUPS[cardStep]}
+              </div>
+
+              {/* Step info — fixed height */}
+              <div className="shrink-0 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <p className="text-xs font-medium uppercase tracking-wide text-indigo-600 mb-1">
+                  Step {STEPS[cardStep].number} of {STEPS.length}
+                </p>
+                <h3 className="text-base font-semibold text-gray-900 mb-1 leading-snug">
+                  {STEPS[cardStep].title}
+                </h3>
+                <p className="text-sm text-gray-500 leading-relaxed mb-2.5">
+                  {STEPS[cardStep].description}
+                </p>
+                <div className="space-y-1.5">
+                  {STEPS[cardStep].bullets.map(b => (
+                    <div key={b} className="flex items-center gap-2">
+                      <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span className="text-sm text-gray-600">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Nav row */}
+        <div className="shrink-0 flex items-center justify-between mt-3">
+          <button
+            onClick={() => { if (cardStep > 0) { setCardDir(-1); setCardStep(s => s - 1) } }}
+            disabled={cardStep === 0}
+            className="w-9 h-9 rounded-full border border-gray-200 flex items-center justify-center disabled:opacity-30 transition-opacity duration-120 cursor-pointer disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="w-4 h-4 text-gray-600" />
+          </button>
+
+          <div className="flex items-center gap-1.5">
+            {STEPS.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => { setCardDir(i > cardStep ? 1 : -1); setCardStep(i) }}
+                className={`rounded-full transition-all duration-300 cursor-pointer ${
+                  i === cardStep ? 'w-5 h-2 bg-indigo-600' : 'w-2 h-2 bg-gray-200'
+                }`}
+              />
+            ))}
+          </div>
+
+          <button
+            onClick={() => { if (cardStep < STEPS.length - 1) { setCardDir(1); setCardStep(s => s + 1) } }}
+            disabled={cardStep === STEPS.length - 1}
+            className="w-9 h-9 rounded-full border border-gray-200 flex items-center justify-center disabled:opacity-30 transition-opacity duration-120 cursor-pointer disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="w-4 h-4 text-gray-600" />
+          </button>
+        </div>
+      </div>
+
+      <div className="pb-24 hidden lg:block" />
     </section>
   )
 }

@@ -139,7 +139,7 @@ export default function BookDemo() {
               className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg px-5 py-3 transition-colors duration-[120ms] cursor-pointer"
             >
               <Calendar size={15} />
-              Schedule time with me
+              Schedule a Demo with our Founder
             </button>
           </motion.div>
         </motion.div>
