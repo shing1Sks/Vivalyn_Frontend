@@ -1093,7 +1093,7 @@ function DeployContent({
   const [displayLabel, setDisplayLabel] = useState(savedAgent?.agent_display_label ?? '')
   const [labelDraft, setLabelDraft] = useState(savedAgent?.agent_display_label ?? '')
   const [editingLabel, setEditingLabel] = useState(false)
-  const [showReport, setShowReport] = useState(savedAgent?.show_report ?? false)
+  const [showReport, setShowReport] = useState(savedAgent?.show_report ?? true)
 
   const liveUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}` : ''
   const testUrl = savedAgent ? `${window.location.origin}/agent/${savedAgent.id}?mode=test` : ''
