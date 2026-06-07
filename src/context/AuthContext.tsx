@@ -28,18 +28,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
+    // Supabase v2: INITIAL_SESSION fires after PKCE code exchange completes.
+    // Using onAuthStateChange as sole source of truth avoids the race where
+    // getSession() resolves from localStorage (null) before the exchange finishes,
+    // causing protected routes to redirect to /auth mid-exchange.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      setLoading(false);
+      if (event === 'INITIAL_SESSION') {
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -57,7 +57,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: name } },
+      options: {
+        data: { full_name: name },
+        emailRedirectTo: `${window.location.origin}/auth`,
+      },
     });
     return { error: error as Error | null };
   }
@@ -65,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/agent-space` },
+      options: { redirectTo: `${window.location.origin}/auth` },
     });
   }
 
@@ -74,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       provider: "azure",
       options: {
         scopes: "email profile",
-        redirectTo: `${window.location.origin}/agent-space`,
+        redirectTo: `${window.location.origin}/auth`,
       },
     });
   }
